@@ -1,2 +1,0 @@
-# teste
-Scripts de teste
