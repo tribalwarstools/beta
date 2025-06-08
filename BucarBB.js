@@ -74,7 +74,7 @@
 
             <div>
                 <strong>Coordenadas:</strong><br>
-                <textarea id="coordenadas" style="width: 100%; height: 60px; font-size: 10px;" readonly></textarea>
+                <textarea id="coordenadas" style="width: 95%; height: 60px; font-size: 10px;" readonly></textarea>
             </div>
         </div>
     `;
