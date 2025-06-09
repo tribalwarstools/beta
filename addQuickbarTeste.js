@@ -34,7 +34,7 @@
           <td>Nome do script:</td>
           <td style="display:flex; gap:4px;">
             <input id="inputHref" type="text" maxlength="200" style="width:50%;" placeholder="ex: teste">
-            <button id="btnCopyUrl" class="btn" style="white-space: nowrap;">Copiar URL</button>
+            <button id="btnGenerateCopyUrl" class="btn" style="white-space: nowrap;">Gerar URL</button>
           </td>
         </tr>
         <tr>
@@ -64,15 +64,28 @@
 
   $('#inputHref').on('input', atualizarHrefCompleto);
 
-  $('#btnCopyUrl').on('click', () => {
+  $('#btnGenerateCopyUrl').on('click', () => {
     const href = $('#inputHref').data('hrefCompleto') || '';
-    if (!href) {
-      UI.ErrorMessage('Digite o nome do script.');
-      return;
+    const buttonText = $('#btnGenerateCopyUrl').text();
+
+    if (buttonText === 'Gerar URL') {
+      // Gerar o link completo
+      if (!href) {
+        UI.ErrorMessage('Digite o nome do script.');
+        return;
+      }
+
+      // Preenche o campo com a URL gerada
+      $('#inputHref').val(href);
+      $('#btnGenerateCopyUrl').text('Copiar URL');
+    } else {
+      // Copiar URL para a área de transferência
+      navigator.clipboard.writeText(href)
+        .then(() => UI.SuccessMessage('URL copiada para a área de transferência!'))
+        .catch(() => UI.ErrorMessage('Falha ao copiar a URL.'));
+      
+      $('#btnGenerateCopyUrl').text('Gerar URL'); // Volta para "Gerar URL"
     }
-    navigator.clipboard.writeText(href)
-      .then(() => UI.SuccessMessage('URL copiada para a área de transferência!'))
-      .catch(() => UI.ErrorMessage('Falha ao copiar a URL.'));
   });
 
   $('#btnAdd').on('click', async () => {
