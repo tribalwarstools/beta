@@ -1,17 +1,15 @@
 (async function () {
-    // Carregar village.txt para obter as pontuações
     const villRaw = await fetch('/map/village.txt').then(r => r.text());
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, player, points] = line.split(',');
         return {
+            id,
             coord: `${x}|${y}`,
             points: parseInt(points)
         };
     });
 
     const groups = [];
-
-    // Obter TODOS os grupos
     const groupData = await $.get("/game.php?screen=groups&mode=overview&ajax=load_group_menu");
     groupData.result.forEach(group => {
         if (group.group_id != 0) {
@@ -19,7 +17,6 @@
         }
     });
 
-    // Interface
     const html = `
         <div class="vis" style="padding: 10px; width: 800px;">
             <h2>Grupos de Aldeias</h2>
@@ -73,15 +70,13 @@
                 const name = tds[0].textContent.trim();
                 const coords = tds[1].textContent.trim();
 
-                // Buscar pontos pela coordenada no village.txt
                 const village = villages.find(v => v.coord === coords);
                 const points = village ? village.points : 0;
+                const villageId = village ? village.id : null;
 
-                // Limite da barra
                 const maxPoints = 10000;
                 const pct = Math.min(points, maxPoints) / maxPoints * 100;
 
-                // Barra de progresso verde
                 const progressBar = `
                     <div style="background: #ddd; border-radius: 4px; width: 100px; height: 12px; position: relative;">
                         <div style="
@@ -108,7 +103,15 @@
                     </div>
                 `;
 
-                output += `<tr><td>${name}</td><td><b>${coords}</b></td><td>${progressBar}</td></tr>`;
+                const nameLink = villageId
+                    ? `<a href="/game.php?village=${game_data.village.id}&screen=overview&intro&target=${villageId}" target="_blank">${name}</a>`
+                    : name;
+
+                const coordLink = villageId
+                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank"><b>${coords}</b></a>`
+                    : `<b>${coords}</b>`;
+
+                output += `<tr><td>${nameLink}</td><td>${coordLink}</td><td>${progressBar}</td></tr>`;
             }
         });
         output += `</tbody></table>`;
