@@ -16,8 +16,51 @@
     });
 
     const html = `
-        <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 2.23</h2>
+        <style>
+            #tw_group_viewer, 
+            #tw_group_viewer .vis {
+                max-width: 800px !important;
+                overflow-x: hidden !important;
+                box-sizing: border-box;
+            }
+            #groupVillages table.vis {
+                width: 100%;
+                table-layout: fixed;
+                font-size: 13px;
+                border-collapse: collapse;
+            }
+            #groupVillages table.vis th, 
+            #groupVillages table.vis td {
+                padding: 4px 6px;
+                border: 1px solid #aaa;
+                overflow-wrap: break-word;
+                word-wrap: break-word;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
+            #groupVillages table.vis th:nth-child(1) { /* Nome */
+                width: 38%;
+            }
+            #groupVillages table.vis th:nth-child(2) { /* Coordenadas */
+                width: 22%;
+            }
+            #groupVillages table.vis th:nth-child(3) { /* Pontos */
+                width: 18%;
+                white-space: normal; /* permitir quebrar p/ barra */
+            }
+            #groupVillages table.vis th:nth-child(4) { /* Comandos */
+                width: 22%;
+                white-space: nowrap;
+            }
+            #groupVillages td > button.btn {
+                min-width: 30px;
+                margin-right: 4px;
+                padding: 2px 6px;
+                font-size: 12px;
+            }
+        </style>
+        <div class="vis" style="padding: 10px; width: 800px; box-sizing: border-box;">
+            <h2>Grupos de Aldeias versão 1.3</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -26,12 +69,14 @@
                 color: #000;
                 border: 1px solid #603000;
                 font-weight: bold;
+                max-width: 100%;
+                box-sizing: border-box;
             ">
                 <option disabled selected>Selecione...</option>
             </select>
             <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
-            <div id="groupVillages" style="max-height: 300px; overflow-y: auto;"></div>
+            <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
             <button id="copyAllCoords" class="btn btn-default" style="margin-top: 10px; display: none;">
                 📋 Copiar todas as coordenadas
             </button>
@@ -83,13 +128,13 @@
             return;
         }
 
-        let output = `<table class="vis" width="100%" style="font-size: 13px;">
+        let output = `<table class="vis" width="100%">
             <thead>
                 <tr>
                     <th>Nome</th>
-                    <th style="width: 110px;">Coordenadas</th>
-                    <th style="width: 70px;">Pontos</th>
-                    <th style="width: 140px;">Comandos</th>
+                    <th>Coordenadas</th>
+                    <th>Pontos</th>
+                    <th>Comandos</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -144,14 +189,18 @@
                     ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
                     : `<b style="font-size: 13px;">${coords}</b>`;
 
+                // Exemplo com 3 botões comandos (você pode adicionar/remover)
+                const commandsButtons = `
+                    <button class="btn btn-default btn-sm" title="Copiar coordenada" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
+                    <button class="btn btn-default btn-sm" title="Abrir aldeia" onclick="window.open('/game.php?village=${villageId}&screen=overview', '_blank')">🏠</button>
+                    <button class="btn btn-default btn-sm" title="Info aldeia" onclick="window.open('/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}', '_blank')">ℹ️</button>
+                `;
+
                 output += `<tr>
-                    <td>${nameLink}</td>
+                    <td title="${name}">${nameLink}</td>
                     <td>${coordLink}</td>
                     <td>${progressBar}</td>
-                    <td>
-                        <button class="btn btn-default btn-sm" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
-                        <!-- Botões adicionais aqui -->
-                    </td>
+                    <td style="white-space: nowrap;">${commandsButtons}</td>
                 </tr>`;
             }
         });
@@ -160,6 +209,7 @@
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
 
+        // Mostrar botão copiar todas
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
             navigator.clipboard.writeText(allCoords.join(' '));
