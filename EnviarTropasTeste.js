@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 2.0...');
+  UI.InfoMessage('Iniciando versão 2.9...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
