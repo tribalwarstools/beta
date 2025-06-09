@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 3.9...');
+  UI.InfoMessage('Iniciando versão 1.0...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -140,18 +140,18 @@
           <div style="display:flex; gap:10px; margin-bottom:8px;">
             <div style="flex:1;">
               <label><b>Jogador:</b></label><br>
-              <input list="listPlayers" id="inputPlayer" style="width:100%;" placeholder="Digite ou escolha...">
+              <input list="listPlayers" id="inputPlayer" style="width:90%;" placeholder="Digite ou escolha...">
               <datalist id="listPlayers">${players.map(p => `<option value="${decodeName(p[1])}">`).join('')}</datalist>
             </div>
             <div style="flex:1;">
               <label><b>Tribo:</b></label><br>
-              <input list="listTribes" id="inputTribe" style="width:100%;" placeholder="Digite ou escolha...">
+              <input list="listTribes" id="inputTribe" style="width:90%;" placeholder="Digite ou escolha...">
               <datalist id="listTribes">${tribes.map(t => `<option value="${decodeName(t[2])}">`).join('')}</datalist>
             </div>
           </div>
 
           <label><b>Coordenadas:</b></label>
-          <textarea id="campoCoords" style="width:98%; height:80px; margin-bottom:8px;"></textarea>
+          <textarea id="campoCoords" style="width:95%; height:80px; margin-bottom:8px;"></textarea>
 
           <div style="display:flex; gap:10px; margin-bottom:8px;">
             <button class="btn" id="btnColar" style="flex:1 1 120px;">Colar</button>
