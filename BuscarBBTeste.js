@@ -45,7 +45,8 @@
             <div style="margin-bottom: 6px;">
                 <button id="btnFiltro" class="btn btn-confirm-yes" style="margin-right: 6px; font-size: 10px; padding: 2px 6px;">Filtro</button>
                 <button id="btnReset" class="btn btn-confirm-no" style="margin-right: 6px; font-size: 10px; padding: 2px 6px;">Reset</button>
-                <button id="btnCopiar" class="btn" style="font-size: 10px; padding: 2px 6px;">Copiar</button>
+                <button id="btnCopiar" class="btn" style="margin-right: 6px; font-size: 10px; padding: 2px 6px;">Copiar</button>
+                <button id="btnFechar" class="btn" style="font-size: 10px; padding: 2px 6px;">Fechar</button>
             </div>
 
             <div style="margin-bottom: 6px;">
@@ -103,5 +104,9 @@
         navigator.clipboard.writeText(texto)
             .then(() => UI.InfoMessage('Coordenadas copiadas!'))
             .catch(() => UI.ErrorMessage('Erro ao copiar as coordenadas!'));
+    });
+
+    document.getElementById('btnFechar').addEventListener('click', () => {
+        Dialog.close();
     });
 })();
