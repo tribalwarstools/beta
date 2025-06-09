@@ -11,20 +11,25 @@
   ];
 
   function gerarTabelaTropas() {
-    return unidades.reduce((html, [id, nome], idx) => {
-      if (idx % 2 === 0) html += "<tr>";
-      html += `
-          <td>
-            <span style="white-space: nowrap;">
-              <img src="/graphic/unit/unit_${id}.png" title="${nome}" style="vertical-align: middle; margin-right: 4px; height: 18px;">
-              ${nome}
-            </span>
-          </td>
-          <td><input type="number" id="input_${id}" min="0" value="0" style="width: 40px;"></td>
-      `;
-      if (idx % 2 === 1) html += "</tr>";
-      return html;
-    }, "");
+    let html = '<table style="width:100%; border-collapse: collapse;">';
+    for (let i = 0; i < unidades.length; i += 3) {
+      html += '<tr>';
+      for (let j = 0; j < 3; j++) {
+        if (i + j < unidades.length) {
+          const [id, title] = unidades[i + j];
+          html += `
+            <td style="padding:4px 8px; white-space: nowrap; vertical-align: middle;">
+              <img src="/graphic/unit/unit_${id}.png" title="${title}" style="height:20px; vertical-align:middle; margin-right:6px;">
+              <input type="number" id="input_${id}" min="0" value="0" style="width:45px; text-align:right;">
+            </td>`;
+        } else {
+          html += '<td></td>';
+        }
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    return html;
   }
 
   function coletarTropas() {
@@ -160,7 +165,7 @@
           </div>
 
           <h3>Quantidade de Tropas</h3>
-          <table class="vis" style="width:100%; text-align:left; margin-bottom:5px;">${gerarTabelaTropas()}</table>
+          ${gerarTabelaTropas()}
 
           <div style="margin-bottom:8px;">
             <button class="btn" id="btnPreview" style="width:100%;">Mostrar resultado</button>
