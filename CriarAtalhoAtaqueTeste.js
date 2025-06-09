@@ -20,7 +20,7 @@
     }
   }
 
-  const hrefFixo = `javascript:$.getScript('https://tribalwarstools.github.io/twscripts/ScriptAtaqueTeste.js');`;
+  const hrefFixo = `javascript:$.getScript('https://tribalwarstools.github.io/teste/ScriptAtaqueTeste.js');`;
 
   const $html = `
     <div style="font-size:11px; line-height:1.2;">
