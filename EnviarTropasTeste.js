@@ -20,7 +20,7 @@
           html += `
             <td style="padding:4px 8px; white-space: nowrap; vertical-align: middle;">
               <img src="/graphic/unit/unit_${id}.png" title="${title}" style="height:20px; vertical-align:middle; margin-right:6px;">
-              <input type="number" id="input_${id}" min="0" value="0" style="width:45px; text-align:right;">
+              <input type="number" id="input_${id}" min="0" value="0" style="width:40px; text-align:right;">
             </td>`;
         } else {
           html += '<td></td>';
