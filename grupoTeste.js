@@ -16,7 +16,7 @@
     });
 
     const html = `
-        <div class="vis" style="padding: 10px; max-width: 100%; width: 800px; overflow-x: auto;">
+        <div class="vis" style="padding: 10px; width: 800px;">
             <h2>Grupos de Aldeias versão 1.3</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
@@ -31,16 +31,10 @@
             </select>
             <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
-            <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
-            <button id="copyAllCoords" style="
-                margin-top: 10px;
-                padding: 5px 10px;
-                font-weight: bold;
-                background: #fce5a5;
-                border: 1px solid #aa8533;
-                cursor: pointer;
-                display: none;
-            ">📋 Copiar todas as coordenadas</button>
+            <div id="groupVillages" style="max-height: 300px; overflow-y: auto;"></div>
+            <button id="copyAllCoords" class="btn btn-default" style="margin-top: 10px; display: none;">
+                📋 Copiar todas as coordenadas
+            </button>
         </div>
     `;
     Dialog.show("tw_group_viewer", html);
@@ -50,6 +44,7 @@
     const copyAllButton = document.getElementById("copyAllCoords");
 
     select.options[0].disabled = true;
+
     const allOpt = document.createElement("option");
     allOpt.value = 0;
     allOpt.textContent = "Todas as aldeias";
@@ -60,13 +55,11 @@
             const opt = document.createElement("option");
             opt.value = g.group_id;
             opt.textContent = g.group_name;
-
             if (!opt.textContent.trim()) {
                 opt.disabled = true;
                 opt.textContent = "";
                 opt.style.color = "#999";
             }
-
             select.appendChild(opt);
         }
     });
@@ -90,18 +83,18 @@
             return;
         }
 
-        const allCoords = [];
-
-        let output = `<table class="vis" style="width: 100%; table-layout: fixed; word-wrap: break-word; font-size: 13px;">
+        let output = `<table class="vis" width="100%" style="font-size: 13px;">
             <thead>
                 <tr>
                     <th>Nome</th>
                     <th style="width: 110px;">Coordenadas</th>
                     <th>Pontos</th>
-                    <th style="width: 60px;">Copiar</th>
+                    <th style="width: 40px;">Copiar</th>
                 </tr>
             </thead>
             <tbody>`;
+
+        const allCoords = [];
 
         rows.forEach(row => {
             const tds = row.querySelectorAll("td");
@@ -155,7 +148,7 @@
                     <td>${nameLink}</td>
                     <td>${coordLink}</td>
                     <td>${progressBar}</td>
-                    <td><button onclick="navigator.clipboard.writeText('${coords}')" style="cursor:pointer;">📋</button></td>
+                    <td><button class="btn btn-default btn-sm" onclick="navigator.clipboard.writeText('${coords}')">📋</button></td>
                 </tr>`;
             }
         });
@@ -164,7 +157,7 @@
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
 
-        // Habilita o botão de copiar todas
+        // Mostrar botão copiar todas
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
             navigator.clipboard.writeText(allCoords.join(' '));
