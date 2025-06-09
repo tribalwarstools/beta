@@ -34,8 +34,9 @@
         </tr>
         <tr>
           <td>URL do script:</td>
-          <td>
+          <td style="display: flex; align-items: center; gap: 4px;">
             <input id="inputHref" type="text" style="width:98%;" readonly value="${hrefFixo}">
+            <button id="btnCopiarHref" class="btn" title="Copiar URL">📋</button>
           </td>
         </tr>
         <tr>
@@ -48,6 +49,14 @@
   `;
 
   Dialog.show('add_quickbar', $html);
+
+  $('#btnCopiarHref').on('click', () => {
+    const hrefInput = document.getElementById('inputHref');
+    hrefInput.select();
+    hrefInput.setSelectionRange(0, 99999); // Para dispositivos móveis
+    document.execCommand('copy');
+    UI.SuccessMessage('URL copiada para a área de transferência!');
+  });
 
   $('#btnAdd').on('click', async () => {
     const name = $('#inputName').val().trim();
