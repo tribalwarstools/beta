@@ -69,10 +69,10 @@
             <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
             <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
-            <button id="copyAllCoords" class="btn btn-default" style="margin-top: 10px; display: none;">
+            <button id="copyAllCoords" class="btn btn-confirm-yes" style="margin-top: 10px; display: none;">
                 📋 Copiar todas as coordenadas
             </button>
-            <button id="closeAndGo" class="btn btn-confirm" style="margin-top: 10px; float: right;">
+            <button id="closeAndGo" class="btn btn-confirm-no" style="margin-top: 10px; float: right;">
                 Fechar e ir para o grupo
             </button>
         </div>
