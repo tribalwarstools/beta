@@ -91,17 +91,23 @@
     allOpt.textContent = "Todas as aldeias";
     select.appendChild(allOpt);
 
-    groups.forEach(g => {
-        const opt = document.createElement("option");
-        opt.value = g.group_id;
-        opt.textContent = g.group_name || "[Sem nome]";
-        if (!opt.textContent.trim()) {
-            opt.disabled = true;
-            opt.textContent = "";
-            opt.style.color = "#999";
-        }
-        select.appendChild(opt);
-    });
+groups.forEach(g => {
+    const opt = document.createElement("option");
+    const rawName = (g.group_name || "").trim();
+
+    opt.value = g.group_id;
+
+    if (!rawName) {
+        opt.textContent = "[Sem nome]";
+        opt.disabled = true;
+        opt.style.display = "none"; // Esconde no dropdown
+    } else {
+        opt.textContent = rawName;
+    }
+
+    select.appendChild(opt);
+});
+
 
     async function loadGroup(groupId) {
         if (!groupId) return;
