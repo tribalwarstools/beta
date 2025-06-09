@@ -12,9 +12,7 @@
     const groups = [];
     const groupData = await $.get("/game.php?screen=groups&mode=overview&ajax=load_group_menu");
     groupData.result.forEach(group => {
-        if (group.group_id != 0) {
-            groups.push({ group_id: group.group_id, group_name: group.name });
-        }
+        groups.push({ group_id: group.group_id, group_name: group.name });
     });
 
     const html = `
@@ -38,11 +36,21 @@
     Dialog.show("tw_group_viewer", html);
 
     const select = document.getElementById("groupSelect");
+
+    // Adicionar manualmente a opção "Todos (Todas as aldeias)"
+    const allOpt = document.createElement("option");
+    allOpt.value = 0;
+    allOpt.textContent = "Todos (Todas as aldeias)";
+    select.appendChild(allOpt);
+
+    // Adicionar os demais grupos
     groups.forEach(g => {
-        const opt = document.createElement("option");
-        opt.value = g.group_id;
-        opt.textContent = g.group_name;
-        select.appendChild(opt);
+        if (g.group_id != 0) {
+            const opt = document.createElement("option");
+            opt.value = g.group_id;
+            opt.textContent = g.group_name;
+            select.appendChild(opt);
+        }
     });
 
     select.addEventListener("change", async function () {
