@@ -49,7 +49,7 @@
             }
         </style>
         <div class="vis" style="padding: 10px; width: 800px; box-sizing: border-box;">
-            <h2>Grupos de Aldeias versão 1.3</h2>
+            <h2>Grupos de Aldeias versão 3.0</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
