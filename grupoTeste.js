@@ -34,24 +34,13 @@
                 padding: 4px 6px;
                 border: 1px solid #aaa;
                 overflow-wrap: break-word;
-                word-wrap: break-word;
                 white-space: nowrap;
                 text-overflow: ellipsis;
             }
-            #groupVillages table.vis th:nth-child(1) { /* Nome */
-                width: 38%;
-            }
-            #groupVillages table.vis th:nth-child(2) { /* Coordenadas */
-                width: 22%;
-            }
-            #groupVillages table.vis th:nth-child(3) { /* Pontos */
-                width: 18%;
-                white-space: normal; /* permitir quebrar p/ barra */
-            }
-            #groupVillages table.vis th:nth-child(4) { /* Comandos */
-                width: 22%;
-                white-space: nowrap;
-            }
+            #groupVillages table.vis th:nth-child(1) { width: 38%; }
+            #groupVillages table.vis th:nth-child(2) { width: 22%; }
+            #groupVillages table.vis th:nth-child(3) { width: 18%; white-space: normal; }
+            #groupVillages table.vis th:nth-child(4) { width: 22%; white-space: nowrap; }
             #groupVillages td > button.btn {
                 min-width: 30px;
                 margin-right: 4px;
@@ -111,6 +100,7 @@
 
     select.addEventListener("change", async function () {
         const groupId = this.value;
+        sessionStorage.setItem("tw_last_group", groupId);
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
         villageCountSpan.textContent = "Carregando...";
         copyAllButton.style.display = "none";
@@ -157,29 +147,12 @@
 
                 const progressBar = `
                     <div style="background: #ddd; border-radius: 4px; width: 100px; height: 12px; position: relative;">
-                        <div style="
-                            background: #4caf50;
-                            width: ${pct}%;
-                            height: 100%;
-                            border-radius: 4px;
-                        "></div>
-                        <div style="
-                            position: absolute;
-                            top: 0;
-                            left: 0;
-                            width: 100%;
-                            height: 100%;
-                            text-align: center;
-                            font-size: 10px;
-                            line-height: 12px;
-                            color: #000;
-                            font-weight: bold;
-                            user-select: none;
-                        ">
+                        <div style="background: #4caf50; width: ${pct}%; height: 100%; border-radius: 4px;"></div>
+                        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                            text-align: center; font-size: 10px; line-height: 12px; color: #000; font-weight: bold;">
                             ${points}
                         </div>
-                    </div>
-                `;
+                    </div>`;
 
                 const nameLink = villageId
                     ? `<a href="/game.php?village=${villageId}&screen=overview" target="_blank">${name}</a>`
@@ -189,7 +162,6 @@
                     ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
                     : `<b style="font-size: 13px;">${coords}</b>`;
 
-                // Exemplo com 3 botões comandos (você pode adicionar/remover)
                 const commandsButtons = `
                     <button class="btn btn-default btn-sm" title="Copiar coordenada" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
                     <button class="btn btn-default btn-sm" title="Abrir aldeia" onclick="window.open('/game.php?village=${villageId}&screen=overview', '_blank')">🏠</button>
@@ -208,12 +180,27 @@
         output += `</tbody></table>`;
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
-
-        // Mostrar botão copiar todas
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
             navigator.clipboard.writeText(allCoords.join(' '));
             UI.SuccessMessage("Coordenadas copiadas!");
         };
+    });
+
+    // Botão "Fechar e ir para o grupo"
+    const fecharBtn = document.createElement('button');
+    fecharBtn.textContent = 'Fechar e ir para o grupo';
+    fecharBtn.className = 'btn btn-confirm';
+    fecharBtn.style.marginTop = '10px';
+    copyAllButton.insertAdjacentElement('afterend', fecharBtn);
+
+    fecharBtn.addEventListener('click', () => {
+        const groupId = select.value;
+        if (!groupId || groupId === "Selecione...") {
+            UI.ErrorMessage("Selecione um grupo antes de continuar.");
+            return;
+        }
+        if (Dialog.close) Dialog.close();
+        window.location.href = `/game.php?screen=overview_villages&mode=combined&group=${groupId}`;
     });
 })();
