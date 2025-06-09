@@ -17,7 +17,7 @@
 
     const html = `
         <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 2.22</h2>
+            <h2>Grupos de Aldeias versão 2.23</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -83,7 +83,7 @@
             return;
         }
 
-        let output = `<table class="vis" width="700px" style="font-size: 13px;">
+        let output = `<table class="vis" width="100%" style="font-size: 13px;">
             <thead>
                 <tr>
                     <th>Nome</th>
