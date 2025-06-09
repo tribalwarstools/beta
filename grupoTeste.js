@@ -16,8 +16,8 @@
     });
 
     const html = `
-        <div class="vis" style="padding: 10px; width: 100%;">
-            <h2>Grupos de Aldeias versão 2.0</h2>
+        <div class="vis" style="padding: 10px; width: 750%;">
+            <h2>Grupos de Aldeias versão 2.1</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
