@@ -84,11 +84,6 @@
 
     select.options[0].disabled = true;
 
-    const allOpt = document.createElement("option");
-    allOpt.value = 0;
-    allOpt.textContent = "Todas as aldeias";
-    select.appendChild(allOpt);
-
     groups.forEach(g => {
         const opt = document.createElement("option");
         const rawName = (g.group_name || "").trim();
@@ -98,7 +93,7 @@
         if (!rawName) {
             opt.textContent = "[Sem nome]";
             opt.disabled = true;
-            opt.style.display = "none"; // Esconde no dropdown
+            opt.style.display = "none";
         } else {
             opt.textContent = rawName;
         }
@@ -195,7 +190,6 @@
         window.location.href = `/game.php?village=${game_data.village.id}&screen=overview_villages&mode=combined&group=${selectedId}`;
     });
 
-    // Se havia grupo salvo, carrega automaticamente
     if (savedGroupId) {
         localStorage.removeItem("tw_group_selected");
         loadGroup(savedGroupId);
