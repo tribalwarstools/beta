@@ -143,16 +143,22 @@
           <label><b>Coordenadas:</b></label>
           <textarea id="campoCoords" style="width:98%;height:80px;"></textarea>
 
+          <!-- Grupo 1 de botões -->
           <div style="margin:8px 0;display:flex;gap:10px;flex-wrap:wrap;">
               <button class="btn" id="btnColar" style="flex:1 1 120px;">Colar</button>
               <button class="btn" id="btnSalvar" style="flex:1 1 120px;">Salvar</button>
               <button class="btn" id="btnLimpar" style="flex:1 1 120px;">Limpar</button>
-              <button class="btn" id="btnPreview" style="flex:1 1 120px;">Mostrar resultado</button>
+              <button class="btn" id="btnBuscarBarbara" style="flex:1 1 120px;">Buscar Bárbara</button>
               <button class="btn" id="btnAtalho" style="flex:1 1 120px;">Criar Atalho</button>
           </div>
 
           <h3>Quantidade de Tropas</h3>
           <table class="vis" style="width:100%;text-align:left;margin-bottom:8px;">${gerarTabelaTropas()}</table>
+
+          <!-- Grupo 2 de botões -->
+          <div style="margin-bottom:8px;">
+              <button class="btn" id="btnPreview" style="width: 100%;">Mostrar resultado</button>
+          </div>
 
           <div id="previewContainer" style="max-height:140px;overflow-y:auto;background:#f0f0f0;padding:5px;border:1px solid #ccc;"></div>
       </div>
@@ -210,8 +216,31 @@
       );
     };
 
+    // Botão Buscar Bárbara
+    document.getElementById("btnBuscarBarbara").onclick = () => {
+      Dialog.show("buscar_barbara_dialog", `
+        <div style="padding:10px; max-width:500px;">
+          <h3>Busca Bárbara</h3>
+          <p>Este painel executa o script de busca de aldeias bárbaras.</p>
+          <button class="btn" id="btnExecutarBusca">Executar Busca</button>
+          <div id="resultadoBusca" style="margin-top:10px; max-height:200px; overflow:auto; background:#f9f9f9; border:1px solid #ccc; padding:5px;"></div>
+        </div>
+      `);
+
+      document.getElementById("btnExecutarBusca").onclick = () => {
+        $.getScript('https://tribalwarstools.github.io/twscripts/buscar_barbara.js')
+          .done(() => {
+            document.getElementById("resultadoBusca").innerText = "Busca concluída!";
+          })
+          .fail(() => {
+            document.getElementById("resultadoBusca").innerText = "Falha ao carregar o script.";
+          });
+      };
+    };
+
     carregarDados();
   }
 
   abrirPainel();
+
 })();
