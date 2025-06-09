@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando...');
+  UI.InfoMessage('Iniciando versão 3.0...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -155,7 +155,7 @@
           </div>
 
           <h3>Quantidade de Tropas</h3>
-          <table class="vis" style="width:100%; text-align:left; margin-bottom:5px;">${gerarTabelaTropas()}</table>
+          <table class="vis" style="width:80%; text-align:left; margin-bottom:8px;">${gerarTabelaTropas()}</table>
 
           <div style="margin-bottom:8px;">
             <button class="btn" id="btnPreview" style="width:100%;">Mostrar resultado</button>
