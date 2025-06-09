@@ -124,7 +124,7 @@
     ]);
 
     const html = `
-      <div class="vis" style="padding:5px; max-width: 800px;">
+      <div class="vis" style="padding:10px; max-width: 800px;">
           <h2>Config. Envio de Tropas</h2>
 
           <div style="display:flex; gap:10px; margin-bottom:8px;">
@@ -161,7 +161,7 @@
             <button class="btn" id="btnPreview" style="width:100%;">Mostrar resultado</button>
           </div>
 
-          <div id="previewContainer" style="max-height:140px; overflow-y:auto; background:#f0f0f0; padding:5px; border:1px solid #ccc;"></div>
+          <div id="previewContainer" style="max-height:140px; overflow-y:auto; background:#f0f0f0; padding:10px; border:1px solid #ccc;"></div>
       </div>
     `;
 
