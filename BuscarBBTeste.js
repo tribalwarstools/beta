@@ -1,5 +1,4 @@
 (async function () {
-    const coordAtual = game_data.village.coord;
     let villages = [];
 
     function calcularDistancia(coord1, coord2) {
@@ -19,12 +18,49 @@
         });
     }
 
+    async function carregarMinhasAldeias() {
+        const response = await fetch(window.location.href);
+        const htmlText = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+
+        const select = document.getElementById('coordAtual');
+        select.innerHTML = ''; // limpa opções anteriores
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Selecione uma aldeia';
+        select.appendChild(defaultOption);
+
+        doc.querySelectorAll('#combined_table tbody tr').forEach(row => {
+            const nameCell = row.querySelector('span.quickedit-label');
+            if (!nameCell) return;
+
+            const coordMatch = nameCell.textContent.match(/\((\d+\|\d+)\)/);
+            if (coordMatch) {
+                const name = nameCell.textContent.trim();  // já inclui coord
+                const coord = coordMatch[1];
+
+                const opt = document.createElement('option');
+                opt.value = coord;
+                opt.textContent = name; // evita duplicação da coord
+                select.appendChild(opt);
+            }
+        });
+
+        // Seleciona a aldeia atual automaticamente
+        const aldeiaAtual = game_data.village.coord;
+        select.value = aldeiaAtual || '';
+    }
+
     const html = `
         <div style="font-family: Verdana, sans-serif; font-size: 10px; color: #000; line-height: 1.1; max-width: 260px; width: 100%;">
             <div style="margin-bottom: 6px;">
                 <h2>Buscar aldeias bárbaras</h2>
                 <label for="coordAtual" style="font-weight: bold; display: block; margin-bottom: 1px;">Aldeia Atual:</label>
-                <input id="coordAtual" type="text" value="${coordAtual}" style="width: 100%; padding: 3px 5px; font-weight: bold; border: 1px solid #603000; background: #fff3cc; color: #000; box-sizing: border-box; border-radius: 2px; font-size: 10px;">
+                <select id="coordAtual" style="width: 100%; padding: 3px 5px; font-weight: bold; border: 1px solid #603000; background: #fff3cc; color: #000; box-sizing: border-box; border-radius: 2px; font-size: 10px;">
+                    <option>Carregando...</option>
+                </select>
             </div>
 
             <div style="display: flex; gap: 6px; margin-bottom: 6px;">
@@ -62,6 +98,9 @@
 
     Dialog.show("tw_barbaras_filter_ultracompact", html);
 
+    // Após abrir o diálogo, carrega as aldeias do jogador no select
+    await carregarMinhasAldeias();
+
     document.getElementById('btnReset').addEventListener('click', () => {
         document.getElementById('coordAtual').value = game_data.village.coord;
         document.getElementById('campoValor').value = 50;
@@ -75,6 +114,11 @@
         if (!villages.length) villages = await carregarVillages();
 
         const coordAtual = document.getElementById('coordAtual').value.trim();
+        if (!coordAtual) {
+            UI.ErrorMessage('Selecione uma aldeia atual válida!');
+            return;
+        }
+
         const raio = parseInt(document.getElementById('campoValor').value);
         const minPontos = parseInt(document.getElementById('minPontos').value);
         const maxPontos = parseInt(document.getElementById('maxPontos').value);
