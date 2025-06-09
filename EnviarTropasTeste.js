@@ -187,7 +187,7 @@
     document.getElementById("btnPreview").onclick = mostrarPreview;
 
     document.getElementById("btnBuscarBarbara").onclick = () => {
-      $.getScript('https://tribalwarstools.github.io/teste/BucarBBTeste.js');
+      $.getScript('https://tribalwarstools.github.io/teste/BuscarBBTeste.js');
     };
 
     document.getElementById("btnAtalho").onclick = () => {
