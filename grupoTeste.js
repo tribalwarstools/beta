@@ -16,8 +16,8 @@
     });
 
     const html = `
-        <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 1.5</h2>
+        <div class="vis" style="padding: 10px; max-width: 100%; width: 800px; overflow-x: auto;">
+            <h2>Grupos de Aldeias versão 1.3</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -31,31 +31,36 @@
             </select>
             <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
-            <div id="groupVillages" style="max-height: 300px; overflow-y: auto;"></div>
+            <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
+            <button id="copyAllCoords" style="
+                margin-top: 10px;
+                padding: 5px 10px;
+                font-weight: bold;
+                background: #fce5a5;
+                border: 1px solid #aa8533;
+                cursor: pointer;
+                display: none;
+            ">📋 Copiar todas as coordenadas</button>
         </div>
     `;
     Dialog.show("tw_group_viewer", html);
 
     const select = document.getElementById("groupSelect");
     const villageCountSpan = document.getElementById("villageCount");
+    const copyAllButton = document.getElementById("copyAllCoords");
 
-    // Desabilitar o placeholder "Selecione..."
     select.options[0].disabled = true;
-
-    // Adicionar manualmente a opção "Todas as aldeias"
     const allOpt = document.createElement("option");
     allOpt.value = 0;
     allOpt.textContent = "Todas as aldeias";
     select.appendChild(allOpt);
 
-    // Adicionar os demais grupos, desabilitando os vazios
     groups.forEach(g => {
         if (g.group_id != 0) {
             const opt = document.createElement("option");
             opt.value = g.group_id;
             opt.textContent = g.group_name;
 
-            // Se texto vazio ou só espaços, desabilitar opção
             if (!opt.textContent.trim()) {
                 opt.disabled = true;
                 opt.textContent = "";
@@ -70,6 +75,7 @@
         const groupId = this.value;
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
         villageCountSpan.textContent = "Carregando...";
+        copyAllButton.style.display = "none";
 
         const response = await $.post("/game.php?screen=groups&ajax=load_villages_from_group", {
             group_id: groupId
@@ -84,12 +90,15 @@
             return;
         }
 
-        let output = `<table class="vis" width="100%" style="font-size: 13px;">
+        const allCoords = [];
+
+        let output = `<table class="vis" style="width: 100%; table-layout: fixed; word-wrap: break-word; font-size: 13px;">
             <thead>
                 <tr>
                     <th>Nome</th>
                     <th style="width: 110px;">Coordenadas</th>
                     <th>Pontos</th>
+                    <th style="width: 60px;">Copiar</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -99,6 +108,7 @@
             if (tds.length >= 2) {
                 const name = tds[0].textContent.trim();
                 const coords = tds[1].textContent.trim();
+                allCoords.push(coords);
 
                 const village = villages.find(v => v.coord === coords);
                 const points = village ? village.points : 0;
@@ -138,15 +148,27 @@
                     : name;
 
                 const coordLink = villageId
-                    ? `<a href="/game.php?village=${villageId}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
+                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
                     : `<b style="font-size: 13px;">${coords}</b>`;
 
-                output += `<tr><td>${nameLink}</td><td>${coordLink}</td><td>${progressBar}</td></tr>`;
+                output += `<tr>
+                    <td>${nameLink}</td>
+                    <td>${coordLink}</td>
+                    <td>${progressBar}</td>
+                    <td><button onclick="navigator.clipboard.writeText('${coords}')" style="cursor:pointer;">📋</button></td>
+                </tr>`;
             }
         });
-        output += `</tbody></table>`;
 
+        output += `</tbody></table>`;
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
+
+        // Habilita o botão de copiar todas
+        copyAllButton.style.display = "inline-block";
+        copyAllButton.onclick = () => {
+            navigator.clipboard.writeText(allCoords.join(' '));
+            UI.SuccessMessage("Coordenadas copiadas!");
+        };
     });
 })();
