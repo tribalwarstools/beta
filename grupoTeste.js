@@ -1,3 +1,5 @@
+//corrigir contator de aldeias
+
 (async function () {
     const savedGroupId = localStorage.getItem("tw_group_selected");
 
