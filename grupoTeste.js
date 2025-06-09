@@ -29,6 +29,7 @@
             ">
                 <option disabled selected>Selecione...</option>
             </select>
+            <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
             <div id="groupVillages" style="max-height: 300px; overflow-y: auto;"></div>
         </div>
@@ -36,19 +37,31 @@
     Dialog.show("tw_group_viewer", html);
 
     const select = document.getElementById("groupSelect");
+    const villageCountSpan = document.getElementById("villageCount");
 
-    // Adicionar manualmente a opção "Todos (Todas as aldeias)"
+    // Desabilitar o placeholder "Selecione..."
+    select.options[0].disabled = true;
+
+    // Adicionar manualmente a opção "Todas as aldeias"
     const allOpt = document.createElement("option");
     allOpt.value = 0;
     allOpt.textContent = "Todas as aldeias";
     select.appendChild(allOpt);
 
-    // Adicionar os demais grupos
+    // Adicionar os demais grupos, desabilitando os vazios
     groups.forEach(g => {
         if (g.group_id != 0) {
             const opt = document.createElement("option");
             opt.value = g.group_id;
             opt.textContent = g.group_name;
+
+            // Se texto vazio ou só espaços, desabilitar opção
+            if (!opt.textContent.trim()) {
+                opt.disabled = true;
+                opt.textContent = "(vazio)";
+                opt.style.color = "#999";
+            }
+
             select.appendChild(opt);
         }
     });
@@ -56,6 +69,7 @@
     select.addEventListener("change", async function () {
         const groupId = this.value;
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
+        villageCountSpan.textContent = "Carregando...";
 
         const response = await $.post("/game.php?screen=groups&ajax=load_villages_from_group", {
             group_id: groupId
@@ -66,6 +80,7 @@
 
         if (!rows.length) {
             $("#groupVillages").html("<p><i>Nenhuma aldeia no grupo.</i></p>");
+            villageCountSpan.textContent = "0 aldeias";
             return;
         }
 
@@ -132,5 +147,6 @@
         output += `</tbody></table>`;
 
         $("#groupVillages").html(output);
+        villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
     });
 })();
