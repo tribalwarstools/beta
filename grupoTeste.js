@@ -17,7 +17,7 @@
 
     const html = `
         <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias</h2>
+            <h2>Grupos de Aldeias versão 1.0</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
