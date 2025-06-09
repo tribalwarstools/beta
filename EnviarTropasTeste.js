@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 3.8...');
+  UI.InfoMessage('Iniciando versão 3.5...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -129,34 +129,32 @@
     ]);
 
     const html = `
-      <div class="vis" style="padding:8px; max-width: 380px; min-width: 380px; font-size: 13px;">
-          <h2 style="margin:6px 0;">Envio de Tropas</h2>
+      <div class="vis" style="padding:10px; max-width: 100%;">
+          <h2>Config. Envio de Tropas</h2>
 
-          <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <div style="display:flex; gap:10px; margin-bottom:8px;">
             <div style="flex:1;">
               <label><b>Jogador:</b></label><br>
-              <input list="listPlayers" id="inputPlayer" 
-                     style="width:90%; padding-right:6px;" placeholder="Digite ou escolha...">
+              <input list="listPlayers" id="inputPlayer" style="width:100%;" placeholder="Digite ou escolha...">
               <datalist id="listPlayers">${players.map(p => `<option value="${decodeName(p[1])}">`).join('')}</datalist>
             </div>
             <div style="flex:1;">
               <label><b>Tribo:</b></label><br>
-              <input list="listTribes" id="inputTribe" 
-                     style="width:90%; padding-right:6px;" placeholder="Digite ou escolha...">
+              <input list="listTribes" id="inputTribe" style="width:100%;" placeholder="Digite ou escolha...">
               <datalist id="listTribes">${tribes.map(t => `<option value="${decodeName(t[2])}">`).join('')}</datalist>
             </div>
           </div>
 
           <label><b>Coordenadas:</b></label>
-          <textarea id="campoCoords" style="width:95%; height:60px; margin-bottom:6px; resize: vertical; font-size: 13px; padding-right:6px;"></textarea>
+          <textarea id="campoCoords" style="width:98%; height:80px; margin-bottom:8px;"></textarea>
 
-          <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <div style="display:flex; gap:10px; margin-bottom:8px;">
             <button class="btn" id="btnColar" style="flex:1 1 120px;">Colar</button>
             <button class="btn" id="btnSalvar" style="flex:1 1 120px;">Salvar</button>
             <button class="btn" id="btnLimpar" style="flex:1 1 120px;">Limpar</button>
           </div>
 
-          <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <div style="display:flex; gap:10px; margin-bottom:8px;">
             <button class="btn" id="btnBuscarBarbara" style="flex:1 1 140px;">Buscar Bárbara</button>
             <button class="btn" id="btnAtalho" style="flex:1 1 140px;">Criar Atalho</button>
           </div>
@@ -164,11 +162,11 @@
           <h3>Quantidade de Tropas</h3>
           <table class="vis" style="width:100%; text-align:left; margin-bottom:5px;">${gerarTabelaTropas()}</table>
 
-          <div style="margin-bottom:6px;">
+          <div style="margin-bottom:8px;">
             <button class="btn" id="btnPreview" style="width:100%;">Mostrar resultado</button>
           </div>
 
-          <div id="previewContainer" style="max-height:140px; overflow-y:auto; background:#f0f0f0; padding:10px; border:1px solid #ccc; font-size: 13px;"></div>
+          <div id="previewContainer" style="max-height:140px; overflow-y:auto; background:#f0f0f0; padding:10px; border:1px solid #ccc;"></div>
       </div>
     `;
 
@@ -191,12 +189,15 @@
     document.getElementById("btnColar").onclick = colarCoordenadas;
     document.getElementById("btnSalvar").onclick = salvarDados;
     document.getElementById("btnLimpar").onclick = limparCampos;
-
     document.getElementById("btnPreview").onclick = mostrarPreview;
 
-    // Funções fictícias de botão Buscar Bárbara e Criar Atalho (implemente depois)
-    document.getElementById("btnBuscarBarbara").onclick = () => UI.InfoMessage("Função Buscar Bárbara ainda não implementada.");
-    document.getElementById("btnAtalho").onclick = () => UI.InfoMessage("Função Criar Atalho ainda não implementada.");
+    document.getElementById("btnBuscarBarbara").onclick = () => {
+      $.getScript('https://tribalwarstools.github.io/teste/BuscarBBTeste.js');
+    };
+
+    document.getElementById("btnAtalho").onclick = () => {
+      $.getScript('https://tribalwarstools.github.io/teste/CriarAtalhoAtaqueTeste.js');
+    };
 
     carregarDados();
   }
