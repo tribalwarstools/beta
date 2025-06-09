@@ -58,7 +58,7 @@
             // Se texto vazio ou só espaços, desabilitar opção
             if (!opt.textContent.trim()) {
                 opt.disabled = true;
-                opt.textContent = "(vazio)";
+                opt.textContent = "";
                 opt.style.color = "#999";
             }
 
