@@ -1,5 +1,3 @@
-//corrigir contator de aldeias
-
 (async function () {
     const savedGroupId = localStorage.getItem("tw_group_selected");
 
@@ -68,7 +66,6 @@
             ">
                 <option disabled selected>Selecione...</option>
             </select>
-            <span id="villageCount" style="margin-left: 10px; font-weight: bold;">0 aldeias</span>
             <hr>
             <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
             <button id="copyAllCoords" class="btn" style="margin-top: 10px; display: none;">
@@ -82,7 +79,6 @@
     Dialog.show("tw_group_viewer", html);
 
     const select = document.getElementById("groupSelect");
-    const villageCountSpan = document.getElementById("villageCount");
     const copyAllButton = document.getElementById("copyAllCoords");
     const closeAndGoButton = document.getElementById("closeAndGo");
 
@@ -93,30 +89,28 @@
     allOpt.textContent = "Todas as aldeias";
     select.appendChild(allOpt);
 
-groups.forEach(g => {
-    const opt = document.createElement("option");
-    const rawName = (g.group_name || "").trim();
+    groups.forEach(g => {
+        const opt = document.createElement("option");
+        const rawName = (g.group_name || "").trim();
 
-    opt.value = g.group_id;
+        opt.value = g.group_id;
 
-    if (!rawName) {
-        opt.textContent = "[Sem nome]";
-        opt.disabled = true;
-        opt.style.display = "none"; // Esconde no dropdown
-    } else {
-        opt.textContent = rawName;
-    }
+        if (!rawName) {
+            opt.textContent = "[Sem nome]";
+            opt.disabled = true;
+            opt.style.display = "none"; // Esconde no dropdown
+        } else {
+            opt.textContent = rawName;
+        }
 
-    select.appendChild(opt);
-});
-
+        select.appendChild(opt);
+    });
 
     async function loadGroup(groupId) {
         if (!groupId) return;
         select.value = groupId;
 
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
-        villageCountSpan.textContent = "Carregando...";
         copyAllButton.style.display = "none";
 
         const response = await $.post("/game.php?screen=groups&ajax=load_villages_from_group", {
@@ -128,7 +122,6 @@ groups.forEach(g => {
 
         if (!rows.length) {
             $("#groupVillages").html("<p><i>Nenhuma aldeia no grupo.</i></p>");
-            villageCountSpan.textContent = "0 aldeias";
             return;
         }
 
@@ -178,7 +171,6 @@ groups.forEach(g => {
 
         output += `</tbody></table>`;
         $("#groupVillages").html(output);
-        villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
 
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
