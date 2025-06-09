@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 3.1...');
+  UI.InfoMessage('Iniciando versão 3.2...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -20,7 +20,7 @@
               ${nome}
             </span>
           </td>
-          <td><input type="number" id="input_${id}" min="0" value="0" style="width: 60px;"></td>
+          <td><input type="number" id="input_${id}" min="0" value="0" style="width: 40px;"></td>
       `;
       if (idx % 2 === 1) html += "</tr>";
       return html;
