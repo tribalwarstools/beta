@@ -17,7 +17,7 @@
 
     const html = `
         <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 1.3</h2>
+            <h2>Grupos de Aldeias versão 2.22</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -83,13 +83,13 @@
             return;
         }
 
-        let output = `<table class="vis" width="100%" style="font-size: 13px;">
+        let output = `<table class="vis" width="700px" style="font-size: 13px;">
             <thead>
                 <tr>
                     <th>Nome</th>
                     <th style="width: 110px;">Coordenadas</th>
-                    <th>Pontos</th>
-                    <th style="width: 40px;">Copiar</th>
+                    <th style="width: 70px;">Pontos</th>
+                    <th style="width: 140px;">Comandos</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -148,7 +148,10 @@
                     <td>${nameLink}</td>
                     <td>${coordLink}</td>
                     <td>${progressBar}</td>
-                    <td><button class="btn btn-default btn-sm" onclick="navigator.clipboard.writeText('${coords}')">📋</button></td>
+                    <td>
+                        <button class="btn btn-default btn-sm" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
+                        <!-- Botões adicionais aqui -->
+                    </td>
                 </tr>`;
             }
         });
@@ -157,7 +160,6 @@
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
 
-        // Mostrar botão copiar todas
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
             navigator.clipboard.writeText(allCoords.join(' '));
