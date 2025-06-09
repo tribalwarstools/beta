@@ -57,6 +57,6 @@
     }
     await adicionarAtalho(name, hrefFixo);
     Dialog.close();
-    location.reload();
+    location.href = `/game.php?screen=place&village=${game_data.village.id}`;
   });
 })();
