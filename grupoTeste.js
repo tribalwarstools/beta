@@ -134,11 +134,11 @@
                 `;
 
                 const nameLink = villageId
-                    ? `<a href="/game.php?village=${game_data.village.id}&screen=overview&intro&target=${villageId}" target="_blank">${name}</a>`
+                    ? `<a href="/game.php?village=${villageId}&screen=overview" target="_blank">${name}</a>`
                     : name;
 
                 const coordLink = villageId
-                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
+                    ? `<a href="/game.php?village=${villageId}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
                     : `<b style="font-size: 13px;">${coords}</b>`;
 
                 output += `<tr><td>${nameLink}</td><td>${coordLink}</td><td>${progressBar}</td></tr>`;
