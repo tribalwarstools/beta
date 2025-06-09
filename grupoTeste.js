@@ -62,7 +62,8 @@
             #coordCount {
                 font-weight: bold;
                 color: #603000;
-                min-width: 160px;
+                min-width: 30px; /* só espaço pra número */
+                text-align: center;
             }
         </style>
         <div class="vis" style="padding: 10px; width: 800px;">
@@ -80,7 +81,7 @@
                 ">
                     <option disabled selected>Selecione...</option>
                 </select>
-                <span id="coordCount"><i>Selecione um grupo para ver o total</i></span>
+                <span id="coordCount">0</span>
             </div>
             <hr>
             <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
@@ -120,14 +121,14 @@
 
     async function loadGroup(groupId) {
         if (!groupId) {
-            coordCountSpan.innerHTML = `<i>Selecione um grupo para ver o total</i>`;
+            coordCountSpan.textContent = "0";
             return;
         }
         select.value = groupId;
 
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
         copyAllButton.style.display = "none";
-        coordCountSpan.textContent = "Carregando...";
+        coordCountSpan.textContent = "...";
 
         const response = await $.post("/game.php?screen=groups&ajax=load_villages_from_group", {
             group_id: groupId
@@ -138,7 +139,7 @@
 
         if (!rows.length) {
             $("#groupVillages").html("<p><i>Nenhuma aldeia no grupo.</i></p>");
-            coordCountSpan.textContent = "Total de coordenadas: 0";
+            coordCountSpan.textContent = "0";
             return;
         }
 
@@ -195,8 +196,8 @@
             UI.SuccessMessage("Coordenadas copiadas!");
         };
 
-        // Atualiza o contador ao lado do select
-        coordCountSpan.textContent = `Total de coordenadas: ${allCoords.length}`;
+        // Atualiza o contador só com o número
+        coordCountSpan.textContent = allCoords.length;
     }
 
     select.addEventListener("change", () => {
