@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 2.9...');
+  UI.InfoMessage('Iniciando versão 3.0...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -190,35 +190,9 @@
       $.getScript('https://tribalwarstools.github.io/teste/BuscarBBTeste.js');
     };
 
+    // ✅ Novo comportamento do botão "Criar Atalho"
     document.getElementById("btnAtalho").onclick = () => {
-      (async function adicionarAtalhoQuickbar(nome, href) {
-        try {
-          const token = window.csrf_token || (typeof twSDK !== 'undefined' && await twSDK.getCSRFToken()) || null;
-          if (!token) {
-            UI.ErrorMessage('Token CSRF não encontrado.');
-            return;
-          }
-
-          const data = `hotkey=&name=${encodeURIComponent(nome)}&href=${encodeURIComponent(href)}&h=${token}`;
-          await $.ajax({
-            url: '/game.php?screen=settings&mode=quickbar_edit&action=quickbar_edit&',
-            method: 'POST',
-            data,
-          });
-
-          UI.SuccessMessage(`Atalho '${nome}' adicionado com sucesso!`);
-
-          Dialog.close();
-
-          window.location.href = '/game.php?screen=place';
-
-        } catch (e) {
-          UI.ErrorMessage('Erro ao adicionar atalho: ' + e.message);
-        }
-      })(
-        'Script de Ataque',
-        "javascript:$.getScript('https://tribalwarstools.github.io/twscripts/ataque.js');"
-      );
+      $.getScript('https://tribalwarstools.github.io/teste/CriarAtalhoAtaqueTeste.js');
     };
 
     carregarDados();
