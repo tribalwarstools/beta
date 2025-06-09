@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 3.3...');
+  UI.InfoMessage('Iniciando versão 3.5...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -129,7 +129,7 @@
     ]);
 
     const html = `
-      <div class="vis" style="padding:10px; max-width: 800px;">
+      <div class="vis" style="padding:10px; max-width: 100%;">
           <h2>Config. Envio de Tropas</h2>
 
           <div style="display:flex; gap:10px; margin-bottom:8px;">
