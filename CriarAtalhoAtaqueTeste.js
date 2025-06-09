@@ -24,7 +24,7 @@
 
   const $html = `
     <div style="font-size:11px; line-height:1.2;">
-      <h2 align="center">Adicionar atalho quickbar</h2>
+      <h2 align="center">Adicionar atalho</h2>
       <table class="vis" style="width:100%; margin-top:4px;">
         <tr>
           <td>Nome do atalho:</td>
