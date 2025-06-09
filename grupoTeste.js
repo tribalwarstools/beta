@@ -19,6 +19,7 @@
 
     const html = `
         <style>
+            /* seu CSS atual */
             #tw_group_viewer, 
             #tw_group_viewer .vis {
                 max-width: 830px !important;
@@ -50,22 +51,37 @@
                 padding: 2px 6px;
                 font-size: 12px;
             }
+            /* Novo: container flex para select + contador */
+            #groupSelectContainer {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-top: 5px;
+                margin-bottom: 10px;
+            }
+            #coordCount {
+                font-weight: bold;
+                color: #603000;
+                min-width: 160px;
+            }
         </style>
         <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 1.0</h2>
-            <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
-            <select id="groupSelect" style="
-                margin-top: 5px;
-                padding: 4px;
-                background: #f4e4bc;
-                color: #000;
-                border: 1px solid #603000;
-                font-weight: bold;
-                max-width: 100%;
-                box-sizing: border-box;
-            ">
-                <option disabled selected>Selecione...</option>
-            </select>
+            <h2>Grupos de Aldeias versão 1.1</h2>
+            <label for="groupSelect"><b>Selecione um grupo:</b></label>
+            <div id="groupSelectContainer">
+                <select id="groupSelect" style="
+                    padding: 4px;
+                    background: #f4e4bc;
+                    color: #000;
+                    border: 1px solid #603000;
+                    font-weight: bold;
+                    max-width: 100%;
+                    box-sizing: border-box;
+                ">
+                    <option disabled selected>Selecione...</option>
+                </select>
+                <span id="coordCount"><i>Selecione um grupo para ver o total</i></span>
+            </div>
             <hr>
             <div id="groupVillages" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;"></div>
             <button id="copyAllCoords" class="btn" style="margin-top: 10px; display: none;">
@@ -81,6 +97,7 @@
     const select = document.getElementById("groupSelect");
     const copyAllButton = document.getElementById("copyAllCoords");
     const closeAndGoButton = document.getElementById("closeAndGo");
+    const coordCountSpan = document.getElementById("coordCount");
 
     select.options[0].disabled = true;
 
@@ -102,11 +119,15 @@
     });
 
     async function loadGroup(groupId) {
-        if (!groupId) return;
+        if (!groupId) {
+            coordCountSpan.innerHTML = `<i>Selecione um grupo para ver o total</i>`;
+            return;
+        }
         select.value = groupId;
 
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
         copyAllButton.style.display = "none";
+        coordCountSpan.textContent = "Carregando...";
 
         const response = await $.post("/game.php?screen=groups&ajax=load_villages_from_group", {
             group_id: groupId
@@ -117,6 +138,7 @@
 
         if (!rows.length) {
             $("#groupVillages").html("<p><i>Nenhuma aldeia no grupo.</i></p>");
+            coordCountSpan.textContent = "Total de coordenadas: 0";
             return;
         }
 
@@ -172,6 +194,9 @@
             navigator.clipboard.writeText(allCoords.join(' '));
             UI.SuccessMessage("Coordenadas copiadas!");
         };
+
+        // Atualiza o contador ao lado do select
+        coordCountSpan.textContent = `Total de coordenadas: ${allCoords.length}`;
     }
 
     select.addEventListener("change", () => {
