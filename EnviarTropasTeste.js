@@ -124,7 +124,7 @@
     ]);
 
     const html = `
-      <div class="vis" style="padding:10px; max-width: 700px;">
+      <div class="vis" style="padding:10px; max-width: 800px;">
           <h2>Config. Envio de Tropas</h2>
 
           <div style="display:flex; gap:10px; margin-bottom:8px;">
@@ -155,7 +155,7 @@
           </div>
 
           <h3>Quantidade de Tropas</h3>
-          <table class="vis" style="width:100%; text-align:left; margin-bottom:8px;">${gerarTabelaTropas()}</table>
+          <table class="vis" style="width:100%; text-align:left; margin-bottom:5px;">${gerarTabelaTropas()}</table>
 
           <div style="margin-bottom:8px;">
             <button class="btn" id="btnPreview" style="width:100%;">Mostrar resultado</button>
