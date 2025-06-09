@@ -69,8 +69,15 @@
             return;
         }
 
-        let output = `<table class="vis" width="100%">
-            <thead><tr><th>Nome</th><th>Coordenadas</th><th>Pontos</th></tr></thead><tbody>`;
+        let output = `<table class="vis" width="100%" style="font-size: 13px;">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th style="width: 110px;">Coordenadas</th>
+                    <th>Pontos</th>
+                </tr>
+            </thead>
+            <tbody>`;
 
         rows.forEach(row => {
             const tds = row.querySelectorAll("td");
@@ -116,8 +123,8 @@
                     : name;
 
                 const coordLink = villageId
-                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank"><b>${coords}</b></a>`
-                    : `<b>${coords}</b>`;
+                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
+                    : `<b style="font-size: 13px;">${coords}</b>`;
 
                 output += `<tr><td>${nameLink}</td><td>${coordLink}</td><td>${progressBar}</td></tr>`;
             }
