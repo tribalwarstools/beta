@@ -1,5 +1,14 @@
-javascript:
 (async function () {
+    // Carregar village.txt para obter as pontuações
+    const villRaw = await fetch('/map/village.txt').then(r => r.text());
+    const villages = villRaw.trim().split('\n').map(line => {
+        const [id, name, x, y, player, points] = line.split(',');
+        return {
+            coord: `${x}|${y}`,
+            points: parseInt(points)
+        };
+    });
+
     const groups = [];
 
     // Obter TODOS os grupos
@@ -12,7 +21,7 @@ javascript:
 
     // Interface
     const html = `
-        <div class="vis" style="padding: 10px;">
+        <div class="vis" style="padding: 10px; width: 800px;">
             <h2>Grupos de Aldeias</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
@@ -56,13 +65,50 @@ javascript:
         }
 
         let output = `<table class="vis" width="100%">
-            <thead><tr><th>Nome</th><th>Coordenadas</th></tr></thead><tbody>`;
+            <thead><tr><th>Nome</th><th>Coordenadas</th><th>Pontos</th></tr></thead><tbody>`;
+
         rows.forEach(row => {
             const tds = row.querySelectorAll("td");
             if (tds.length >= 2) {
                 const name = tds[0].textContent.trim();
                 const coords = tds[1].textContent.trim();
-                output += `<tr><td>${name}</td><td><b>${coords}</b></td></tr>`;
+
+                // Buscar pontos pela coordenada no village.txt
+                const village = villages.find(v => v.coord === coords);
+                const points = village ? village.points : 0;
+
+                // Limite da barra
+                const maxPoints = 10000;
+                const pct = Math.min(points, maxPoints) / maxPoints * 100;
+
+                // Barra de progresso verde
+                const progressBar = `
+                    <div style="background: #ddd; border-radius: 4px; width: 100px; height: 12px; position: relative;">
+                        <div style="
+                            background: #4caf50;
+                            width: ${pct}%;
+                            height: 100%;
+                            border-radius: 4px;
+                        "></div>
+                        <div style="
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            text-align: center;
+                            font-size: 10px;
+                            line-height: 12px;
+                            color: #000;
+                            font-weight: bold;
+                            user-select: none;
+                        ">
+                            ${points}
+                        </div>
+                    </div>
+                `;
+
+                output += `<tr><td>${name}</td><td><b>${coords}</b></td><td>${progressBar}</td></tr>`;
             }
         });
         output += `</tbody></table>`;
