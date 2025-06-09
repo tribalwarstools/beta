@@ -1,4 +1,6 @@
 (async function () {
+    const savedGroupId = localStorage.getItem("tw_group_selected");
+
     const villRaw = await fetch('/map/village.txt').then(r => r.text());
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, player, points] = line.split(',');
@@ -34,6 +36,7 @@
                 padding: 4px 6px;
                 border: 1px solid #aaa;
                 overflow-wrap: break-word;
+                word-wrap: break-word;
                 white-space: nowrap;
                 text-overflow: ellipsis;
             }
@@ -48,8 +51,8 @@
                 font-size: 12px;
             }
         </style>
-        <div class="vis" style="padding: 10px; width: 800px; box-sizing: border-box;">
-            <h2>Grupos de Aldeias versão 3.0</h2>
+        <div class="vis" style="padding: 10px; width: 800px;">
+            <h2>Grupos de Aldeias versão 1.3</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -69,6 +72,9 @@
             <button id="copyAllCoords" class="btn btn-default" style="margin-top: 10px; display: none;">
                 📋 Copiar todas as coordenadas
             </button>
+            <button id="closeAndGo" class="btn btn-confirm" style="margin-top: 10px; float: right;">
+                Fechar e ir para o grupo
+            </button>
         </div>
     `;
     Dialog.show("tw_group_viewer", html);
@@ -76,6 +82,7 @@
     const select = document.getElementById("groupSelect");
     const villageCountSpan = document.getElementById("villageCount");
     const copyAllButton = document.getElementById("copyAllCoords");
+    const closeAndGoButton = document.getElementById("closeAndGo");
 
     select.options[0].disabled = true;
 
@@ -85,22 +92,21 @@
     select.appendChild(allOpt);
 
     groups.forEach(g => {
-        if (g.group_id != 0) {
-            const opt = document.createElement("option");
-            opt.value = g.group_id;
-            opt.textContent = g.group_name;
-            if (!opt.textContent.trim()) {
-                opt.disabled = true;
-                opt.textContent = "";
-                opt.style.color = "#999";
-            }
-            select.appendChild(opt);
+        const opt = document.createElement("option");
+        opt.value = g.group_id;
+        opt.textContent = g.group_name || "[Sem nome]";
+        if (!opt.textContent.trim()) {
+            opt.disabled = true;
+            opt.textContent = "";
+            opt.style.color = "#999";
         }
+        select.appendChild(opt);
     });
 
-    select.addEventListener("change", async function () {
-        const groupId = this.value;
-        sessionStorage.setItem("tw_last_group", groupId);
+    async function loadGroup(groupId) {
+        if (!groupId) return;
+        select.value = groupId;
+
         $("#groupVillages").html("<i>Carregando aldeias...</i>");
         villageCountSpan.textContent = "Carregando...";
         copyAllButton.style.display = "none";
@@ -118,16 +124,9 @@
             return;
         }
 
-        let output = `<table class="vis" width="100%">
-            <thead>
-                <tr>
-                    <th>Nome</th>
-                    <th>Coordenadas</th>
-                    <th>Pontos</th>
-                    <th>Comandos</th>
-                </tr>
-            </thead>
-            <tbody>`;
+        let output = `<table class="vis"><thead>
+            <tr><th>Nome</th><th>Coordenadas</th><th>Pontos</th><th>Comandos</th></tr>
+        </thead><tbody>`;
 
         const allCoords = [];
 
@@ -141,66 +140,64 @@
                 const village = villages.find(v => v.coord === coords);
                 const points = village ? village.points : 0;
                 const villageId = village ? village.id : null;
-
-                const maxPoints = 10000;
-                const pct = Math.min(points, maxPoints) / maxPoints * 100;
-
-                const progressBar = `
-                    <div style="background: #ddd; border-radius: 4px; width: 100px; height: 12px; position: relative;">
-                        <div style="background: #4caf50; width: ${pct}%; height: 100%; border-radius: 4px;"></div>
-                        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                            text-align: center; font-size: 10px; line-height: 12px; color: #000; font-weight: bold;">
-                            ${points}
-                        </div>
-                    </div>`;
+                const pct = Math.min(points, 10000) / 100;
 
                 const nameLink = villageId
                     ? `<a href="/game.php?village=${villageId}&screen=overview" target="_blank">${name}</a>`
                     : name;
 
                 const coordLink = villageId
-                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank" style="font-size: 13px;"><b>${coords}</b></a>`
-                    : `<b style="font-size: 13px;">${coords}</b>`;
+                    ? `<a href="/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}" target="_blank"><b>${coords}</b></a>`
+                    : `<b>${coords}</b>`;
+
+                const progressBar = `
+                    <div style="background:#ddd;border-radius:4px;width:100px;height:12px;position:relative;">
+                        <div style="background:#4caf50;width:${pct}%;height:100%;border-radius:4px;"></div>
+                        <div style="position:absolute;top:0;left:0;width:100%;height:100%;text-align:center;font-size:10px;line-height:12px;font-weight:bold;">
+                            ${points}
+                        </div>
+                    </div>`;
 
                 const commandsButtons = `
-                    <button class="btn btn-default btn-sm" title="Copiar coordenada" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
-                    <button class="btn btn-default btn-sm" title="Abrir aldeia" onclick="window.open('/game.php?village=${villageId}&screen=overview', '_blank')">🏠</button>
-                    <button class="btn btn-default btn-sm" title="Info aldeia" onclick="window.open('/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}', '_blank')">ℹ️</button>
+                    <button class="btn btn-default" title="Copiar" onclick="navigator.clipboard.writeText('${coords}')">📋</button>
+                    <button class="btn btn-default" title="Abrir" onclick="window.open('/game.php?village=${villageId}&screen=overview','_blank')">🏠</button>
+                    <button class="btn btn-default" title="Info" onclick="window.open('/game.php?village=${game_data.village.id}&screen=info_village&id=${villageId}','_blank')">ℹ️</button>
                 `;
 
-                output += `<tr>
-                    <td title="${name}">${nameLink}</td>
-                    <td>${coordLink}</td>
-                    <td>${progressBar}</td>
-                    <td style="white-space: nowrap;">${commandsButtons}</td>
-                </tr>`;
+                output += `<tr><td>${nameLink}</td><td>${coordLink}</td><td>${progressBar}</td><td>${commandsButtons}</td></tr>`;
             }
         });
 
         output += `</tbody></table>`;
         $("#groupVillages").html(output);
         villageCountSpan.textContent = `${rows.length} aldeia${rows.length > 1 ? 's' : ''}`;
+
         copyAllButton.style.display = "inline-block";
         copyAllButton.onclick = () => {
             navigator.clipboard.writeText(allCoords.join(' '));
             UI.SuccessMessage("Coordenadas copiadas!");
         };
+    }
+
+    select.addEventListener("change", () => {
+        const groupId = select.value;
+        localStorage.setItem("tw_group_selected", groupId);
+        loadGroup(groupId);
     });
 
-    // Botão "Fechar e ir para o grupo"
-    const fecharBtn = document.createElement('button');
-    fecharBtn.textContent = 'Fechar e ir para o grupo';
-    fecharBtn.className = 'btn btn-confirm';
-    fecharBtn.style.marginTop = '10px';
-    copyAllButton.insertAdjacentElement('afterend', fecharBtn);
-
-    fecharBtn.addEventListener('click', () => {
-        const groupId = select.value;
-        if (!groupId || groupId === "Selecione...") {
-            UI.ErrorMessage("Selecione um grupo antes de continuar.");
+    closeAndGoButton.addEventListener("click", () => {
+        const selectedId = select.value;
+        if (!selectedId) {
+            UI.ErrorMessage("Selecione um grupo antes!");
             return;
         }
-        if (Dialog.close) Dialog.close();
-        window.location.href = `/game.php?screen=overview_villages&mode=combined&group=${groupId}`;
+        Dialog.close();
+        window.location.href = `/game.php?village=${game_data.village.id}&screen=overview_villages&mode=combined&group=${selectedId}`;
     });
+
+    // Se havia grupo salvo, carrega automaticamente
+    if (savedGroupId) {
+        localStorage.removeItem("tw_group_selected");
+        loadGroup(savedGroupId);
+    }
 })();
