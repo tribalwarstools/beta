@@ -17,7 +17,7 @@
 
     const html = `
         <div class="vis" style="padding: 10px; width: 800px;">
-            <h2>Grupos de Aldeias versão 1.0</h2>
+            <h2>Grupos de Aldeias versão 1.1</h2>
             <label for="groupSelect"><b>Selecione um grupo:</b></label><br>
             <select id="groupSelect" style="
                 margin-top: 5px;
@@ -40,7 +40,7 @@
     // Adicionar manualmente a opção "Todos (Todas as aldeias)"
     const allOpt = document.createElement("option");
     allOpt.value = 0;
-    allOpt.textContent = "Todos (Todas as aldeias)";
+    allOpt.textContent = "Todas as aldeias";
     select.appendChild(allOpt);
 
     // Adicionar os demais grupos
