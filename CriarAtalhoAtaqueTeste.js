@@ -35,7 +35,7 @@
         <tr>
           <td>URL do script:</td>
           <td>
-            <input id="inputHref" type="text" style="width:100%;" readonly value="${hrefFixo}">
+            <input id="inputHref" type="text" style="width:98%;" readonly value="${hrefFixo}">
           </td>
         </tr>
         <tr>
