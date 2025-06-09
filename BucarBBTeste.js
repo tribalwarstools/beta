@@ -22,6 +22,7 @@
     const html = `
         <div style="font-family: Verdana, sans-serif; font-size: 10px; color: #000; line-height: 1.1; max-width: 260px; width: 100%;">
             <div style="margin-bottom: 6px;">
+                <h2>Buscar aldeias bárbaras</h2>
                 <label for="coordAtual" style="font-weight: bold; display: block; margin-bottom: 1px;">Aldeia Atual:</label>
                 <input id="coordAtual" type="text" value="${coordAtual}" style="width: 100%; padding: 3px 5px; font-weight: bold; border: 1px solid #603000; background: #fff3cc; color: #000; box-sizing: border-box; border-radius: 2px; font-size: 10px;">
             </div>
