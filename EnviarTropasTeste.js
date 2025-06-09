@@ -1,5 +1,5 @@
 (function () {
-  UI.InfoMessage('Iniciando versão 3.0...');
+  UI.InfoMessage('Iniciando versão 3.1...');
 
   const unidades = [
     ["spear", "Lanceiro"], ["sword", "Espadachim"],
@@ -14,7 +14,12 @@
     return unidades.reduce((html, [id, nome], idx) => {
       if (idx % 2 === 0) html += "<tr>";
       html += `
-          <td><img src="/graphic/unit/unit_${id}.png" title="${nome}" /> ${nome}</td>
+          <td>
+            <span style="white-space: nowrap;">
+              <img src="/graphic/unit/unit_${id}.png" title="${nome}" style="vertical-align: middle; margin-right: 4px; height: 18px;">
+              ${nome}
+            </span>
+          </td>
           <td><input type="number" id="input_${id}" min="0" value="0" style="width: 60px;"></td>
       `;
       if (idx % 2 === 1) html += "</tr>";
@@ -190,7 +195,6 @@
       $.getScript('https://tribalwarstools.github.io/teste/BuscarBBTeste.js');
     };
 
-    // ✅ Novo comportamento do botão "Criar Atalho"
     document.getElementById("btnAtalho").onclick = () => {
       $.getScript('https://tribalwarstools.github.io/teste/CriarAtalhoAtaqueTeste.js');
     };
