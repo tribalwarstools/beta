@@ -124,7 +124,7 @@
     ]);
 
     const html = `
-      <div class="vis" style="padding:10px; max-width: 700px;">
+      <div class="vis" style="padding:10px; max-width: 900px;">
           <h2>Gerenciador de Envio de Tropas</h2>
 
           <div style="display:flex; gap:10px; margin-bottom:8px;">
