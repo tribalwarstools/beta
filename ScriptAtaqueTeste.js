@@ -4,7 +4,7 @@ javascript:
     const coordsSalvas = localStorage.getItem("coordsSalvas") || "500|500";
     const tropasSalvas = localStorage.getItem("tropasSalvas");
 
-    // Inicializa units com todos 0, só spy com 5 como no original
+    // Inicializa units com todos 0
     var units = {
         spear: [0, 0],
         sword: [0, 0],
