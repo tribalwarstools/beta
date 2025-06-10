@@ -1,22 +1,4 @@
 (async function () {
-    if (!window.location.href.includes('overview_villages&mode=combined')) {
-        const url = `/game.php?screen=overview_villages&mode=combined&group=${game_data.group_id || 0}`;
-        const avisoHtml = `
-            <div style="font-family: Verdana, sans-serif; font-size: 12px; color: #000;">
-                <p><strong>Você precisa estar na tela "Visão geral das aldeias (combinada)" para usar este script.</strong></p>
-                <p>Clique no botão abaixo para ir até lá.</p>
-                <button id="btnIrParaCombined" class="btn btn-confirm-yes">Ir para visão combinada</button>
-            </div>
-        `;
-        Dialog.show("tw_aviso_necessario", avisoHtml);
-
-        document.getElementById('btnIrParaCombined').addEventListener('click', () => {
-            window.location.href = url;
-        });
-        return;
-    }
-
-    // Continuação do script original se estiver na visão correta
     let villages = [];
 
     function calcularDistancia(coord1, coord2) {
@@ -37,48 +19,43 @@
     }
 
     async function carregarMinhasAldeias() {
-        const response = await fetch(window.location.href);
-        const htmlText = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlText, 'text/html');
+        if (!villages.length) villages = await carregarVillages();
+
+        const meuId = game_data.player.id;
+
+        const minhasAldeias = villages
+            .filter(([id, name, x, y, player, points]) => player === meuId)
+            .sort((a, b) => {
+                const nomeA = a[1].toLowerCase();
+                const nomeB = b[1].toLowerCase();
+                if (nomeA < nomeB) return -1;
+                if (nomeA > nomeB) return 1;
+
+                const coordA = `${a[2].toString().padStart(3, '0')}|${a[3].toString().padStart(3, '0')}`;
+                const coordB = `${b[2].toString().padStart(3, '0')}|${b[3].toString().padStart(3, '0')}`;
+                return coordA.localeCompare(coordB);
+            });
 
         const select = document.getElementById('coordAtual');
-        select.innerHTML = '';
+        select.innerHTML = ''; // limpa opções anteriores
 
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = 'Selecione uma aldeia';
         select.appendChild(defaultOption);
 
-        let encontrou = false;
-
-        doc.querySelectorAll('#combined_table tbody tr').forEach(row => {
-            const nameCell = row.querySelector('span.quickedit-label');
-            if (!nameCell) return;
-
-            const coordMatch = nameCell.textContent.match(/\((\d+\|\d+)\)/);
-            if (coordMatch) {
-                encontrou = true;
-                const name = nameCell.textContent.trim();
-                const coord = coordMatch[1];
-
-                const opt = document.createElement('option');
-                opt.value = coord;
-                opt.textContent = name;
-                select.appendChild(opt);
-            }
+        minhasAldeias.forEach(([id, name, x, y]) => {
+            const coord = `${x}|${y}`;
+            const opt = document.createElement('option');
+            opt.value = coord;
+            opt.textContent = `${decodeURIComponent(name.replace(/\+/g, ' '))} (${coord})`;
+            select.appendChild(opt);
         });
 
         const aldeiaAtual = game_data.village.coord;
-
-        if (!encontrou && aldeiaAtual) {
-            const opt = document.createElement('option');
-            opt.value = aldeiaAtual;
-            opt.textContent = aldeiaAtual;
-            select.appendChild(opt);
+        if (minhasAldeias.some(([_, __, x, y]) => `${x}|${y}` === aldeiaAtual)) {
+            select.value = aldeiaAtual;
         }
-
-        select.value = aldeiaAtual || '';
     }
 
     const html = `
@@ -126,6 +103,7 @@
 
     Dialog.show("tw_barbaras_filter_ultracompact", html);
 
+    // Após abrir o diálogo, carrega as aldeias do jogador no select
     await carregarMinhasAldeias();
 
     document.getElementById('btnReset').addEventListener('click', () => {
