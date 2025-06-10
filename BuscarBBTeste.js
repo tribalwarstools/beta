@@ -1,4 +1,22 @@
 (async function () {
+    if (!window.location.href.includes('overview_villages&mode=combined')) {
+        const url = `/game.php?screen=overview_villages&mode=combined&group=${game_data.group_id || 0}`;
+        const avisoHtml = `
+            <div style="font-family: Verdana, sans-serif; font-size: 12px; color: #000;">
+                <p><strong>Você precisa estar na tela "Visão geral das aldeias (combinada)" para usar este script.</strong></p>
+                <p>Clique no botão abaixo para ir até lá.</p>
+                <button id="btnIrParaCombined" class="btn btn-confirm-yes">Ir para visão combinada</button>
+            </div>
+        `;
+        Dialog.show("tw_aviso_necessario", avisoHtml);
+
+        document.getElementById('btnIrParaCombined').addEventListener('click', () => {
+            window.location.href = url;
+        });
+        return;
+    }
+
+    // Continuação do script original se estiver na visão correta
     let villages = [];
 
     function calcularDistancia(coord1, coord2) {
@@ -25,12 +43,14 @@
         const doc = parser.parseFromString(htmlText, 'text/html');
 
         const select = document.getElementById('coordAtual');
-        select.innerHTML = ''; // limpa opções anteriores
+        select.innerHTML = '';
 
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = 'Selecione uma aldeia';
         select.appendChild(defaultOption);
+
+        let encontrou = false;
 
         doc.querySelectorAll('#combined_table tbody tr').forEach(row => {
             const nameCell = row.querySelector('span.quickedit-label');
@@ -38,18 +58,26 @@
 
             const coordMatch = nameCell.textContent.match(/\((\d+\|\d+)\)/);
             if (coordMatch) {
-                const name = nameCell.textContent.trim();  // já inclui coord
+                encontrou = true;
+                const name = nameCell.textContent.trim();
                 const coord = coordMatch[1];
 
                 const opt = document.createElement('option');
                 opt.value = coord;
-                opt.textContent = name; // evita duplicação da coord
+                opt.textContent = name;
                 select.appendChild(opt);
             }
         });
 
-        // Seleciona a aldeia atual automaticamente
         const aldeiaAtual = game_data.village.coord;
+
+        if (!encontrou && aldeiaAtual) {
+            const opt = document.createElement('option');
+            opt.value = aldeiaAtual;
+            opt.textContent = aldeiaAtual;
+            select.appendChild(opt);
+        }
+
         select.value = aldeiaAtual || '';
     }
 
@@ -98,7 +126,6 @@
 
     Dialog.show("tw_barbaras_filter_ultracompact", html);
 
-    // Após abrir o diálogo, carrega as aldeias do jogador no select
     await carregarMinhasAldeias();
 
     document.getElementById('btnReset').addEventListener('click', () => {
