@@ -40,9 +40,17 @@
         <div id="progressoRenomeio" style="margin:10px 0; height:14px; border:1px solid #000; width:100%;">
           <div id="barraProgresso" style="height:100%; width:0%; background:#0c0;"></div>
         </div>
-        <button class="btn" onclick="interromper=true">Parar renomeação</button>
+        <button id="btnPararRenomeacao" class="btn">Parar renomeação</button>
       </div>
     `);
+
+    const btnParar = document.getElementById('btnPararRenomeacao');
+    interromper = false;
+    btnParar.addEventListener('click', () => {
+      interromper = true;
+      btnParar.disabled = true;
+      btnParar.innerText = 'Parando...';
+    });
 
     for (let i = 0; i < aldeias.length; i++) {
       if (interromper) break;
@@ -76,7 +84,11 @@
         contador++;
 
         const progresso = ((i + 1) / aldeias.length) * 100;
-        document.getElementById('barraProgresso').style.width = progresso + '%';
+        const barra = document.getElementById('barraProgresso');
+        if (barra) barra.style.width = progresso + '%';
+      } else {
+        UI.ErrorMessage('Campo de edição não encontrado.');
+        break;
       }
 
       await delay(config.delay);
