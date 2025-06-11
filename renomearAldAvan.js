@@ -1,8 +1,8 @@
-//
 (function () {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   let interromper = false;
+  let renomearAtivo = false;
 
   function montarNome(contador, digitos, prefixo, textoBase, sufixo, usarNumeracao, usarPrefixo, usarTexto, usarSufixo, coordenadas) {
     let partes = [];
@@ -15,7 +15,7 @@
   }
 
   async function renomearAldeias(config) {
-    const icones = [...document.querySelectorAll('.rename-icon')];
+    const icones = [...document.querySelectorAll('.rename-icon')].filter(el => el.offsetParent !== null);
     const nomesAtuais = icones.map(el => el.closest('tr').querySelector('span.quickedit-label')?.innerText || '');
 
     let aldeias = icones.map((el, i) => ({ el, nome: nomesAtuais[i] }));
@@ -105,6 +105,7 @@
 
     UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
     interromper = false;
+    renomearAtivo = false;
   }
 
   function salvarConfiguracao() {
@@ -181,66 +182,96 @@
     interromper = false;
 
     Dialog.show('painelAvancado', `
-      <div style="font-size:11px;">
-        <h3 style="text-align:center">Painel de Renomeação Avançado</h3>
-        <table class="vis" style="width:100%">
-          <tr><td><input id="numeracao" type="checkbox" checked> Numeração</td><td><input id="digitos" type="number" value="2" min="1" max="10" style="width:40px;"></td></tr>
-          <tr><td><input id="prefixcheck" type="checkbox"> Prefixo</td><td><input id="prefixbox" type="text" style="width:80px;"></td></tr>
-          <tr><td><input id="textocheck" type="checkbox"> Texto base</td><td><input id="textbox" type="text" style="width:100px;"></td></tr>
-          <tr><td><input id="suffixcheck" type="checkbox"> Sufixo</td><td><input id="suffixbox" type="text" style="width:80px;"></td></tr>
-          <tr><td>Início contador</td><td><input id="contadorInicio" type="number" value="1" style="width:60px;"></td></tr>
-          <tr><td>Delay (ms)</td><td><input id="delay" type="number" value="400" style="width:60px;"></td></tr>
-          <tr><td>Incluir coordenadas</td><td><input id="coords" type="checkbox"></td></tr>
-          <tr><td><input id="filtercheck" type="checkbox"> Filtro por nome</td><td><input id="filtertext" type="text" style="width:100px;"></td></tr>
-          <tr><td><input id="regexcheck" type="checkbox"> Regex avançado</td><td></td></tr>
-          <tr><td>Ordem</td><td><select id="ordem"><option value="asc">Crescente</option><option value="desc">Decrescente</option></select></td></tr>
-        </table>
+      <div style="font-size:13px; padding:10px; max-width:500px; margin:auto;">
+        <h3 style="text-align:center; margin-bottom:10px;">Painel de Renomeação Avançado</h3>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <label><input id="numeracao" type="checkbox" checked> Numeração</label>
+          <label style="display:flex; align-items:center;">Digitos: <input id="digitos" type="number" value="2" min="1" max="10" style="width:50px; margin-left:4px;"></label>
 
-        <div style="margin-top:10px; border:1px solid #000; height:20px; width:100%; position: relative; background:#eee; border-radius:4px; overflow: hidden;">
-          <div id="barraProgresso" style="height:100%; width:0%; background: linear-gradient(90deg, #4caf50, #81c784); transition: width 0.3s ease;"></div>
-          <div id="barraTexto" style="position:absolute; top:0; left:0; width:100%; height:100%; text-align:center; line-height:20px; font-weight:bold; color:#fff; text-shadow: 0 0 3px rgba(0,0,0,0.7); user-select:none;">0%</div>
+          <label><input id="prefixcheck" type="checkbox"> Prefixo</label>
+          <input id="prefixbox" type="text" placeholder="Ex: K55" style="width:100%;">
+
+          <label><input id="textocheck" type="checkbox"> Texto base</label>
+          <input id="textbox" type="text" placeholder="Ex: Aldeia" style="width:100%;">
+
+          <label><input id="suffixcheck" type="checkbox"> Sufixo</label>
+          <input id="suffixbox" type="text" placeholder="Ex: Norte" style="width:100%;">
+
+          <label style="grid-column:2; display:flex; align-items:center;">Início contador: <input id="contadorInicio" type="number" value="1" style="width:60px; margin-left:4px;"></label>
+
+          <label style="grid-column:2; display:flex; align-items:center;">Delay (ms): <input id="delay" type="number" value="400" style="width:60px; margin-left:4px;"></label>
+
+          <label><input id="coords" type="checkbox"> Incluir coordenadas</label>
+          <label><input id="filtercheck" type="checkbox"> Filtro por nome</label>
+          <input id="filtertext" type="text" placeholder="Texto ou regex" style="width:100%;" />
+          
+          <label><input id="regexcheck" type="checkbox"> Regex avançado</label>
+          <label>Ordem:
+            <select id="ordem" style="margin-left:5px;">
+              <option value="asc">Crescente</option>
+              <option value="desc">Decrescente</option>
+            </select>
+          </label>
         </div>
 
-        <div style="text-align:center; margin-top:10px;">
-          <button class="btn" id="executarAvancado">Executar</button>
-          <button class="btn" id="btnParar" style="margin-left:8px;">Parar renomeação</button>
-          <button class="btn" id="btnSalvar" style="margin-left:8px;">Salvar Configuração</button>
-          <button class="btn" id="btnReset" style="margin-left:8px;">Resetar Configuração</button>
+        <div style="margin-top:15px; border:1px solid #000; height:24px; width:100%; position:relative; background:#eee; border-radius:6px; overflow:hidden;">
+          <div id="barraProgresso" style="height:100%; width:0%; background: linear-gradient(90deg, #4caf50, #81c784); transition: width 0.3s ease;"></div>
+          <div id="barraTexto" style="position:absolute; top:0; left:0; width:100%; height:100%; text-align:center; line-height:24px; font-weight:bold; color:#fff; text-shadow: 0 0 3px rgba(0,0,0,0.7); user-select:none;">0%</div>
+        </div>
+
+        <div style="text-align:center; margin-top:15px;">
+          <button class="btn" id="executarAvancado" style="background:#4caf50; color:white; font-weight:bold;">🚀 Executar</button>
+          <button class="btn" id="btnParar" style="margin-left:8px; background:#f44336; color:white;">✋ Parar</button>
+          <button class="btn" id="btnSalvar" style="margin-left:8px;">💾 Salvar</button>
+          <button class="btn" id="btnReset" style="margin-left:8px;">♻️ Resetar</button>
         </div>
       </div>
     `);
 
-    setTimeout(() => {
-      carregarConfiguracao();
+    carregarConfiguracao();
 
-      document.getElementById('executarAvancado').addEventListener('click', () => {
-        if (interromper) return;
-        const config = {
-          usarNumeracao: document.getElementById('numeracao').checked,
-          usarPrefixo: document.getElementById('prefixcheck').checked,
-          prefixo: document.getElementById('prefixbox').value.trim(),
-          usarTexto: document.getElementById('textocheck').checked,
-          textoBase: document.getElementById('textbox').value.trim(),
-          usarSufixo: document.getElementById('suffixcheck').checked,
-          sufixo: document.getElementById('suffixbox').value.trim(),
-          digitos: parseInt(document.getElementById('digitos').value) || 2,
-          inicio: parseInt(document.getElementById('contadorInicio').value) || 1,
-          delay: parseInt(document.getElementById('delay').value) || 400,
-          incluirCoords: document.getElementById('coords').checked,
-          filtrar: document.getElementById('filtercheck').checked,
-          filtroNome: document.getElementById('filtertext').value.trim(),
-          regex: document.getElementById('regexcheck').checked,
-          ordem: document.getElementById('ordem').value
-        };
-        renomearAldeias(config);
-      });
+    document.getElementById('executarAvancado').onclick = async () => {
+      if (renomearAtivo) {
+        UI.InfoMessage('Já está renomeando...');
+        return;
+      }
+      renomearAtivo = true;
 
-      document.getElementById('btnSalvar').addEventListener('click', salvarConfiguracao);
-      document.getElementById('btnReset').addEventListener('click', resetarConfiguracao);
-    }, 200);
+      const config = {
+        usarNumeracao: document.getElementById('numeracao').checked,
+        digitos: parseInt(document.getElementById('digitos').value) || 2,
+        usarPrefixo: document.getElementById('prefixcheck').checked,
+        prefixo: document.getElementById('prefixbox').value.trim(),
+        usarTexto: document.getElementById('textocheck').checked,
+        textoBase: document.getElementById('textbox').value.trim(),
+        usarSufixo: document.getElementById('suffixcheck').checked,
+        sufixo: document.getElementById('suffixbox').value.trim(),
+        inicio: parseInt(document.getElementById('contadorInicio').value) || 1,
+        delay: parseInt(document.getElementById('delay').value) || 400,
+        incluirCoords: document.getElementById('coords').checked,
+        filtrar: document.getElementById('filtercheck').checked,
+        filtroNome: document.getElementById('filtertext').value.trim(),
+        regex: document.getElementById('regexcheck').checked,
+        ordem: document.getElementById('ordem').value
+      };
+
+      await renomearAldeias(config);
+      renomearAtivo = false;
+    };
+
+    document.getElementById('btnParar').onclick = () => {
+      interromper = true;
+    };
+
+    document.getElementById('btnSalvar').onclick = () => {
+      salvarConfiguracao();
+    };
+
+    document.getElementById('btnReset').onclick = () => {
+      resetarConfiguracao();
+    };
   }
 
-  // Exibe o painel
   abrirPainelAvancado();
-
 })();
