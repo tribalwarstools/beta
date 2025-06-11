@@ -386,7 +386,7 @@
     btn.style.right = '20px';
     btn.style.padding = '10px 16px';
     btn.style.zIndex = 9999;
-    btn.style.backgroundColor = '#4caf50';
+    btn.style.backgroundColor = '#603000';
     btn.style.color = '#fff';
     btn.style.border = 'none';
     btn.style.borderRadius = '6px';
