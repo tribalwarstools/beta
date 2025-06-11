@@ -1,5 +1,6 @@
 (function () {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
   let interromper = false;
 
   function montarNome(contador, digitos, prefixo, textoBase, sufixo, usarNumeracao, usarPrefixo, usarTexto, usarSufixo, coordenadas) {
@@ -35,19 +36,22 @@
 
     interromper = false;
 
-    // Inicia barra e botão no painel já aberto
     const barraProgresso = document.getElementById('barraProgresso');
-    const btnParar = document.getElementById('btnPararRenomeacao');
-    if (barraProgresso) barraProgresso.style.width = '0%';
-    if (btnParar) {
-      btnParar.disabled = false;
-      btnParar.innerText = 'Parar renomeação';
-      btnParar.onclick = () => {
-        interromper = true;
-        btnParar.disabled = true;
-        btnParar.innerText = 'Parando...';
-      };
+    const barraTexto = document.getElementById('barraTexto');
+    const btnParar = document.getElementById('btnParar');
+    if (!barraProgresso || !btnParar || !barraTexto) {
+      UI.ErrorMessage('Painel de controle não encontrado.');
+      return;
     }
+
+    btnParar.disabled = false;
+    btnParar.textContent = 'Parar renomeação';
+
+    btnParar.onclick = () => {
+      interromper = true;
+      btnParar.textContent = 'Parando...';
+      btnParar.disabled = true;
+    };
 
     for (let i = 0; i < aldeias.length; i++) {
       if (interromper) break;
@@ -80,22 +84,90 @@
         confirmar.click();
         contador++;
 
-        const progresso = ((i + 1) / aldeias.length) * 100;
-        if (barraProgresso) barraProgresso.style.width = progresso + '%';
-      } else {
-        UI.ErrorMessage('Campo de edição não encontrado.');
-        break;
+        const progresso = Math.round(((i + 1) / aldeias.length) * 100);
+        barraProgresso.style.width = progresso + '%';
+        barraTexto.textContent = progresso + '%';
       }
 
       await delay(config.delay);
     }
 
-    Dialog.close();
-    interromper = false;
     UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
+    interromper = false;
+  }
+
+  function salvarConfiguracao() {
+    const config = {
+      usarNumeracao: document.getElementById('numeracao').checked,
+      digitos: parseInt(document.getElementById('digitos').value) || 2,
+      usarPrefixo: document.getElementById('prefixcheck').checked,
+      prefixo: document.getElementById('prefixbox').value.trim(),
+      usarTexto: document.getElementById('textocheck').checked,
+      textoBase: document.getElementById('textbox').value.trim(),
+      usarSufixo: document.getElementById('suffixcheck').checked,
+      sufixo: document.getElementById('suffixbox').value.trim(),
+      inicio: parseInt(document.getElementById('contadorInicio').value) || 1,
+      delay: parseInt(document.getElementById('delay').value) || 400,
+      incluirCoords: document.getElementById('coords').checked,
+      filtrar: document.getElementById('filtercheck').checked,
+      filtroNome: document.getElementById('filtertext').value.trim(),
+      regex: document.getElementById('regexcheck').checked,
+      ordem: document.getElementById('ordem').value
+    };
+    localStorage.setItem('renomearConfig', JSON.stringify(config));
+    UI.SuccessMessage('Configuração salva!');
+  }
+
+  function carregarConfiguracao() {
+    const raw = localStorage.getItem('renomearConfig');
+    if (!raw) return;
+    try {
+      const config = JSON.parse(raw);
+
+      document.getElementById('numeracao').checked = !!config.usarNumeracao;
+      document.getElementById('digitos').value = config.digitos || 2;
+      document.getElementById('prefixcheck').checked = !!config.usarPrefixo;
+      document.getElementById('prefixbox').value = config.prefixo || '';
+      document.getElementById('textocheck').checked = !!config.usarTexto;
+      document.getElementById('textbox').value = config.textoBase || '';
+      document.getElementById('suffixcheck').checked = !!config.usarSufixo;
+      document.getElementById('suffixbox').value = config.sufixo || '';
+      document.getElementById('contadorInicio').value = config.inicio || 1;
+      document.getElementById('delay').value = config.delay || 400;
+      document.getElementById('coords').checked = !!config.incluirCoords;
+      document.getElementById('filtercheck').checked = !!config.filtrar;
+      document.getElementById('filtertext').value = config.filtroNome || '';
+      document.getElementById('regexcheck').checked = !!config.regex;
+      document.getElementById('ordem').value = config.ordem || 'asc';
+
+    } catch {
+      UI.ErrorMessage('Falha ao carregar configuração salva.');
+    }
+  }
+
+  function resetarConfiguracao() {
+    localStorage.removeItem('renomearConfig');
+    document.getElementById('numeracao').checked = true;
+    document.getElementById('digitos').value = 2;
+    document.getElementById('prefixcheck').checked = false;
+    document.getElementById('prefixbox').value = '';
+    document.getElementById('textocheck').checked = false;
+    document.getElementById('textbox').value = '';
+    document.getElementById('suffixcheck').checked = false;
+    document.getElementById('suffixbox').value = '';
+    document.getElementById('contadorInicio').value = 1;
+    document.getElementById('delay').value = 400;
+    document.getElementById('coords').checked = false;
+    document.getElementById('filtercheck').checked = false;
+    document.getElementById('filtertext').value = '';
+    document.getElementById('regexcheck').checked = false;
+    document.getElementById('ordem').value = 'asc';
+    UI.SuccessMessage('Configuração resetada para padrão.');
   }
 
   function abrirPainelAvancado() {
+    interromper = false;
+
     Dialog.show('painelAvancado', `
       <div style="font-size:11px;">
         <h3 style="text-align:center">Painel de Renomeação Avançado</h3>
@@ -112,41 +184,60 @@
           <tr><td>Ordem</td><td><select id="ordem"><option value="asc">Crescente</option><option value="desc">Decrescente</option></select></td></tr>
         </table>
 
-        <div style="margin-top:10px; text-align:center;">
-          <div id="progressoRenomeio" style="margin:10px auto; height:14px; border:1px solid #000; width:90%; max-width:300px; border-radius:4px; overflow:hidden;">
-            <div id="barraProgresso" style="height:100%; width:0%; background:#0c0; transition: width 0.3s ease;"></div>
-          </div>
-          <button class="btn" id="btnPararRenomeacao">Parar renomeação</button>
+        <div style="margin-top:10px; border:1px solid #000; height:20px; width:100%; position: relative; background:#eee; border-radius:4px; overflow: hidden;">
+          <div id="barraProgresso" style="height:100%; width:0%; background: linear-gradient(90deg, #4caf50, #81c784); transition: width 0.3s ease;"></div>
+          <div id="barraTexto" style="position:absolute; top:0; left:0; width:100%; height:100%; text-align:center; line-height:20px; font-weight:bold; color:#fff; text-shadow: 0 0 3px rgba(0,0,0,0.7); user-select:none;">0%</div>
         </div>
 
-        <div style="text-align:center; margin-top:8px">
+        <div style="text-align:center; margin-top:10px;">
           <button class="btn" id="executarAvancado">Executar</button>
+          <button class="btn" id="btnParar" style="margin-left:8px;">Parar renomeação</button>
+          <button class="btn" id="btnSalvar" style="margin-left:8px;">Salvar Configuração</button>
+          <button class="btn" id="btnReset" style="margin-left:8px;">Resetar Configuração</button>
         </div>
       </div>
     `);
 
-    document.getElementById('executarAvancado').addEventListener('click', () => {
-      if (interromper) return; // evita clicar várias vezes
+    setTimeout(() => {
+      carregarConfiguracao();
 
-      const config = {
-        usarNumeracao: document.getElementById('numeracao').checked,
-        usarPrefixo: document.getElementById('prefixcheck').checked,
-        prefixo: document.getElementById('prefixbox').value.trim(),
-        usarTexto: document.getElementById('textocheck').checked,
-        textoBase: document.getElementById('textbox').value.trim(),
-        usarSufixo: document.getElementById('suffixcheck').checked,
-        sufixo: document.getElementById('suffixbox').value.trim(),
-        digitos: parseInt(document.getElementById('digitos').value) || 2,
-        inicio: parseInt(document.getElementById('contadorInicio').value) || 1,
-        delay: parseInt(document.getElementById('delay').value) || 400,
-        incluirCoords: document.getElementById('coords').checked,
-        filtrar: document.getElementById('filtercheck').checked,
-        filtroNome: document.getElementById('filtertext').value.trim(),
-        regex: document.getElementById('regexcheck').checked,
-        ordem: document.getElementById('ordem').value
-      };
-      renomearAldeias(config);
-    });
+      document.getElementById('executarAvancado').addEventListener('click', () => {
+        if (interromper) return;
+        const config = {
+          usarNumeracao: document.getElementById('numeracao').checked,
+          usarPrefixo: document.getElementById('prefixcheck').checked,
+          prefixo: document.getElementById('prefixbox').value.trim(),
+          usarTexto: document.getElementById('textocheck').checked,
+          textoBase: document.getElementById('textbox').value.trim(),
+          usarSufixo: document.getElementById('suffixcheck').checked,
+          sufixo: document.getElementById('suffixbox').value.trim(),
+          digitos: parseInt(document.getElementById('digitos').value) || 2,
+          inicio: parseInt(document.getElementById('contadorInicio').value) || 1,
+          delay: parseInt(document.getElementById('delay').value) || 400,
+          incluirCoords: document.getElementById('coords').checked,
+          filtrar: document.getElementById('filtercheck').checked,
+          filtroNome: document.getElementById('filtertext').value.trim(),
+          regex: document.getElementById('regexcheck').checked,
+          ordem: document.getElementById('ordem').value
+        };
+        renomearAldeias(config);
+      });
+
+      document.getElementById('btnParar').addEventListener('click', () => {
+        interromper = true;
+        const btn = document.getElementById('btnParar');
+        btn.textContent = 'Parando...';
+        btn.disabled = true;
+      });
+
+      document.getElementById('btnSalvar').addEventListener('click', () => {
+        salvarConfiguracao();
+      });
+
+      document.getElementById('btnReset').addEventListener('click', () => {
+        resetarConfiguracao();
+      });
+    }, 100);
   }
 
   abrirPainelAvancado();
