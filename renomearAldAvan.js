@@ -39,20 +39,15 @@
 
     const barraProgresso = document.getElementById('barraProgresso');
     const barraTexto = document.getElementById('barraTexto');
-    const btn = document.getElementById('btn');
+    const btnParar = document.getElementById('btnParar');
     if (!barraProgresso || !btnParar || !barraTexto) {
       UI.ErrorMessage('Painel de controle não encontrado.');
+      renomearAtivo = false;
       return;
     }
 
     btnParar.disabled = false;
     btnParar.textContent = '✋ Parar';
-
-    btnParar.onclick = () => {
-      interromper = true;
-      btnParar.textContent = 'Parando...';
-      btnParar.disabled = true;
-    };
 
     for (let i = 0; i < aldeias.length; i++) {
       if (interromper) break;
@@ -104,6 +99,10 @@
     }
 
     UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
+
+    btnParar.textContent = '✋ Parar';
+    btnParar.disabled = true;
+
     interromper = false;
     renomearAtivo = false;
   }
@@ -222,7 +221,7 @@
 
         <div style="text-align:center; margin-top:15px;">
           <button class="btn" id="executarAvancado" style="background:#4caf50; color:white; font-weight:bold;">🚀 Executar</button>
-          <button class="btn" id="btnParar" style="margin-left:8px; background:#f44336; color:white;">✋ Parar</button>
+          <button class="btn" id="btnParar" style="margin-left:8px; background:#f44336; color:white;" disabled>✋ Parar</button>
           <button class="btn" id="btnSalvar" style="margin-left:8px;">💾 Salvar</button>
           <button class="btn" id="btnReset" style="margin-left:8px;">♻️ Resetar</button>
         </div>
@@ -261,7 +260,11 @@
     };
 
     document.getElementById('btnParar').onclick = () => {
+      if (!renomearAtivo) return;
       interromper = true;
+      const btnParar = document.getElementById('btnParar');
+      btnParar.textContent = 'Parando...';
+      btnParar.disabled = true;
     };
 
     document.getElementById('btnSalvar').onclick = () => {
