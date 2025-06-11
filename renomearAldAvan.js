@@ -46,7 +46,7 @@
     }
 
     btnParar.disabled = false;
-    btnParar.textContent = 'Parar renomeação';
+    btnParar.textContent = 'Parar';
 
     btnParar.onclick = () => {
       interromper = true;
