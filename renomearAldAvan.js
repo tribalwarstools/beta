@@ -1,6 +1,5 @@
 (function () {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-
   let interromper = false;
 
   function montarNome(contador, digitos, prefixo, textoBase, sufixo, usarNumeracao, usarPrefixo, usarTexto, usarSufixo, coordenadas) {
@@ -34,23 +33,21 @@
     if (config.ordem === 'desc') aldeias.reverse();
     let contador = config.inicio || 1;
 
-    Dialog.show('stopDialog', `
-      <div style="text-align:center; font-size:12px">
-        <b>Renomeando aldeias...</b>
-        <div id="progressoRenomeio" style="margin:10px 0; height:14px; border:1px solid #000; width:100%;">
-          <div id="barraProgresso" style="height:100%; width:0%; background:#0c0;"></div>
-        </div>
-        <button id="btnPararRenomeacao" class="btn">Parar renomeação</button>
-      </div>
-    `);
-
-    const btnParar = document.getElementById('btnPararRenomeacao');
     interromper = false;
-    btnParar.addEventListener('click', () => {
-      interromper = true;
-      btnParar.disabled = true;
-      btnParar.innerText = 'Parando...';
-    });
+
+    // Inicia barra e botão no painel já aberto
+    const barraProgresso = document.getElementById('barraProgresso');
+    const btnParar = document.getElementById('btnPararRenomeacao');
+    if (barraProgresso) barraProgresso.style.width = '0%';
+    if (btnParar) {
+      btnParar.disabled = false;
+      btnParar.innerText = 'Parar renomeação';
+      btnParar.onclick = () => {
+        interromper = true;
+        btnParar.disabled = true;
+        btnParar.innerText = 'Parando...';
+      };
+    }
 
     for (let i = 0; i < aldeias.length; i++) {
       if (interromper) break;
@@ -84,8 +81,7 @@
         contador++;
 
         const progresso = ((i + 1) / aldeias.length) * 100;
-        const barra = document.getElementById('barraProgresso');
-        if (barra) barra.style.width = progresso + '%';
+        if (barraProgresso) barraProgresso.style.width = progresso + '%';
       } else {
         UI.ErrorMessage('Campo de edição não encontrado.');
         break;
@@ -96,7 +92,7 @@
 
     Dialog.close();
     interromper = false;
-    UI.SuccessMessage('Processo de renomeação finalizado.');
+    UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
   }
 
   function abrirPainelAvancado() {
@@ -115,6 +111,14 @@
           <tr><td><input id="regexcheck" type="checkbox"> Regex avançado</td><td></td></tr>
           <tr><td>Ordem</td><td><select id="ordem"><option value="asc">Crescente</option><option value="desc">Decrescente</option></select></td></tr>
         </table>
+
+        <div style="margin-top:10px; text-align:center;">
+          <div id="progressoRenomeio" style="margin:10px auto; height:14px; border:1px solid #000; width:90%; max-width:300px; border-radius:4px; overflow:hidden;">
+            <div id="barraProgresso" style="height:100%; width:0%; background:#0c0; transition: width 0.3s ease;"></div>
+          </div>
+          <button class="btn" id="btnPararRenomeacao">Parar renomeação</button>
+        </div>
+
         <div style="text-align:center; margin-top:8px">
           <button class="btn" id="executarAvancado">Executar</button>
         </div>
@@ -122,6 +126,8 @@
     `);
 
     document.getElementById('executarAvancado').addEventListener('click', () => {
+      if (interromper) return; // evita clicar várias vezes
+
       const config = {
         usarNumeracao: document.getElementById('numeracao').checked,
         usarPrefixo: document.getElementById('prefixcheck').checked,
