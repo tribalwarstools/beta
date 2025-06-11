@@ -176,7 +176,7 @@
     }
 
     btnParar.disabled = false;
-    btnParar.textContent = '✋ Parar';
+    btnParar.textContent = 'Parar';
 
     for (let i = 0; i < aldeias.length; i++) {
       if (interromper) break;
@@ -229,7 +229,7 @@
 
     UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
 
-    btnParar.textContent = '✋ Parar';
+    btnParar.textContent = 'Parar';
     btnParar.disabled = true;
 
     interromper = false;
@@ -274,10 +274,10 @@
           </select>
         </div>
         <div style="margin-top:8px; display:flex; justify-content:center; gap:8px;">
-          <button id="btnExecutar">▶️ Executar</button>
-          <button id="btnParar" disabled>✋ Parar</button>
-          <button id="btnSalvar">💾 Salvar</button>
-          <button id="btnResetar">↩️ Resetar</button>
+          <button id="btnExecutar" class="btn btn-confirm-yes" >Executar</button>
+          <button id="btnParar" class="btn btn-confirm-no" disabled>Parar</button>
+          <button id="btnSalvar" class="btn btn-confirm-yes" >Salvar</button>
+          <button id="btnResetar" class="btn btn-confirm-no" >Resetar</button>
         </div>
       </div>
 
