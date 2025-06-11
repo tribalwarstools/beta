@@ -84,12 +84,22 @@
         confirmar.click();
         contador++;
 
-        const progresso = Math.round(((i + 1) / aldeias.length) * 100);
+        const progresso = ((i + 1) / aldeias.length) * 100;
         barraProgresso.style.width = progresso + '%';
-        barraTexto.textContent = progresso + '%';
+        barraTexto.textContent = progresso.toFixed(1) + '%';
       }
 
       await delay(config.delay);
+    }
+
+    // Salvar contador atualizado para próxima execução
+    const configSalvaRaw = localStorage.getItem('renomearConfig');
+    if (configSalvaRaw) {
+      try {
+        const configSalva = JSON.parse(configSalvaRaw);
+        configSalva.inicio = contador;
+        localStorage.setItem('renomearConfig', JSON.stringify(configSalva));
+      } catch { /* fail silently */ }
     }
 
     UI.SuccessMessage(interromper ? 'Renomeação interrompida pelo usuário.' : 'Processo de renomeação finalizado.');
@@ -147,6 +157,7 @@
 
   function resetarConfiguracao() {
     localStorage.removeItem('renomearConfig');
+    // Valores padrão
     document.getElementById('numeracao').checked = true;
     document.getElementById('digitos').value = 2;
     document.getElementById('prefixcheck').checked = false;
@@ -223,22 +234,12 @@
         renomearAldeias(config);
       });
 
-      document.getElementById('btnParar').addEventListener('click', () => {
-        interromper = true;
-        const btn = document.getElementById('btnParar');
-        btn.textContent = 'Parando...';
-        btn.disabled = true;
-      });
-
-      document.getElementById('btnSalvar').addEventListener('click', () => {
-        salvarConfiguracao();
-      });
-
-      document.getElementById('btnReset').addEventListener('click', () => {
-        resetarConfiguracao();
-      });
-    }, 100);
+      document.getElementById('btnSalvar').addEventListener('click', salvarConfiguracao);
+      document.getElementById('btnReset').addEventListener('click', resetarConfiguracao);
+    }, 200);
   }
 
+  // Exibe o painel
   abrirPainelAvancado();
+
 })();
