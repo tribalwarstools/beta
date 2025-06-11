@@ -1,3 +1,6 @@
+//funcional mas feio
+
+
 (function () {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
