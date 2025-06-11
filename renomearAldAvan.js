@@ -282,7 +282,7 @@
       </div>
 
       <div style="flex:1; min-width:300px; max-height:400px; overflow-y:auto; border:1px solid #ccc; border-radius:6px; padding:6px; background:#fafafa;">
-        <h2 style="text-align:center; margin:0 0 8px;">Pré-visualização de nomes</h2>
+        <h3 style="text-align:center; margin:0 0 8px;">Pré-visualização de nomes</h3>
         <ul id="listaPreview" style="list-style:none; padding-left:8px; font-size:10px; line-height:1.3; color:#444; margin:0;">
           <li>Nenhuma aldeia visível para pré-visualizar</li>
         </ul>
