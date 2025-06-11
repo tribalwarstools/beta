@@ -39,14 +39,14 @@
 
     const barraProgresso = document.getElementById('barraProgresso');
     const barraTexto = document.getElementById('barraTexto');
-    const btnParar = document.getElementById('btnParar');
+    const btn = document.getElementById('btn');
     if (!barraProgresso || !btnParar || !barraTexto) {
       UI.ErrorMessage('Painel de controle não encontrado.');
       return;
     }
 
     btnParar.disabled = false;
-    btnParar.textContent = 'Parar';
+    btnParar.textContent = '✋ Parar';
 
     btnParar.onclick = () => {
       interromper = true;
