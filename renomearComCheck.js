@@ -1,4 +1,3 @@
-
 (function () {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   let interromper = false;
@@ -202,7 +201,6 @@
       </div>
     </div>
 
-    <!-- BARRA DE PROGRESSO TOTAL -->
     <div style="height:16px; background:#ddd; margin-top:10px; border-radius:8px; overflow:hidden; width:100%;">
       <div id="barraProgresso" style="height:16px; width:0%; background: linear-gradient(90deg,#4caf50,#81c784);"></div>
     </div>
@@ -238,7 +236,50 @@
       interromper = true;
     };
 
+    document.getElementById('btnSalvar').onclick = () => {
+      const config = getConfig();
+      localStorage.setItem('configRenomearAvancado', JSON.stringify(config));
+      UI.SuccessMessage('Configuração salva com sucesso.');
+    };
+
+    document.getElementById('btnResetar').onclick = () => {
+      localStorage.removeItem('configRenomearAvancado');
+      document.querySelectorAll('#painelAvancado input[type=checkbox]').forEach(cb => cb.checked = false);
+      document.querySelectorAll('#painelAvancado input[type=text], #painelAvancado input[type=number]').forEach(inp => inp.value = '');
+      document.getElementById('digitos').value = 2;
+      document.getElementById('contadorInicio').value = 1;
+      document.getElementById('delay').value = 400;
+      document.getElementById('ordem').value = 'asc';
+      atualizarPreview(getConfig());
+      UI.SuccessMessage('Configuração resetada.');
+    };
+
     const atualizar = () => atualizarPreview(getConfig());
+
+    const configSalva = localStorage.getItem('configRenomearAvancado');
+    if (configSalva) {
+      try {
+        const config = JSON.parse(configSalva);
+        document.getElementById('numeracao').checked = config.usarNumeracao;
+        document.getElementById('digitos').value = config.digitos;
+        document.getElementById('prefixcheck').checked = config.usarPrefixo;
+        document.getElementById('prefixbox').value = config.prefixo;
+        document.getElementById('textocheck').checked = config.usarTexto;
+        document.getElementById('textbox').value = config.textoBase;
+        document.getElementById('suffixcheck').checked = config.usarSufixo;
+        document.getElementById('suffixbox').value = config.sufixo;
+        document.getElementById('contadorInicio').value = config.inicio;
+        document.getElementById('delay').value = config.delay;
+        document.getElementById('coords').checked = config.incluirCoords;
+        document.getElementById('filtercheck').checked = config.filtrar;
+        document.getElementById('filtertext').value = config.filtroNome;
+        document.getElementById('regexcheck').checked = config.regex;
+        document.getElementById('ordem').value = config.ordem;
+      } catch (e) {
+        console.error('Erro ao restaurar configuração:', e);
+      }
+    }
+
     document.querySelectorAll('#painelAvancado input, #painelAvancado select').forEach(el => {
       el.addEventListener('change', atualizar);
       el.addEventListener('input', atualizar);
