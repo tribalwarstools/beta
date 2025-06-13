@@ -1,4 +1,7 @@
 (function () {
+
+
+
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   let interromper = false;
@@ -237,6 +240,35 @@
   }
 
   function abrirPainelAvancado() {
+
+    
+//REDIRECIONAMENTO
+const url = window.location.href;
+    const urlBase = '/game.php?screen=overview_villages&mode=combined&group=0';
+
+    if (!url.includes('screen=overview_villages') || !url.includes('mode=combined')) {
+      Dialog.show('redirDialog', `
+        <div style="font-size:12px; text-align:center;">
+          <p>Você não está na página de aldeias combinadas. Deseja ser redirecionado?</p>
+          <div style="margin-top:10px;">
+            <button id="redirSim" class="btn">Sim</button>
+            <button id="redirNao" class="btn">Não</button>
+          </div>
+        </div>
+      `);
+
+      $('#redirSim').on('click', () => {
+        window.location.href = urlBase;
+      });
+
+      $('#redirNao').on('click', () => {
+        Dialog.close();
+      });
+
+      return;
+    }
+//REDIRECIONAMENTO
+
     interromper = false;
 
     Dialog.show('painelAvancado', `
