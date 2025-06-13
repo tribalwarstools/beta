@@ -153,38 +153,62 @@
     }
 
     Dialog.show('painelAvancado', `
-      <div style="padding:10px; font-size:13px; max-width:600px;">
-        <div style="margin-bottom:6px;">Configuração:</div>
-        <label><input id="numeracao" type="checkbox" checked> Numeração</label><br>
-        <label>Digitos: <input id="digitos" type="number" value="2" style="width:50px;"></label><br>
-        <label><input id="prefixcheck" type="checkbox"> Prefixo</label> <input id="prefixbox" type="text"><br>
-        <label><input id="textocheck" type="checkbox"> Texto base</label> <input id="textbox" type="text"><br>
-        <label><input id="suffixcheck" type="checkbox"> Sufixo</label> <input id="suffixbox" type="text"><br>
-        <label>Início contador: <input id="contadorInicio" type="number" value="1" style="width:60px;"></label><br>
-        <label>Delay (ms): <input id="delay" type="number" value="400" style="width:60px;"></label><br>
-        <label><input id="coords" type="checkbox"> Incluir coordenadas</label><br>
-        <label><input id="filtercheck" type="checkbox"> Filtro</label> <input id="filtertext" type="text"><br>
-        <label><input id="regexcheck" type="checkbox"> Usar regex</label><br>
-        <label>Ordem:
-          <select id="ordem">
+  <div style="font-size:13px; padding:10px; max-width:650px; margin:auto;">
+    <div style="display:flex; gap:10px;">
+      <div style="flex:1; min-width:280px;">
+        <h3 style="text-align:center; margin-bottom:10px;">Configuração de Renomeação</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <label><input id="numeracao" type="checkbox" checked> Numeração</label>
+          <label style="display:flex; align-items:center;">Digitos: <input id="digitos" type="number" value="2" min="1" max="10" style="width:50px; margin-left:4px;"></label>
+
+          <label><input id="prefixcheck" type="checkbox"> Prefixo</label>
+          <input id="prefixbox" type="text" placeholder="Ex: K55" style="width:100%;">
+
+          <label><input id="textocheck" type="checkbox"> Texto base</label>
+          <input id="textbox" type="text" placeholder="Ex: Aldeia" style="width:100%;">
+
+          <label><input id="suffixcheck" type="checkbox"> Sufixo</label>
+          <input id="suffixbox" type="text" placeholder="Ex: Norte" style="width:100%;">
+
+          <label style="grid-column:2; display:flex; align-items:center;">Início contador: <input id="contadorInicio" type="number" value="1" style="width:60px; margin-left:4px;"></label>
+
+          <label style="grid-column:2; display:flex; align-items:center;">Delay (ms): <input id="delay" type="number" value="400" style="width:60px; margin-left:4px;"></label>
+
+          <label><input id="coords" type="checkbox"> Incluir coordenadas</label>
+          <label><input id="filtercheck" type="checkbox"> Filtro por nome</label>
+          <input id="filtertext" type="text" placeholder="Texto ou regex" style="width:100%;" />
+          
+          <label><input id="regexcheck" type="checkbox"> Usar regex</label>
+
+          <label for="ordem">Ordem</label>
+          <select id="ordem" style="width:100%;">
             <option value="asc">Crescente</option>
             <option value="desc">Decrescente</option>
           </select>
-        </label>
-        <hr>
-        <button id="btnExecutar" class="btn">Executar</button>
-        <button id="btnParar" class="btn">Parar</button>
-        <div style="margin-top:10px;">
-          <div style="height:14px; background:#ccc;">
-            <div id="barraProgresso" style="height:14px; background:green; width:0%;"></div>
-          </div>
-          <div id="barraTexto" style="text-align:center; font-weight:bold;">0%</div>
         </div>
-        <div style="max-height:150px; overflow:auto; margin-top:6px;">
-          <ul id="listaPreview" style="list-style:none; padding:0; font-size:11px;"></ul>
+        <div style="margin-top:8px; display:flex; justify-content:center; gap:8px;">
+          <button id="btnExecutar" class="btn btn-confirm-yes" >Executar</button>
+          <button id="btnParar" class="btn btn-confirm-no" disabled>Parar</button>
+          <button id="btnSalvar" class="btn btn-confirm-yes" >Salvar</button>
+          <button id="btnResetar" class="btn btn-confirm-no" >Resetar</button>
         </div>
       </div>
-    `);
+
+      <div style="flex:1; min-width:300px; max-height:400px; overflow-y:auto; border:1px solid #ccc; border-radius:6px; padding:6px; background:#fafafa;">
+        <h3 style="text-align:center; margin:0 0 8px;">Pré-visualização de nomes</h3>
+        <ul id="listaPreview" style="list-style:none; padding-left:8px; font-size:10px; line-height:1.3; color:#444; margin:0;">
+          <li>Nenhuma aldeia visível para pré-visualizar</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- BARRA DE PROGRESSO TOTAL -->
+    <div style="height:16px; background:#ddd; margin-top:10px; border-radius:8px; overflow:hidden; width:100%;">
+      <div id="barraProgresso" style="height:16px; width:0%; background: linear-gradient(90deg,#4caf50,#81c784);"></div>
+    </div>
+    <div id="barraTexto" style="text-align:center; margin-top:4px; font-weight:bold;">0%</div>
+  </div>
+`);
 
     const getConfig = () => ({
       usarNumeracao: document.getElementById('numeracao').checked,
