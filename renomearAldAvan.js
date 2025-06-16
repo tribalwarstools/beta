@@ -30,7 +30,7 @@
       try {
         const re = config.regex ? new RegExp(config.filtroNome) : null;
         aldeias = aldeias.filter(a => {
-          return config.regex ? re.test(a.nome) : a.nome.includes(config.filtroNome);
+          return config.regex ? re.test(a.nome) : a.nome.toLowerCase().includes(config.filtroNome.toLowerCase());
         });
       } catch {
         listaPreview.innerHTML = '<li style="color:red;">Filtro regex inválido</li>';
@@ -153,7 +153,7 @@
       try {
         const re = config.regex ? new RegExp(config.filtroNome) : null;
         aldeias = aldeias.filter(a => {
-          return config.regex ? re.test(a.nome) : a.nome.includes(config.filtroNome);
+          return config.regex ? re.test(a.nome) : a.nome.toLowerCase().includes(config.filtroNome.toLowerCase());
         });
       } catch {
         UI.ErrorMessage('Expressão regular inválida.');
@@ -209,6 +209,17 @@
         await delay(200);
         confirmar.click();
         contador++;
+
+    // Salvar contador após cada renomeação
+    const configSalvaRaw = localStorage.getItem('renomearConfig');
+    if (configSalvaRaw) {
+      try {
+        const configSalva = JSON.parse(configSalvaRaw);
+        configSalva.inicio = contador;
+        localStorage.setItem('renomearConfig', JSON.stringify(configSalva));
+      } catch { }
+    }
+    
 
         const progresso = ((i + 1) / aldeias.length) * 100;
         barraProgresso.style.width = progresso + '%';
@@ -329,6 +340,14 @@ const url = window.location.href;
 
 
     carregarConfiguracao();
+
+    // Se a renomeação ainda estiver ativa, manter o botão Parar habilitado
+    const btnParar = document.getElementById('btnParar');
+    if (renomearAtivo && btnParar) {
+      btnParar.disabled = false;
+      btnParar.textContent = 'Parar';
+    }
+    
 
     const atualizar = () => {
       const config = {
