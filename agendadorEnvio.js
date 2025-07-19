@@ -4,32 +4,107 @@
         return;
     }
 
+    const salvarHorario = (data, hora, ajuste) => {
+        const lista = JSON.parse(localStorage.getItem("horarios_salvos") || "[]");
+        lista.push({ data, hora, ajuste });
+        localStorage.setItem("horarios_salvos", JSON.stringify(lista));
+        atualizarLista();
+    };
+
+    const removerHorario = (index) => {
+        const lista = JSON.parse(localStorage.getItem("horarios_salvos") || "[]");
+        lista.splice(index, 1);
+        localStorage.setItem("horarios_salvos", JSON.stringify(lista));
+        atualizarLista();
+    };
+
+    const limparHorarios = () => {
+        localStorage.removeItem("horarios_salvos");
+        atualizarLista();
+    };
+
     const html = `
         <div style="display:flex; flex-direction:column; gap:10px">
             <label>Data alvo (DD/MM/AAAA):<br><input id="ag_data" type="text" placeholder="19/07/2025"></label>
             <label>Hora alvo (hh:mm:ss):<br><input id="ag_hora" type="text" placeholder="14:33:00"></label>
-            <label>Ajuste fino (ms) <br> Negativo adianta, positivo atrasa:<br>
+            <label>Ajuste fino (ms) – Negativo adianta, positivo atrasa:<br>
                 <input id="ajuste_fino" type="number" value="0" step="10">
             </label>
-            <button id="ag_iniciar" class="btn" >Agendar envio</button>
+            <div style="display:flex; gap:10px">
+                <button id="btn_salvar">💾 Salvar horário</button>
+                <button id="btn_limpar">🗑️ Limpar todos</button>
+            </div>
+            <div id="lista_horarios" style="max-height:150px; overflow:auto; border:1px solid #ccc; padding:5px"></div>
             <p id="ag_status" style="margin-top:10px; font-weight:bold;"></p>
         </div>
     `;
 
     Dialog.show("agendador_envio", html);
 
-    document.getElementById("ag_iniciar").addEventListener("click", () => {
-        const dataStr = document.getElementById("ag_data").value.trim();
-        const horaStr = document.getElementById("ag_hora").value.trim();
-        const ajusteFino = parseInt(document.getElementById("ajuste_fino").value, 10) || 0;
-        const status = document.getElementById("ag_status");
+    const status = document.getElementById("ag_status");
 
-        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr) || !/^\d{2}:\d{2}:\d{2}$/.test(horaStr)) {
+    document.getElementById("btn_salvar").addEventListener("click", () => {
+        const data = document.getElementById("ag_data").value.trim();
+        const hora = document.getElementById("ag_hora").value.trim();
+        const ajuste = parseInt(document.getElementById("ajuste_fino").value, 10) || 0;
+
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data) || !/^\d{2}:\d{2}:\d{2}$/.test(hora)) {
             status.textContent = "❌ Formato inválido. Use DD/MM/AAAA e hh:mm:ss";
             status.style.color = "red";
             return;
         }
 
+        salvarHorario(data, hora, ajuste);
+    });
+
+    document.getElementById("btn_limpar").addEventListener("click", () => {
+        if (confirm("Tem certeza que deseja apagar todos os horários salvos?")) {
+            limparHorarios();
+        }
+    });
+
+    function atualizarLista() {
+        const container = document.getElementById("lista_horarios");
+        const lista = JSON.parse(localStorage.getItem("horarios_salvos") || "[]");
+
+        if (lista.length === 0) {
+            container.innerHTML = "<i>Nenhum horário salvo.</i>";
+            return;
+        }
+
+        container.innerHTML = "";
+
+        lista.forEach(({ data, hora, ajuste }, i) => {
+            const div = document.createElement("div");
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
+            div.style.marginBottom = "4px";
+            div.innerHTML = `
+                <span>${data} ${hora} [${ajuste}ms]</span>
+                <div>
+                    <button data-agendar="${i}">▶️ Agendar</button>
+                    <button data-remover="${i}">❌</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+
+        container.querySelectorAll("[data-remover]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                removerHorario(parseInt(btn.dataset.remover));
+            });
+        });
+
+        container.querySelectorAll("[data-agendar]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const { data, hora, ajuste } = lista[parseInt(btn.dataset.agendar)];
+                agendarEnvio(data, hora, ajuste);
+            });
+        });
+    }
+
+    function agendarEnvio(dataStr, horaStr, ajusteFino) {
         const syncTime = () => {
             const serverDateStr = document.getElementById("serverDate")?.textContent;
             const serverTimeStr = document.getElementById("serverTime")?.textContent;
@@ -89,5 +164,7 @@
         };
 
         syncTime();
-    });
+    }
+
+    atualizarLista();
 })();
