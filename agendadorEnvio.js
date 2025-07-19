@@ -8,7 +8,7 @@
         <div style="display:flex; flex-direction:column; gap:10px">
             <label>Data alvo (DD/MM/AAAA):<br><input id="ag_data" type="text" placeholder="19/07/2025"></label>
             <label>Hora alvo (hh:mm:ss):<br><input id="ag_hora" type="text" placeholder="14:33:00"></label>
-            <label>Ajuste fino (ms) – Negativo adianta, positivo atrasa:<br>
+            <label>Ajuste fino (ms) <br> Negativo adianta, positivo atrasa:<br>
                 <input id="ajuste_fino" type="number" value="0" step="10">
             </label>
             <button id="ag_iniciar">Agendar envio</button>
