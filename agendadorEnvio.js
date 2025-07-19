@@ -96,12 +96,16 @@
             });
         });
 
-        container.querySelectorAll("[data-agendar]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const { data, hora, ajuste } = lista[parseInt(btn.dataset.agendar)];
-                agendarEnvio(data, hora, ajuste);
-            });
-        });
+container.querySelectorAll("[data-agendar]").forEach(btn => {
+    btn.addEventListener("click", () => {
+        // Desabilita todos os botões de agendamento
+        container.querySelectorAll("[data-agendar]").forEach(b => b.disabled = true);
+
+        const { data, hora, ajuste } = lista[parseInt(btn.dataset.agendar)];
+        agendarEnvio(data, hora, ajuste);
+    });
+});
+
     }
 
     function agendarEnvio(dataStr, horaStr, ajusteFino) {
