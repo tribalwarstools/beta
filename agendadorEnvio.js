@@ -11,7 +11,7 @@
             <label>Ajuste fino (ms) <br> Negativo adianta, positivo atrasa:<br>
                 <input id="ajuste_fino" type="number" value="0" step="10">
             </label>
-            <button id="ag_iniciar">Agendar envio</button>
+            <button id="ag_iniciar" class="btn btn-confirm-yes" >Agendar envio</button>
             <p id="ag_status" style="margin-top:10px; font-weight:bold;"></p>
         </div>
     `;
