@@ -132,11 +132,15 @@ container.querySelectorAll("[data-agendar]").forEach(btn => {
 
             let millisUntilTarget = targetDate.getTime() - (nowLocal.getTime() + offset) + ajusteFino;
 
-            if (millisUntilTarget < 0) {
-                status.textContent = "⛔ Já passou do horário alvo!";
-                status.style.color = "red";
-                return;
-            }
+if (millisUntilTarget < 0) {
+    status.textContent = "⛔ Já passou do horário alvo!";
+    status.style.color = "red";
+
+    // Reativa os botões de agendamento
+    document.querySelectorAll("[data-agendar]").forEach(b => b.disabled = false);
+    return;
+}
+
 
             const btn = document.getElementById("troop_confirm_submit");
             if (!btn) {
