@@ -111,7 +111,6 @@
 
         container.querySelectorAll("[data-agendar]").forEach(btn => {
             btn.addEventListener("click", () => {
-                container.querySelectorAll("[data-agendar]").forEach(b => b.disabled = true);
                 agendarEnvio(lista[parseInt(btn.dataset.agendar)], true);
             });
         });
@@ -125,7 +124,7 @@
             if (!serverDateStr || !serverTimeStr) {
                 status.textContent = "❌ Erro ao obter hora do servidor.";
                 status.style.color = "red";
-                reativarAgendar();
+                reativarBotoes();
                 return;
             }
 
@@ -145,7 +144,7 @@
             if (millisUntilTarget < 0) {
                 status.textContent = "⛔ Já passou do horário alvo!";
                 status.style.color = "red";
-                reativarAgendar();
+                reativarBotoes();
                 return;
             }
 
@@ -153,21 +152,24 @@
             if (!btn) {
                 status.textContent = "❌ Botão de envio não encontrado.";
                 status.style.color = "red";
-                reativarAgendar();
+                reativarBotoes();
                 return;
             }
 
             const tempoFinal = Date.now() + millisUntilTarget;
-
             status.textContent = `⏳ Envio agendado...`;
             status.style.color = "blue";
+
+            desativarBotoes();
 
             intervaloCountdown = setInterval(() => {
                 const restante = tempoFinal - Date.now();
                 if (restante <= 0) {
                     clearInterval(intervaloCountdown);
                 } else {
-                    status.textContent = `⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)`;
+                    status.innerHTML = `
+                        ⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)
+                    `;
                 }
             }, 200);
 
@@ -176,15 +178,12 @@
                 status.textContent = `✔️ Tropas enviadas com ajuste de ${ajusteFino}ms!`;
                 status.style.color = "green";
                 clearInterval(intervaloCountdown);
+                removerBotaoCancelar();
+                reativarBotoes();
             }, millisUntilTarget);
 
             if (mostrarCancelar) {
-                const btnCancelar = document.createElement("button");
-                btnCancelar.textContent = "🛑 Cancelar";
-                btnCancelar.id = "cancelar_envio";
-                btnCancelar.style.marginTop = "10px";
-                status.parentElement.appendChild(btnCancelar);
-                btnCancelar.addEventListener("click", cancelarAgendamento);
+                criarBotaoCancelar();
             }
         };
 
@@ -195,17 +194,33 @@
         clearTimeout(agendamentoAtivo);
         clearInterval(intervaloCountdown);
         agendamentoAtivo = null;
-
-        const btnCancelar = document.getElementById("cancelar_envio");
-        if (btnCancelar) btnCancelar.remove();
-
         status.textContent = "❌ Agendamento cancelado.";
         status.style.color = "orange";
-        reativarAgendar();
+        reativarBotoes();
     }
 
-    function reativarAgendar() {
-        document.querySelectorAll("[data-agendar]").forEach(b => b.disabled = false);
+    function criarBotaoCancelar() {
+        removerBotaoCancelar();
+        const btnCancelar = document.createElement("button");
+        btnCancelar.textContent = "🛑 Cancelar";
+        btnCancelar.id = "cancelar_envio";
+        btnCancelar.style.marginTop = "10px";
+        status.parentElement.appendChild(btnCancelar);
+        btnCancelar.addEventListener("click", cancelarAgendamento);
+    }
+
+    function removerBotaoCancelar() {
+        const btnCancelar = document.getElementById("cancelar_envio");
+        if (btnCancelar) btnCancelar.remove();
+    }
+
+    function desativarBotoes() {
+        document.querySelectorAll("[data-agendar], [data-editar], [data-remover]").forEach(b => b.disabled = true);
+    }
+
+    function reativarBotoes() {
+        document.querySelectorAll("[data-agendar], [data-editar], [data-remover]").forEach(b => b.disabled = false);
+        removerBotaoCancelar();
     }
 
     atualizarLista();
