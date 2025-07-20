@@ -44,7 +44,7 @@
                 <button id="btn_salvar" class="btn" style="flex:1; background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px; cursor:pointer;">💾 Salvar horário</button>
                 <button id="btn_limpar" class="btn" style="flex:1; background:#f44336; color:white; border:none; border-radius:5px; padding:8px; cursor:pointer;">🗑️ Limpar todos</button>
             </div>
-            <div id="lista_horarios" style="max-height:150px; overflow:auto; border:1px solid #ccc; padding:5px; background:#f9f9f9; border-radius:5px;"></div>
+            <div id="lista_horarios" style="max-height:150px; overflow:auto; border:1px solid #ccc; padding:5px; background:#f9f9f9; border-radius:5px; font-size: 9px; "></div>
             <p id="ag_status" style="margin-top:10px; font-weight:bold;"></p>
         </div>
     `;
