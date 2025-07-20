@@ -4,6 +4,9 @@
         return;
     }
 
+    let agendamentoAtivo = null;
+    let intervaloCountdown = null;
+
     const salvarHorario = (data, hora, ajuste) => {
         const lista = JSON.parse(localStorage.getItem("horarios_salvos") || "[]");
         lista.push({ data, hora, ajuste });
@@ -84,6 +87,7 @@
                 <span>${data} ${hora} [${ajuste}ms]</span>
                 <div>
                     <button data-agendar="${i}">▶️ Agendar</button>
+                    <button data-editar="${i}">✏️</button>
                     <button data-remover="${i}">❌</button>
                 </div>
             `;
@@ -96,19 +100,24 @@
             });
         });
 
-container.querySelectorAll("[data-agendar]").forEach(btn => {
-    btn.addEventListener("click", () => {
-        // Desabilita todos os botões de agendamento
-        container.querySelectorAll("[data-agendar]").forEach(b => b.disabled = true);
+        container.querySelectorAll("[data-editar]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const { data, hora, ajuste } = lista[parseInt(btn.dataset.editar)];
+                document.getElementById("ag_data").value = data;
+                document.getElementById("ag_hora").value = hora;
+                document.getElementById("ajuste_fino").value = ajuste;
+            });
+        });
 
-        const { data, hora, ajuste } = lista[parseInt(btn.dataset.agendar)];
-        agendarEnvio(data, hora, ajuste);
-    });
-});
-
+        container.querySelectorAll("[data-agendar]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                container.querySelectorAll("[data-agendar]").forEach(b => b.disabled = true);
+                agendarEnvio(lista[parseInt(btn.dataset.agendar)], true);
+            });
+        });
     }
 
-    function agendarEnvio(dataStr, horaStr, ajusteFino) {
+    function agendarEnvio({ data: dataStr, hora: horaStr, ajuste: ajusteFino }, mostrarCancelar = false) {
         const syncTime = () => {
             const serverDateStr = document.getElementById("serverDate")?.textContent;
             const serverTimeStr = document.getElementById("serverTime")?.textContent;
@@ -116,6 +125,7 @@ container.querySelectorAll("[data-agendar]").forEach(btn => {
             if (!serverDateStr || !serverTimeStr) {
                 status.textContent = "❌ Erro ao obter hora do servidor.";
                 status.style.color = "red";
+                reativarAgendar();
                 return;
             }
 
@@ -132,20 +142,18 @@ container.querySelectorAll("[data-agendar]").forEach(btn => {
 
             let millisUntilTarget = targetDate.getTime() - (nowLocal.getTime() + offset) + ajusteFino;
 
-if (millisUntilTarget < 0) {
-    status.textContent = "⛔ Já passou do horário alvo!";
-    status.style.color = "red";
-
-    // Reativa os botões de agendamento
-    document.querySelectorAll("[data-agendar]").forEach(b => b.disabled = false);
-    return;
-}
-
+            if (millisUntilTarget < 0) {
+                status.textContent = "⛔ Já passou do horário alvo!";
+                status.style.color = "red";
+                reativarAgendar();
+                return;
+            }
 
             const btn = document.getElementById("troop_confirm_submit");
             if (!btn) {
                 status.textContent = "❌ Botão de envio não encontrado.";
                 status.style.color = "red";
+                reativarAgendar();
                 return;
             }
 
@@ -154,24 +162,50 @@ if (millisUntilTarget < 0) {
             status.textContent = `⏳ Envio agendado...`;
             status.style.color = "blue";
 
-            const countdown = setInterval(() => {
+            intervaloCountdown = setInterval(() => {
                 const restante = tempoFinal - Date.now();
                 if (restante <= 0) {
-                    clearInterval(countdown);
+                    clearInterval(intervaloCountdown);
                 } else {
                     status.textContent = `⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)`;
                 }
             }, 200);
 
-            setTimeout(() => {
+            agendamentoAtivo = setTimeout(() => {
                 btn.click();
                 status.textContent = `✔️ Tropas enviadas com ajuste de ${ajusteFino}ms!`;
                 status.style.color = "green";
-                clearInterval(countdown);
+                clearInterval(intervaloCountdown);
             }, millisUntilTarget);
+
+            if (mostrarCancelar) {
+                const btnCancelar = document.createElement("button");
+                btnCancelar.textContent = "🛑 Cancelar";
+                btnCancelar.id = "cancelar_envio";
+                btnCancelar.style.marginTop = "10px";
+                status.parentElement.appendChild(btnCancelar);
+                btnCancelar.addEventListener("click", cancelarAgendamento);
+            }
         };
 
         syncTime();
+    }
+
+    function cancelarAgendamento() {
+        clearTimeout(agendamentoAtivo);
+        clearInterval(intervaloCountdown);
+        agendamentoAtivo = null;
+
+        const btnCancelar = document.getElementById("cancelar_envio");
+        if (btnCancelar) btnCancelar.remove();
+
+        status.textContent = "❌ Agendamento cancelado.";
+        status.style.color = "orange";
+        reativarAgendar();
+    }
+
+    function reativarAgendar() {
+        document.querySelectorAll("[data-agendar]").forEach(b => b.disabled = false);
     }
 
     atualizarLista();
