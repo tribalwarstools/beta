@@ -94,7 +94,7 @@
                 <span>${data} ${hora} [${ajuste}ms]</span>
                 <div style="display:flex; gap:4px;">
                     
-                    <button class="btn" style="background:#4CAF50; color:white; border:none; border-radius:4px; padding:2px 6px;" data-agendar="${i}">▶️</button>
+                    <button class="btn" style="background:#4CAF50; color:white; border:none; border-radius:4px; padding:2px 6px;" data-agendar="${i}">▶️ Agendar</button>
                     <button class="btn" style="background:#f44336; color:white; border:none; border-radius:4px; padding:2px 6px;" data-remover="${i}">❌</button>
 					<button class="btn" style="background:#2196F3; color:white; border:none; border-radius:4px; padding:2px 6px;" data-editar="${i}">✏️</button>
 					
