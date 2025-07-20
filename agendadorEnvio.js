@@ -27,17 +27,24 @@
     };
 
     const html = `
-        <div style="display:flex; flex-direction:column; gap:10px">
-            <label>Data alvo (DD/MM/AAAA):<br><input id="ag_data" type="text" placeholder="19/07/2025"></label>
-            <label>Hora alvo (hh:mm:ss):<br><input id="ag_hora" type="text" placeholder="14:33:00"></label>
-            <label>Ajuste fino (ms) – Negativo adianta, positivo atrasa:<br>
-                <input id="ajuste_fino" type="number" value="0" step="10">
+        <div style="display:flex; flex-direction:column; gap:12px; font-family:Arial; padding:5px 10px">
+            <label style="font-weight:bold;">
+                📅 Data alvo (DD/MM/AAAA):<br>
+                <input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
             </label>
-            <div style="display:flex; gap:10px">
-                <button id="btn_salvar">💾 Salvar horário</button>
-                <button id="btn_limpar">🗑️ Limpar todos</button>
+            <label style="font-weight:bold;">
+                ⏰ Hora alvo (hh:mm:ss):<br>
+                <input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
+            </label>
+            <label style="font-weight:bold;">
+                ⚙️ Ajuste fino (ms) – Negativo adianta, positivo atrasa:<br>
+                <input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
+            </label>
+            <div style="display:flex; gap:10px; justify-content:space-between;">
+                <button id="btn_salvar" class="btn" style="flex:1; background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px; cursor:pointer;">💾 Salvar horário</button>
+                <button id="btn_limpar" class="btn" style="flex:1; background:#f44336; color:white; border:none; border-radius:5px; padding:8px; cursor:pointer;">🗑️ Limpar todos</button>
             </div>
-            <div id="lista_horarios" style="max-height:150px; overflow:auto; border:1px solid #ccc; padding:5px"></div>
+            <div id="lista_horarios" style="max-height:150px; overflow:auto; border:1px solid #ccc; padding:5px; background:#f9f9f9; border-radius:5px;"></div>
             <p id="ag_status" style="margin-top:10px; font-weight:bold;"></p>
         </div>
     `;
@@ -85,11 +92,12 @@
             div.style.marginBottom = "4px";
             div.innerHTML = `
                 <span>${data} ${hora} [${ajuste}ms]</span>
-                <div>
-                
-                    <button data-agendar="${i}">▶️</button>
-                    <button data-editar="${i}">✏️</button>
-                    <button data-remover="${i}">❌</button>
+                <div style="display:flex; gap:4px;">
+                    
+                    <button class="btn" style="background:#4CAF50; color:white; border:none; border-radius:4px; padding:2px 6px;" data-agendar="${i}">▶️</button>
+                    <button class="btn" style="background:#f44336; color:white; border:none; border-radius:4px; padding:2px 6px;" data-remover="${i}">❌</button>
+					<button class="btn" style="background:#2196F3; color:white; border:none; border-radius:4px; padding:2px 6px;" data-editar="${i}">✏️</button>
+					
                 </div>
             `;
             container.appendChild(div);
@@ -168,9 +176,7 @@
                 if (restante <= 0) {
                     clearInterval(intervaloCountdown);
                 } else {
-                    status.innerHTML = `
-                        ⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)
-                    `;
+                    status.innerHTML = `⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)`;
                 }
             }, 200);
 
@@ -181,6 +187,7 @@
                 clearInterval(intervaloCountdown);
                 removerBotaoCancelar();
                 reativarBotoes();
+                agendamentoAtivo = null;
             }, millisUntilTarget);
 
             if (mostrarCancelar) {
@@ -206,6 +213,7 @@
         btnCancelar.textContent = "🛑 Cancelar";
         btnCancelar.id = "cancelar_envio";
         btnCancelar.style.marginTop = "10px";
+        btnCancelar.className = "btn btn-confirm-no";
         status.parentElement.appendChild(btnCancelar);
         btnCancelar.addEventListener("click", cancelarAgendamento);
     }
@@ -216,10 +224,14 @@
     }
 
     function desativarBotoes() {
+        document.getElementById("btn_salvar").disabled = true;
+        document.getElementById("btn_limpar").disabled = true;
         document.querySelectorAll("[data-agendar], [data-editar], [data-remover]").forEach(b => b.disabled = true);
     }
 
     function reativarBotoes() {
+        document.getElementById("btn_salvar").disabled = false;
+        document.getElementById("btn_limpar").disabled = false;
         document.querySelectorAll("[data-agendar], [data-editar], [data-remover]").forEach(b => b.disabled = false);
         removerBotaoCancelar();
     }
