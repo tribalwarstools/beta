@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     if (!window.TribalWars) {
         alert("Este script deve ser executado dentro do Tribal Wars.");
         return;
@@ -50,6 +50,23 @@
     `;
 
     Dialog.show("agendador_envio", html);
+
+// Impede o fechamento do Dialog se houver agendamento ativo
+setTimeout(() => {
+    const dialog = document.querySelector("#popup_box_agendador_envio");
+    const fechar = dialog?.querySelector(".popup_box_close");
+
+    if (fechar) {
+        fechar.addEventListener("click", (e) => {
+            if (agendamentoAtivo) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                alert("⛔ Você não pode fechar essa janela enquanto o agendamento estiver ativo.");
+            }
+        });
+    }
+}, 100);
+
 
     const status = document.getElementById("ag_status");
 
@@ -236,5 +253,16 @@
         removerBotaoCancelar();
     }
 
+
+
+
     atualizarLista();
+window.addEventListener("beforeunload", function (e) {
+    if (agendamentoAtivo) {
+        e.preventDefault();
+        e.returnValue = ""; // Requerido para exibir o alerta em navegadores modernos
+        return "";
+    }
+});
+
 })();
