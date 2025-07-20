@@ -86,7 +86,7 @@
             div.innerHTML = `
                 <span>${data} ${hora} [${ajuste}ms]</span>
                 <div>
-                    <button data-agendar="${i}">▶️ Agendar</button>
+                    <button data-agendar="${i}">▶️</button>
                     <button data-editar="${i}">✏️</button>
                     <button data-remover="${i}">❌</button>
                 </div>
