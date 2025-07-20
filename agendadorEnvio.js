@@ -30,15 +30,15 @@
         <div style="display:flex; flex-direction:column; gap:12px; font-family:Arial; padding:5px 10px">
             <label style="font-weight:bold;">
                 📅 Data alvo (DD/MM/AAAA):<br>
-                <input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
+                <input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;">
             </label>
             <label style="font-weight:bold;">
                 ⏰ Hora alvo (hh:mm:ss):<br>
-                <input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
+                <input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;">
             </label>
             <label style="font-weight:bold;">
                 ⚙️ Ajuste fino (ms) – Negativo adianta, positivo atrasa:<br>
-                <input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:100%; border:1px solid #ccc; border-radius:5px;">
+                <input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;">
             </label>
             <div style="display:flex; gap:10px; justify-content:space-between;">
                 <button id="btn_salvar" class="btn" style="flex:1; background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px; cursor:pointer;">💾 Salvar horário</button>
