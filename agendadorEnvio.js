@@ -7,6 +7,12 @@
     let agendamentoAtivo = null;
     let intervaloCountdown = null;
 
+    // Função para converter "HH:MM:SS" em milissegundos
+    function duracaoParaMs(str) {
+        const [h, m, s] = str.split(":").map(Number);
+        return ((h * 3600) + (m * 60) + s) * 1000;
+    }
+
     // Cria o painel flutuante
     const painel = document.createElement("div");
     painel.id = "painel_agendador";
@@ -14,7 +20,7 @@
         position:fixed;
         top:100px;
         right:20px;
-        width:300px;
+        width:320px;
         z-index:99999;
         background:white;
         border:2px solid #888;
@@ -29,12 +35,16 @@
 
     painel.innerHTML = `
         <div id="ag_header" style="display:flex; justify-content:space-between; align-items:center; cursor:move;">
-            <strong>📦 Agendador de Envio</strong>
+            <h1>Agendador de Envio</h1>
             <button id="fechar_painel_ag" style="background:#f44336; color:white; border:none; border-radius:4px; padding:2px 6px; cursor:pointer;">✖</button>
         </div>
         <label>📅 Data alvo:<br><input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:140px; border:1px solid #ccc; border-radius:5px;"></label>
         <label>⏰ Hora alvo:<br><input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:120px; border:1px solid #ccc; border-radius:5px;"></label>
         <label>⚙️ Ajuste (ms):<br><input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:100px; border:1px solid #ccc; border-radius:5px;"></label>
+        <div>
+          <label><input type="radio" name="modo_agendamento" value="saida" checked>Horário de saída</label>
+          <label style="margin-left:10px;"><input type="radio" name="modo_agendamento" value="chegada">Horário de chegada</label>
+        </div>
         <div style="display:flex; gap:8px;">
             <button id="btn_salvar" class="btn" style="flex:1; background:#4CAF50; color:white; border:none; border-radius:5px; padding:6px;">💾 Salvar</button>
             <button id="btn_limpar" class="btn" style="flex:1; background:#f44336; color:white; border:none; border-radius:5px; padding:6px;">🗑️ Limpar</button>
@@ -156,10 +166,37 @@
         const serverDate = new Date(sy, sm - 1, sd, sh, smi, ss);
         const offset = serverDate - new Date();
 
+        // Pega o modo de agendamento selecionado
+        const modo = document.querySelector('input[name="modo_agendamento"]:checked').value;
+
+        // Pega a duração da viagem (tempo de viagem)
+        const duracaoTexto = (() => {
+            // tenta encontrar o tempo da viagem na tabela de comando
+            // Ajuste o seletor conforme necessário na sua página
+            const linhas = document.querySelectorAll("table.vis tr");
+            for (const linha of linhas) {
+                const celulas = linha.querySelectorAll("td");
+                if (celulas.length === 2 && celulas[0].textContent.trim() === "Duração:") {
+                    return celulas[1].textContent.trim();
+                }
+            }
+            return "0:0:0";
+        })();
+
+        const tempoViagem = duracaoParaMs(duracaoTexto);
+
         const [td, tm, ty] = data.split("/").map(Number);
         const [th, tmin, ts] = hora.split(":").map(Number);
         const target = new Date(ty, tm - 1, td, th, tmin, ts);
-        const millis = target - new Date() - offset + ajuste;
+
+        let horarioEnvio;
+        if (modo === "chegada") {
+            horarioEnvio = new Date(target.getTime() - tempoViagem);
+        } else {
+            horarioEnvio = target;
+        }
+
+        const millis = horarioEnvio - new Date() - offset + ajuste;
 
         if (millis < 0) {
             status.textContent = "⛔ Já passou do horário alvo!";
@@ -188,7 +225,7 @@
         }, millis);
 
         intervaloCountdown = setInterval(() => {
-            const restante = millis - (Date.now() - (target - millis));
+            const restante = millis - (Date.now() - (horarioEnvio - millis));
             if (restante <= 0) clearInterval(intervaloCountdown);
             else status.innerHTML = `⏳ Enviando em ${Math.ceil(restante / 1000)}s (${restante}ms)`;
         }, 250);
