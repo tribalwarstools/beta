@@ -35,7 +35,7 @@
 
     painel.innerHTML = `
         <div id="ag_header" style="display:flex; justify-content:space-between; align-items:center; cursor:move;">
-            <h1>Agendador de Envio</h1>
+            <h2>Agendador de Envio de Tropas</h2>
             <button id="fechar_painel_ag" style="background:#f44336; color:white; border:none; border-radius:4px; padding:2px 6px; cursor:pointer;">✖</button>
         </div>
         <label>📅 Data alvo:<br><input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:140px; border:1px solid #ccc; border-radius:5px;"></label>
