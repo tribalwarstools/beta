@@ -38,12 +38,12 @@
             <h2>Agendador de Envio de Tropas</h2>
             <button id="fechar_painel_ag" style="background:#f44336; color:white; border:none; border-radius:4px; padding:2px 6px; cursor:pointer;">✖</button>
         </div>
-        <label>📅 Data alvo:<br><input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:140px; border:1px solid #ccc; border-radius:5px;"></label>
-        <label>⏰ Hora alvo:<br><input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:120px; border:1px solid #ccc; border-radius:5px;"></label>
-        <label>⚙️ Ajuste (ms):<br><input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:100px; border:1px solid #ccc; border-radius:5px;"></label>
+        <label>📅 Data alvo:<br><input id="ag_data" type="text" placeholder="19/07/2025" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;"></label>
+        <label>⏰ Hora alvo:<br><input id="ag_hora" type="text" placeholder="14:33:00" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;"></label>
+        <label>⚙️ Ajuste (ms):<br><input id="ajuste_fino" type="number" value="0" step="10" style="padding:5px; width:auto; border:1px solid #ccc; border-radius:5px;"></label>
         <div>
-          <label><input type="radio" name="modo_agendamento" value="saida" checked>Horário de saída</label>
-          <label style="margin-left:10px;"><input type="radio" name="modo_agendamento" value="chegada">Horário de chegada</label>
+          <label><input type="radio" name="modo_agendamento" value="saida" checked>🚀Horário de saída</label>
+          <label style="margin-left:10px;"><input type="radio" name="modo_agendamento" value="chegada">🎯Horário de chegada</label>
         </div>
         <div style="display:flex; gap:8px;">
             <button id="btn_salvar" class="btn" style="flex:1; background:#4CAF50; color:white; border:none; border-radius:5px; padding:6px;">💾 Salvar</button>
