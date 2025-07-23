@@ -134,7 +134,7 @@
         if (confirm("Deseja apagar todos os horários salvos?")) {
             localStorage.removeItem("horarios_salvos");
             
-    // === ANTILOGOFF ===
+    /* // === ANTILOGOFF ===
 
     // 1. Ping ao servidor a cada 4 minutos
     setInterval(() => {
@@ -154,7 +154,7 @@
         const evt = new KeyboardEvent('keydown', { key: 'Shift' });
         document.dispatchEvent(evt);
         console.log("[Tecla] Pressionamento simulado");
-    }, 1000 * 60 * 6); // 6 minutos
+    }, 1000 * 60 * 6); // 6 minutos */
 
     atualizarLista();
         }
@@ -196,7 +196,7 @@
                 lista.splice(parseInt(btn.dataset.remover), 1);
                 localStorage.setItem("horarios_salvos", JSON.stringify(lista));
                 
-    // === ANTILOGOFF ===
+    /* // === ANTILOGOFF ===
 
     // 1. Ping ao servidor a cada 4 minutos
     setInterval(() => {
@@ -217,7 +217,7 @@
         document.dispatchEvent(evt);
         console.log("[Tecla] Pressionamento simulado");
     }, 1000 * 60 * 6); // 6 minutos
-
+ */
     atualizarLista();
             };
         });
