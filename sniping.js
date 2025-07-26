@@ -1,14 +1,3 @@
-﻿// ==UserScript==
-// @name         TW - Agendamento com Cancelamento Inteligente
-// @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Agenda envio de tropas com cancelamento automático baseado no tempo de viagem
-// @author       ChatGPT
-// @match        *://*.tribalwars.com.br/game.php*screen=place*
-// @match        *://*.tribalwars.com.br/game.php*screen=overview*
-// @grant        none
-// ==/UserScript==
-
 (function() {
     'use strict';
 
