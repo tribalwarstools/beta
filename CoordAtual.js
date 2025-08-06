@@ -1,16 +1,3 @@
-// ==UserScript==
-// @name         Copia Coordenadas
-// @namespace    https://github.com/tribalwarstools/twscripts
-// @version      1.0
-// @description  Copia Coordenadas da Aldeia Atual
-// @author       tribalwarstools
-// @match        https://*.tribalwars.com.br/*
-// @grant        none
-// @updateURL    https://raw.githubusercontent.com/tribalwarstools/twscripts/main/CoordAtual.js
-// @downloadURL  https://raw.githubusercontent.com/tribalwarstools/twscripts/main/CoordAtual.js
-// ==/UserScript==
-
-
 (function () {
     'use strict';
 
@@ -188,4 +175,5 @@
         panel.style.right = 'auto';
     }
 })();
+
 
