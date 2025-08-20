@@ -49,7 +49,7 @@
     const html = `
         <div style="font-family: Verdana; font-size: 12px;">
             <label><b>Nome do jogador ou tribo:</b></label><br>
-            <input id="playerNameInput" type="text" style="width: 200px; margin-bottom: 6px;" />
+            <input id="playerNameInput" type="text" style="width: 280px; margin-bottom: 6px;" />
             <button id="buscarAldeias" class="btn" style="margin-left: 5px;">Buscar</button>
             <div id="resultado" style="margin-top: 10px;"></div>
         </div>
