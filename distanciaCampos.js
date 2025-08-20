@@ -2,25 +2,35 @@
     if (!window.game_data) return alert("Execute este script dentro do Tribal Wars.");
 
     // --- Buscar arquivos do mapa ---
-    const villRaw = await fetch('/map/village.txt').then(r => r.text());
-    const playerRaw = await fetch('/map/player.txt').then(r => r.text());
+    const [villRaw, playerRaw, allyRaw] = await Promise.all([
+        fetch('/map/village.txt').then(r => r.text()),
+        fetch('/map/player.txt').then(r => r.text()),
+        fetch('/map/ally.txt').then(r => r.text())
+    ]);
 
     // --- Criar objeto de players ---
     const players = {};
     playerRaw.trim().split('\n').forEach(line => {
+        const [id, name, allyId] = line.split(',');
+        players[id] = { id: parseInt(id), name: name, allyId: parseInt(allyId) };
+    });
+
+    // --- Criar objeto de tribos ---
+    const tribos = {};
+    allyRaw.trim().split('\n').forEach(line => {
         const [id, name] = line.split(',');
-        players[name] = parseInt(id);
+        tribos[id] = { id: parseInt(id), name: name };
     });
 
     // --- Todas aldeias ---
     const villages = villRaw.trim().split('\n').map(line => {
-        const [id, name, x, y, player, points] = line.split(',');
+        const [id, name, x, y, playerId, points] = line.split(',');
         return {
             id: parseInt(id),
             coord: `${x}|${y}`,
             x: parseInt(x),
             y: parseInt(y),
-            playerId: parseInt(player)
+            playerId: parseInt(playerId)
         };
     });
 
@@ -28,22 +38,17 @@
     const minhasAldeias = villages.filter(v => v.playerId === game_data.player.id);
 
     // --- Função distância Euclidiana ---
-    function distanciaCampos(a, b) {
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        return Math.sqrt(dx*dx + dy*dy);
-    }
+    const distanciaCampos = (a, b) => Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
 
-    // --- Função sugestão de tropas com ícones ---
-    function sugestaoTropas(dist) {
+    // --- Função sugestão de tropas ---
+    const sugestaoTropas = (dist) => {
         const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
         const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
-        
         if (dist <= 1) return `20k ${lance}20k ${espada}`;
         if (dist <= 3) return `15k ${lance}15k ${espada}`;
         if (dist <= 5) return `10k ${lance}10k ${espada}`;
         return `5k ${lance}5k ${espada}`;
-    }
+    };
 
     // --- HTML do painel ---
     const html = `
@@ -52,43 +57,27 @@
             <input id="playerNameInput" type="text" style="width: 400px; margin-bottom: 6px;" />
             <button id="buscarAldeias" class="btn" style="margin-left: 5px;">Buscar</button>
             <div id="resultado" style="margin-top: 10px;"></div>
+            <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
     `;
     Dialog.show("Distância entre aldeias (campos)", html);
 
-    // --- Evento do botão ---
-    document.getElementById("buscarAldeias").addEventListener("click", () => {
-        const nomeAlvo = document.getElementById("playerNameInput").value.trim().toLowerCase();
+    const pageSize = 100;
+    let aldeiasComDistancia = [];
+    let currentPage = 0;
+
+    function renderPage() {
         const resultado = document.getElementById("resultado");
+        const paginacao = document.getElementById("paginacao");
         resultado.innerHTML = "";
 
-        // Encontrar player
-        const playerId = Object.entries(players).find(([name,id]) => name.toLowerCase() === nomeAlvo)?.[1];
-        if(!playerId){
-            resultado.innerHTML = `<span style="color: red;">Jogador/Tribo não encontrado.</span>`;
-            return;
-        }
+        if (aldeiasComDistancia.length === 0) return;
 
-        // Filtrar aldeias inimigas
-        const aldeiasInimigas = villages.filter(v => v.playerId === playerId);
-        if(aldeiasInimigas.length === 0){
-            resultado.innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para este jogador/tribo.</span>`;
-            return;
-        }
+        const start = currentPage * pageSize;
+        const end = start + pageSize;
+        const subset = aldeiasComDistancia.slice(start, end);
 
-        // --- Calcular distância mais próxima e adicionar ao objeto ---
-        const aldeiasComDistancia = aldeiasInimigas.map(inimiga => {
-            const referencia = minhasAldeias.reduce((prev, atual) =>
-                distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
-            );
-            const dist = distanciaCampos(referencia, inimiga);
-            return { inimiga, referencia, dist };
-        });
-
-        // --- Ordenar por distância crescente ---
-        aldeiasComDistancia.sort((a, b) => a.dist - b.dist);
-
-        // --- Montar tabela ---
+        // Montar tabela
         let tabela = `
             <table class="vis" style="width:100%; font-size:12px;">
                 <thead>
@@ -102,7 +91,7 @@
                 <tbody>
         `;
 
-        aldeiasComDistancia.forEach(({inimiga, referencia, dist}) => {
+        subset.forEach(({inimiga, referencia, dist}) => {
             const tropas = sugestaoTropas(dist);
             tabela += `<tr>
                 <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
@@ -113,6 +102,75 @@
         });
 
         tabela += "</tbody></table>";
-        resultado.innerHTML = `<p><b>${aldeiasInimigas.length}</b> aldeias encontradas:</p>` + tabela;
+        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas:</p>` + tabela;
+
+        // Montar botões de paginação
+        paginacao.innerHTML = `
+            <button id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
+            <span> Página ${currentPage + 1} de ${Math.ceil(aldeiasComDistancia.length / pageSize)} </span>
+            <button id="nextPage" ${(currentPage+1)*pageSize >= aldeiasComDistancia.length ? 'disabled' : ''}>Próxima &gt;</button>
+        `;
+
+        document.getElementById("prevPage").addEventListener("click", () => {
+            if (currentPage > 0) {
+                currentPage--;
+                renderPage();
+            }
+        });
+        document.getElementById("nextPage").addEventListener("click", () => {
+            if ((currentPage+1)*pageSize < aldeiasComDistancia.length) {
+                currentPage++;
+                renderPage();
+            }
+        });
+    }
+
+    // --- Evento do botão de busca ---
+    document.getElementById("buscarAldeias").addEventListener("click", () => {
+        const nomeAlvo = document.getElementById("playerNameInput").value.trim().toLowerCase();
+        if (!nomeAlvo) return;
+
+        // Buscar jogadores
+        const jogadoresEncontrados = Object.values(players).filter(p => p.name.toLowerCase().includes(nomeAlvo));
+
+        // Buscar tribos
+        const tribosEncontradas = Object.values(tribos).filter(t => t.name.toLowerCase().includes(nomeAlvo));
+
+        let playerIds = [];
+
+        if (jogadoresEncontrados.length > 0) playerIds.push(...jogadoresEncontrados.map(p => p.id));
+        tribosEncontradas.forEach(t => {
+            const idsTribo = Object.values(players).filter(p => p.allyId === t.id).map(p => p.id);
+            playerIds.push(...idsTribo);
+        });
+
+        playerIds = [...new Set(playerIds)];
+
+        if (playerIds.length === 0) {
+            document.getElementById("resultado").innerHTML = `<span style="color: red;">Nenhum jogador ou tribo encontrado.</span>`;
+            document.getElementById("paginacao").innerHTML = "";
+            aldeiasComDistancia = [];
+            return;
+        }
+
+        const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
+        if (aldeiasInimigas.length === 0) {
+            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para este jogador/tribo.</span>`;
+            document.getElementById("paginacao").innerHTML = "";
+            aldeiasComDistancia = [];
+            return;
+        }
+
+        // Calcular distância
+        aldeiasComDistancia = aldeiasInimigas.map(inimiga => {
+            const referencia = minhasAldeias.reduce((prev, atual) =>
+                distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
+            );
+            const dist = distanciaCampos(referencia, inimiga);
+            return { inimiga, referencia, dist };
+        }).sort((a, b) => a.dist - b.dist);
+
+        currentPage = 0;
+        renderPage();
     });
 })();
