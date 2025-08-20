@@ -34,15 +34,15 @@
         return Math.sqrt(dx*dx + dy*dy);
     }
 
-    // --- Função sugestão de tropas com ícones que carregam ---
+    // --- Função sugestão de tropas com ícones ---
     function sugestaoTropas(dist) {
         const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
         const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
         
-        if (dist <= 1) return `20k ${lance} 20k ${espada}`;
-        if (dist <= 3) return `15k ${lance} 15k ${espada}`;
-        if (dist <= 5) return `10k ${lance} 10k ${espada}`;
-        return `5k ${lance} 5k ${espada}`;
+        if (dist <= 1) return `20k ${lance} + 20k ${espada}`;
+        if (dist <= 3) return `15k ${lance} + 15k ${espada}`;
+        if (dist <= 5) return `10k ${lance} + 10k ${espada}`;
+        return `5k ${lance} + 5k ${espada}`;
     }
 
     // --- HTML do painel ---
@@ -76,7 +76,19 @@
             return;
         }
 
-        // Montar tabela com coordenadas, distância e sugestão
+        // --- Calcular distância mais próxima e adicionar ao objeto ---
+        const aldeiasComDistancia = aldeiasInimigas.map(inimiga => {
+            const referencia = minhasAldeias.reduce((prev, atual) =>
+                distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
+            );
+            const dist = distanciaCampos(referencia, inimiga);
+            return { inimiga, referencia, dist };
+        });
+
+        // --- Ordenar por distância crescente ---
+        aldeiasComDistancia.sort((a, b) => a.dist - b.dist);
+
+        // --- Montar tabela ---
         let tabela = `
             <table class="vis" style="width:100%; font-size:12px;">
                 <thead>
@@ -90,14 +102,8 @@
                 <tbody>
         `;
 
-        aldeiasInimigas.forEach(inimiga => {
-            // encontrar sua aldeia mais próxima
-            const referencia = minhasAldeias.reduce((prev, atual) =>
-                distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
-            );
-            const dist = distanciaCampos(referencia, inimiga);
+        aldeiasComDistancia.forEach(({inimiga, referencia, dist}) => {
             const tropas = sugestaoTropas(dist);
-
             tabela += `<tr>
                 <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
                 <td><a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.coord}</a></td>
