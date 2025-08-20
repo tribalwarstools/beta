@@ -39,17 +39,17 @@
         const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
         const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
         
-        if (dist <= 1) return `20k ${lance} + 20k ${espada}`;
-        if (dist <= 3) return `15k ${lance} + 15k ${espada}`;
-        if (dist <= 5) return `10k ${lance} + 10k ${espada}`;
-        return `5k ${lance} + 5k ${espada}`;
+        if (dist <= 1) return `20k ${lance}20k ${espada}`;
+        if (dist <= 3) return `15k ${lance}15k ${espada}`;
+        if (dist <= 5) return `10k ${lance}10k ${espada}`;
+        return `5k ${lance}5k ${espada}`;
     }
 
     // --- HTML do painel ---
     const html = `
         <div style="font-family: Verdana; font-size: 12px;">
             <label><b>Nome do jogador ou tribo:</b></label><br>
-            <input id="playerNameInput" type="text" style="width: 280px; margin-bottom: 6px;" />
+            <input id="playerNameInput" type="text" style="width: 400px; margin-bottom: 6px;" />
             <button id="buscarAldeias" class="btn" style="margin-left: 5px;">Buscar</button>
             <div id="resultado" style="margin-top: 10px;"></div>
         </div>
