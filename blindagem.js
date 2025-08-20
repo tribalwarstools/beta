@@ -112,9 +112,9 @@
         resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas:</p>` + tabela;
 
         paginacao.innerHTML = `
-            <button id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
+            <button class="btn" id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
             <span> Página ${currentPage + 1} de ${Math.ceil(aldeiasComDistancia.length / pageSize)} </span>
-            <button id="nextPage" ${(currentPage+1)*pageSize >= aldeiasComDistancia.length ? 'disabled' : ''}>Próxima &gt;</button>
+            <button class="btn" id="nextPage" ${(currentPage+1)*pageSize >= aldeiasComDistancia.length ? 'disabled' : ''}>Próxima &gt;</button>
         `;
 
         document.getElementById("prevPage").addEventListener("click", () => {
