@@ -34,17 +34,16 @@
         return Math.sqrt(dx*dx + dy*dy);
     }
 
-    // --- Função sugestão de tropas com ícones ---
-function sugestaoTropas(dist) {
-    const lance = '<span class="unit u_spear" title="Lança"></span>'; 
-    const espada = '<span class="unit u_sword" title="Espadachim"></span>';
-    
-    if (dist <= 1) return `20k ${lance} + 20k ${espada}`;
-    if (dist <= 3) return `15k ${lance} + 15k ${espada}`;
-    if (dist <= 5) return `10k ${lance} + 10k ${espada}`;
-    return `5k ${lance} + 5k ${espada}`;
-}
-
+    // --- Função sugestão de tropas com ícones que carregam ---
+    function sugestaoTropas(dist) {
+        const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
+        const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
+        
+        if (dist <= 1) return `20k ${lance} + 20k ${espada}`;
+        if (dist <= 3) return `15k ${lance} + 15k ${espada}`;
+        if (dist <= 5) return `10k ${lance} + 10k ${espada}`;
+        return `5k ${lance} + 5k ${espada}`;
+    }
 
     // --- HTML do painel ---
     const html = `
