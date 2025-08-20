@@ -29,6 +29,19 @@
         };
     });
 
+    // --- Preparar dados para a datalist ---
+    const todasOpcoes = [];
+    
+    // Adicionar jogadores
+    Object.values(players).forEach(player => {
+        todasOpcoes.push({id: player.id, nome: player.name, tipo: 'Jogador'});
+    });
+    
+    // Adicionar tribos
+    Object.values(tribos).forEach(tribo => {
+        todasOpcoes.push({id: tribo.id, nome: tribo.name, tipo: 'Tribo'});
+    });
+
     // --- Todas aldeias ---
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, playerId, points] = line.split(',');
@@ -43,15 +56,101 @@
 
     // --- HTML do painel ---
     const html = `
-        <div style="font-family: Verdana; font-size: 12px;">
-            <label><b>Nome do jogador ou tribo (pode separar por ',' ou ';'):</b></label><br>
-            <input id="playerNameInput" type="text" style="width: 400px; margin-bottom: 6px;" />
-            <button id="buscarAldeias" class="btn" style="margin-left: 5px;">Buscar</button>
+        <div style="font-family: Verdana; font-size: 12px;width: 400px;">
+            <label><b>Selecione jogadores ou tribos:</b></label><br>
+            <div id="tagsContainer" style="border: 1px solid #ccc; padding: 5px; min-height: 30px; margin-bottom: 6px; 
+                 display: flex; flex-wrap: wrap; align-items: center; gap: 5px;">
+                <input id="playerNameInput" type="text" list="opcoesList" 
+                       placeholder="Digite e pressione Enter..." 
+                       style="border: none; outline: none; flex-grow: 1; min-width: 100px;" />
+            </div>
+            <datalist id="opcoesList"></datalist>
+            <button id="buscarAldeias" class="btn">Buscar</button>
+            <button id="limparTudo" class="btn" style="margin-left: 5px;">Limpar</button>
             <div id="resultado" style="margin-top: 10px;"></div>
             <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
     `;
     Dialog.show("Distância entre aldeias (campos)", html);
+
+    // --- Preencher a datalist com opções ---
+    const datalist = document.getElementById('opcoesList');
+    todasOpcoes.forEach(opcao => {
+        const option = document.createElement('option');
+        option.value = opcao.nome;
+        option.setAttribute('data-tipo', opcao.tipo);
+        option.setAttribute('data-id', opcao.id);
+        datalist.appendChild(option);
+    });
+
+    const tagsContainer = document.getElementById('tagsContainer');
+    const input = document.getElementById('playerNameInput');
+    const selectedItems = new Set();
+
+    // --- Função para adicionar tag ---
+    function adicionarTag(nome, tipo, id) {
+        if (selectedItems.has(nome)) return;
+        
+        selectedItems.add(nome);
+        
+        const tag = document.createElement('div');
+        tag.className = 'tag';
+        tag.style = 'background: #e0e0e0; padding: 2px 8px; border-radius: 12px; display: flex; align-items: center;';
+        tag.innerHTML = `
+            <span style="margin-right: 5px;">${nome}</span>
+            <button type="button" style="background: none; border: none; cursor: pointer; font-size: 14px; color: #666;">×</button>
+        `;
+        
+        tag.setAttribute('data-nome', nome);
+        tag.setAttribute('data-tipo', tipo);
+        tag.setAttribute('data-id', id);
+        
+        // Botão para remover a tag
+        tag.querySelector('button').addEventListener('click', function() {
+            tagsContainer.removeChild(tag);
+            selectedItems.delete(nome);
+        });
+        
+        tagsContainer.insertBefore(tag, input);
+        input.value = '';
+        input.focus();
+    }
+
+    // --- Event listener para o input ---
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && this.value.trim()) {
+            e.preventDefault();
+            
+            // Encontrar a opção correspondente
+            const opcao = todasOpcoes.find(o => 
+                o.nome.toLowerCase() === this.value.trim().toLowerCase()
+            );
+            
+            if (opcao) {
+                adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+            }
+        }
+    });
+
+    // --- Event listener para o datalist (quando seleciona com mouse) ---
+    input.addEventListener('input', function() {
+        const opcao = todasOpcoes.find(o => 
+            o.nome.toLowerCase() === this.value.trim().toLowerCase()
+        );
+        
+        if (opcao && !selectedItems.has(opcao.nome)) {
+            adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+        }
+    });
+
+    // --- Botão Limpar Tudo ---
+    document.getElementById('limparTudo').addEventListener('click', function() {
+        const tags = tagsContainer.querySelectorAll('.tag');
+        tags.forEach(tag => tagsContainer.removeChild(tag));
+        selectedItems.clear();
+        input.value = '';
+        input.focus();
+    });
 
     const pageSize = 100;
     let aldeiasComDistancia = [];
@@ -106,8 +205,6 @@
         subset.forEach(({inimiga, referencia, dist}) => {
             const vezes = contagem[referencia.coord] || 1;
             const tropas = sugestaoTropas(dist, vezes);
-
-            // --- distância arredondada para inteiro ---
             const distInteiro = Math.round(dist);
 
             tabela += `<tr>
@@ -136,25 +233,27 @@
     }
 
     document.getElementById("buscarAldeias").addEventListener("click", () => {
-        const input = document.getElementById("playerNameInput").value.trim().toLowerCase();
-        if (!input) return;
-        const nomesAlvo = input.split(/[,;]+/).map(n => n.trim()).filter(n => n);
+        const tags = tagsContainer.querySelectorAll('.tag');
+        if (tags.length === 0) return;
+        
         let playerIds = [];
 
-        nomesAlvo.forEach(nomeAlvo => {
-            const jogadoresEncontrados = Object.values(players).filter(p => p.name.toLowerCase().includes(nomeAlvo));
-            const tribosEncontradas = Object.values(tribos).filter(t => t.name.toLowerCase().includes(nomeAlvo));
-            if (jogadoresEncontrados.length > 0) playerIds.push(...jogadoresEncontrados.map(p => p.id));
-            tribosEncontradas.forEach(t => {
-                const idsTribo = Object.values(players).filter(p => p.allyId === t.id).map(p => p.id);
+        tags.forEach(tag => {
+            const tipo = tag.getAttribute('data-tipo');
+            const id = tag.getAttribute('data-id');
+
+            if (tipo === 'Jogador') {
+                playerIds.push(parseInt(id));
+            } else if (tipo === 'Tribo') {
+                const idsTribo = Object.values(players).filter(p => p.allyId === parseInt(id)).map(p => p.id);
                 playerIds.push(...idsTribo);
-            });
+            }
         });
 
         playerIds = [...new Set(playerIds)];
 
         if (playerIds.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: red;">Nenhum jogador ou tribo encontrado.</span>`;
+            document.getElementById("resultado").innerHTML = `<span style="color: red;">Nenhum jogador ou tribo selecionado.</span>`;
             document.getElementById("paginacao").innerHTML = "";
             aldeiasComDistancia = [];
             return;
@@ -162,7 +261,7 @@
 
         const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
         if (aldeiasInimigas.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para este(s) jogador(es)/tribo(s).</span>`;
+            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para os selecionados.</span>`;
             document.getElementById("paginacao").innerHTML = "";
             aldeiasComDistancia = [];
             return;
