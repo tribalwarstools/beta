@@ -25,13 +25,7 @@
     // --- Todas aldeias ---
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, playerId, points] = line.split(',');
-        return {
-            id: parseInt(id),
-            coord: `${x}|${y}`,
-            x: parseInt(x),
-            y: parseInt(y),
-            playerId: parseInt(playerId)
-        };
+        return { id: parseInt(id), coord: `${x}|${y}`, x: parseInt(x), y: parseInt(y), playerId: parseInt(playerId) };
     });
 
     // --- Suas aldeias ---
@@ -39,16 +33,6 @@
 
     // --- Função distância Euclidiana ---
     const distanciaCampos = (a, b) => Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
-
-    // --- Função sugestão de tropas ---
-    const sugestaoTropas = (dist) => {
-        const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
-        const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
-        if (dist <= 1) return `20k ${lance}20k ${espada}`;
-        if (dist <= 3) return `15k ${lance}15k ${espada}`;
-        if (dist <= 5) return `10k ${lance}10k ${espada}`;
-        return `5k ${lance}5k ${espada}`;
-    };
 
     // --- HTML do painel ---
     const html = `
@@ -66,6 +50,28 @@
     let aldeiasComDistancia = [];
     let currentPage = 0;
 
+    function calcularMultiplicador(vezes, dist) {
+        if (dist > 5) return 1; // Distâncias longas: manter 5k
+        if (vezes === 1) return 1;
+        if (vezes === 2) return dist <= 3 ? 1.5 : 1.2;
+        return dist <= 3 ? 2 : 1.5; // 3 ou mais vezes
+    }
+
+    function sugestaoTropas(dist, vezes) {
+        const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
+        const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
+        let baseLance = 5000, baseEspada = 5000;
+
+        if (dist <= 1) baseLance = baseEspada = 20000;
+        else if (dist <= 3) baseLance = baseEspada = 15000;
+        else if (dist <= 5) baseLance = baseEspada = 10000;
+
+        const mult = calcularMultiplicador(vezes, dist);
+        const lanceFinal = Math.ceil(baseLance * mult);
+        const espadaFinal = Math.ceil(baseEspada * mult);
+        return `${lanceFinal.toLocaleString()} ${lance} ${espadaFinal.toLocaleString()} ${espada}`;
+    }
+
     function renderPage() {
         const resultado = document.getElementById("resultado");
         const paginacao = document.getElementById("paginacao");
@@ -77,22 +83,23 @@
         const end = start + pageSize;
         const subset = aldeiasComDistancia.slice(start, end);
 
-        // Montar tabela
-        let tabela = `
-            <table class="vis" style="width:100%; font-size:12px;">
-                <thead>
-                    <tr>
-                        <th>Aldeia Inimiga (Coord)</th>
-                        <th>Sua Aldeia (Coord)</th>
-                        <th>Distância (campos)</th>
-                        <th>Sugestão de apoio</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
+        let tabela = `<table class="vis" style="width:100%; font-size:12px;">
+            <thead><tr>
+                <th>Aldeia Inimiga (Coord)</th>
+                <th>Sua Aldeia (Coord)</th>
+                <th>Distância (campos)</th>
+                <th>Sugestão de apoio</th>
+            </tr></thead><tbody>`;
+
+        // Contagem de quantas vezes cada aldeia aparece
+        const contagem = {};
+        subset.forEach(({referencia}) => {
+            contagem[referencia.coord] = (contagem[referencia.coord] || 0) + 1;
+        });
 
         subset.forEach(({inimiga, referencia, dist}) => {
-            const tropas = sugestaoTropas(dist);
+            const vezes = contagem[referencia.coord] || 1;
+            const tropas = sugestaoTropas(dist, vezes);
             tabela += `<tr>
                 <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
                 <td><a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.coord}</a></td>
@@ -104,7 +111,6 @@
         tabela += "</tbody></table>";
         resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas:</p>` + tabela;
 
-        // Montar botões de paginação
         paginacao.innerHTML = `
             <button id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
             <span> Página ${currentPage + 1} de ${Math.ceil(aldeiasComDistancia.length / pageSize)} </span>
@@ -112,33 +118,22 @@
         `;
 
         document.getElementById("prevPage").addEventListener("click", () => {
-            if (currentPage > 0) {
-                currentPage--;
-                renderPage();
-            }
+            if (currentPage > 0) { currentPage--; renderPage(); }
         });
         document.getElementById("nextPage").addEventListener("click", () => {
-            if ((currentPage+1)*pageSize < aldeiasComDistancia.length) {
-                currentPage++;
-                renderPage();
-            }
+            if ((currentPage+1)*pageSize < aldeiasComDistancia.length) { currentPage++; renderPage(); }
         });
     }
 
-    // --- Evento do botão de busca ---
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const input = document.getElementById("playerNameInput").value.trim().toLowerCase();
         if (!input) return;
-
-        // Separar nomes por ',' ou ';'
         const nomesAlvo = input.split(/[,;]+/).map(n => n.trim()).filter(n => n);
-
         let playerIds = [];
 
         nomesAlvo.forEach(nomeAlvo => {
             const jogadoresEncontrados = Object.values(players).filter(p => p.name.toLowerCase().includes(nomeAlvo));
             const tribosEncontradas = Object.values(tribos).filter(t => t.name.toLowerCase().includes(nomeAlvo));
-
             if (jogadoresEncontrados.length > 0) playerIds.push(...jogadoresEncontrados.map(p => p.id));
             tribosEncontradas.forEach(t => {
                 const idsTribo = Object.values(players).filter(p => p.allyId === t.id).map(p => p.id);
@@ -146,7 +141,6 @@
             });
         });
 
-        // Remover duplicados
         playerIds = [...new Set(playerIds)];
 
         if (playerIds.length === 0) {
@@ -164,7 +158,6 @@
             return;
         }
 
-        // Calcular distância
         aldeiasComDistancia = aldeiasInimigas.map(inimiga => {
             const referencia = minhasAldeias.reduce((prev, atual) =>
                 distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
