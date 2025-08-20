@@ -14,7 +14,7 @@
         const [id, name, allyId] = line.split(',');
         players[id] = { 
             id: parseInt(id), 
-            name: name.replace(/\+/g, " "), // corrigido
+            name: name.replace(/\+/g, " "), 
             allyId: parseInt(allyId) 
         };
     });
@@ -25,7 +25,7 @@
         const [id, name] = line.split(',');
         tribos[id] = { 
             id: parseInt(id), 
-            name: name.replace(/\+/g, " ") // corrigido
+            name: name.replace(/\+/g, " ") 
         };
     });
 
@@ -106,10 +106,14 @@
         subset.forEach(({inimiga, referencia, dist}) => {
             const vezes = contagem[referencia.coord] || 1;
             const tropas = sugestaoTropas(dist, vezes);
+
+            // --- distância arredondada para inteiro ---
+            const distInteiro = Math.round(dist);
+
             tabela += `<tr>
                 <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
                 <td><a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.coord}</a></td>
-                <td>${dist.toFixed(1)}</td>
+                <td>${distInteiro}</td>
                 <td>${tropas}</td>
             </tr>`;
         });
