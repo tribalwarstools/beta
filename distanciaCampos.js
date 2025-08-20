@@ -1,4 +1,6 @@
 (async function () {
+    if (!window.game_data) return alert("Execute este script dentro do Tribal Wars.");
+
     // --- Buscar arquivos do mapa ---
     const villRaw = await fetch('/map/village.txt').then(r => r.text());
     const playerRaw = await fetch('/map/player.txt').then(r => r.text());
@@ -25,6 +27,25 @@
     // --- Suas aldeias ---
     const minhasAldeias = villages.filter(v => v.playerId === game_data.player.id);
 
+    // --- Função distância Euclidiana ---
+    function distanciaCampos(a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    // --- Função sugestão de tropas com ícones ---
+function sugestaoTropas(dist) {
+    const lance = '<span class="unit u_spear" title="Lança"></span>'; 
+    const espada = '<span class="unit u_sword" title="Espadachim"></span>';
+    
+    if (dist <= 1) return `20k ${lance} + 20k ${espada}`;
+    if (dist <= 3) return `15k ${lance} + 15k ${espada}`;
+    if (dist <= 5) return `10k ${lance} + 10k ${espada}`;
+    return `5k ${lance} + 5k ${espada}`;
+}
+
+
     // --- HTML do painel ---
     const html = `
         <div style="font-family: Verdana; font-size: 12px;">
@@ -35,13 +56,6 @@
         </div>
     `;
     Dialog.show("Distância entre aldeias (campos)", html);
-
-    // --- Função distância Euclidiana ---
-    function distanciaCampos(a, b) {
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        return Math.sqrt(dx*dx + dy*dy);
-    }
 
     // --- Evento do botão ---
     document.getElementById("buscarAldeias").addEventListener("click", () => {
@@ -63,7 +77,7 @@
             return;
         }
 
-        // Montar tabela com coordenadas e distância
+        // Montar tabela com coordenadas, distância e sugestão
         let tabela = `
             <table class="vis" style="width:100%; font-size:12px;">
                 <thead>
@@ -71,6 +85,7 @@
                         <th>Aldeia Inimiga (Coord)</th>
                         <th>Sua Aldeia (Coord)</th>
                         <th>Distância (campos)</th>
+                        <th>Sugestão de apoio</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -82,12 +97,13 @@
                 distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
             );
             const dist = distanciaCampos(referencia, inimiga);
+            const tropas = sugestaoTropas(dist);
 
-            // Links clicáveis
             tabela += `<tr>
                 <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
                 <td><a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.coord}</a></td>
                 <td>${dist.toFixed(1)}</td>
+                <td>${tropas}</td>
             </tr>`;
         });
 
