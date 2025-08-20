@@ -12,14 +12,21 @@
     const players = {};
     playerRaw.trim().split('\n').forEach(line => {
         const [id, name, allyId] = line.split(',');
-        players[id] = { id: parseInt(id), name: name, allyId: parseInt(allyId) };
+        players[id] = { 
+            id: parseInt(id), 
+            name: name.replace(/\+/g, " "), // corrigido
+            allyId: parseInt(allyId) 
+        };
     });
 
     // --- Criar objeto de tribos ---
     const tribos = {};
     allyRaw.trim().split('\n').forEach(line => {
         const [id, name] = line.split(',');
-        tribos[id] = { id: parseInt(id), name: name };
+        tribos[id] = { 
+            id: parseInt(id), 
+            name: name.replace(/\+/g, " ") // corrigido
+        };
     });
 
     // --- Todas aldeias ---
@@ -51,10 +58,10 @@
     let currentPage = 0;
 
     function calcularMultiplicador(vezes, dist) {
-        if (dist > 5) return 1; // Distâncias longas: manter 5k
+        if (dist > 5) return 1;
         if (vezes === 1) return 1;
         if (vezes === 2) return dist <= 3 ? 1.5 : 1.2;
-        return dist <= 3 ? 2 : 1.5; // 3 ou mais vezes
+        return dist <= 3 ? 2 : 1.5;
     }
 
     function sugestaoTropas(dist, vezes) {
@@ -91,7 +98,6 @@
                 <th>Sugestão de apoio</th>
             </tr></thead><tbody>`;
 
-        // Contagem de quantas vezes cada aldeia aparece
         const contagem = {};
         subset.forEach(({referencia}) => {
             contagem[referencia.coord] = (contagem[referencia.coord] || 0) + 1;
