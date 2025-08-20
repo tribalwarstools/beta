@@ -1,6 +1,11 @@
 (async function () {
     if (!window.game_data) return alert("Execute este script dentro do Tribal Wars.");
 
+    // Função para decodificar caracteres especiais (como %C3%A7 para ç)
+    function decodeSpecialChars(str) {
+        return decodeURIComponent(str.replace(/\+/g, " "));
+    }
+
     // --- Buscar arquivos do mapa ---
     const [villRaw, playerRaw, allyRaw] = await Promise.all([
         fetch('/map/village.txt').then(r => r.text()),
@@ -14,7 +19,7 @@
         const [id, name, allyId] = line.split(',');
         players[id] = { 
             id: parseInt(id), 
-            name: name.replace(/\+/g, " "), 
+            name: decodeSpecialChars(name), 
             allyId: parseInt(allyId) 
         };
     });
@@ -22,10 +27,11 @@
     // --- Criar objeto de tribos ---
     const tribos = {};
     allyRaw.trim().split('\n').forEach(line => {
-        const [id, name] = line.split(',');
+        const [id, name, , , tag] = line.split(',');
         tribos[id] = { 
             id: parseInt(id), 
-            name: name.replace(/\+/g, " ") 
+            name: decodeSpecialChars(name),
+            tag: decodeSpecialChars(tag || '')
         };
     });
 
@@ -34,18 +40,37 @@
     
     // Adicionar jogadores
     Object.values(players).forEach(player => {
-        todasOpcoes.push({id: player.id, nome: player.name, tipo: 'Jogador'});
+        todasOpcoes.push({
+            id: player.id, 
+            nome: player.name, 
+            tipo: 'Jogador',
+            display: `${player.name} (Jogador)`
+        });
     });
     
     // Adicionar tribos
     Object.values(tribos).forEach(tribo => {
-        todasOpcoes.push({id: tribo.id, nome: tribo.name, tipo: 'Tribo'});
+        todasOpcoes.push({
+            id: tribo.id, 
+            nome: tribo.name, 
+            tipo: 'Tribo',
+            display: `${tribo.name} [${tribo.tag}] (Tribo)`
+        });
     });
 
     // --- Todas aldeias ---
     const villages = villRaw.trim().split('\n').map(line => {
-        const [id, name, x, y, playerId, points] = line.split(',');
-        return { id: parseInt(id), coord: `${x}|${y}`, x: parseInt(x), y: parseInt(y), playerId: parseInt(playerId) };
+        const [id, name, x, y, playerId, points, rank] = line.split(',');
+        return { 
+            id: parseInt(id), 
+            name: decodeSpecialChars(name),
+            coord: `${x}|${y}`, 
+            x: parseInt(x), 
+            y: parseInt(y), 
+            playerId: parseInt(playerId),
+            points: parseInt(points || 0),
+            rank: parseInt(rank || 0)
+        };
     });
 
     // --- Suas aldeias ---
@@ -56,7 +81,7 @@
 
     // --- HTML do painel ---
     const html = `
-        <div style="font-family: Verdana; font-size: 12px;width: 400px;">
+        <div style="font-family: Verdana; font-size: 12px;width: 500px;">
             <label><b>Selecione jogadores ou tribos:</b></label><br>
             <div id="tagsContainer" style="border: 1px solid #ccc; padding: 5px; min-height: 30px; margin-bottom: 6px; 
                  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;">
@@ -67,17 +92,34 @@
             <datalist id="opcoesList"></datalist>
             <button id="buscarAldeias" class="btn">Buscar</button>
             <button id="limparTudo" class="btn" style="margin-left: 5px;">Limpar</button>
-            <div id="resultado" style="margin-top: 10px; overflow-x: auto;"></div>
+            <div id="resultado" style="margin-top: 10px; max-height: 400px; overflow-y: auto;"></div>
             <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
     `;
-    Dialog.show("Distância entre aldeias (campos)", html);
+    
+    // Usando o Dialog do Tribal Wars se disponível
+    if (typeof Dialog !== 'undefined') {
+        Dialog.show("Distância entre aldeias (campos)", html);
+    } else {
+        // Fallback caso Dialog não esteja disponível
+        const dialog = document.createElement('div');
+        dialog.innerHTML = html;
+        dialog.style.position = 'fixed';
+        dialog.style.top = '50%';
+        dialog.style.left = '50%';
+        dialog.style.transform = 'translate(-50%, -50%)';
+        dialog.style.backgroundColor = 'white';
+        dialog.style.padding = '15px';
+        dialog.style.border = '2px solid #ccc';
+        dialog.style.zIndex = '10000';
+        document.body.appendChild(dialog);
+    }
 
     // --- Preencher a datalist com opções ---
     const datalist = document.getElementById('opcoesList');
     todasOpcoes.forEach(opcao => {
         const option = document.createElement('option');
-        option.value = opcao.nome;
+        option.value = opcao.display || opcao.nome;
         option.setAttribute('data-tipo', opcao.tipo);
         option.setAttribute('data-id', opcao.id);
         datalist.appendChild(option);
@@ -89,9 +131,10 @@
 
     // --- Função para adicionar tag ---
     function adicionarTag(nome, tipo, id) {
-        if (selectedItems.has(nome)) return;
+        const uniqueId = `${tipo}-${id}`;
+        if (selectedItems.has(uniqueId)) return;
         
-        selectedItems.add(nome);
+        selectedItems.add(uniqueId);
         
         const tag = document.createElement('div');
         tag.className = 'tag';
@@ -104,11 +147,12 @@
         tag.setAttribute('data-nome', nome);
         tag.setAttribute('data-tipo', tipo);
         tag.setAttribute('data-id', id);
+        tag.setAttribute('data-uniqueid', uniqueId);
         
         // Botão para remover a tag
         tag.querySelector('button').addEventListener('click', function() {
             tagsContainer.removeChild(tag);
-            selectedItems.delete(nome);
+            selectedItems.delete(uniqueId);
         });
         
         tagsContainer.insertBefore(tag, input);
@@ -123,7 +167,8 @@
             
             // Encontrar a opção correspondente
             const opcao = todasOpcoes.find(o => 
-                o.nome.toLowerCase() === this.value.trim().toLowerCase()
+                o.display.toLowerCase().includes(this.value.trim().toLowerCase()) ||
+                o.nome.toLowerCase().includes(this.value.trim().toLowerCase())
             );
             
             if (opcao) {
@@ -135,11 +180,14 @@
     // --- Event listener para o datalist (quando seleciona com mouse) ---
     input.addEventListener('input', function() {
         const opcao = todasOpcoes.find(o => 
-            o.nome.toLowerCase() === this.value.trim().toLowerCase()
+            o.display === this.value || o.nome === this.value
         );
         
-        if (opcao && !selectedItems.has(opcao.nome)) {
-            adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+        if (opcao) {
+            const uniqueId = `${opcao.tipo}-${opcao.id}`;
+            if (!selectedItems.has(uniqueId)) {
+                adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+            }
         }
     });
 
@@ -152,7 +200,7 @@
         input.focus();
     });
 
-    const pageSize = 100;
+    const pageSize = 50;
     let aldeiasComDistancia = [];
     let currentPage = 0;
 
@@ -183,18 +231,22 @@
         const paginacao = document.getElementById("paginacao");
         resultado.innerHTML = "";
 
-        if (aldeiasComDistancia.length === 0) return;
+        if (aldeiasComDistancia.length === 0) {
+            resultado.innerHTML = "<p>Nenhuma aldeia encontrada.</p>";
+            paginacao.innerHTML = "";
+            return;
+        }
 
         const start = currentPage * pageSize;
-        const end = start + pageSize;
+        const end = Math.min(start + pageSize, aldeiasComDistancia.length);
         const subset = aldeiasComDistancia.slice(start, end);
 
-        let tabela = `<table class="vis" style="width:100%; font-size:12px;">
-            <thead><tr>
-                <th>Aldeia Inimiga (Coord)</th>
-                <th>Sua Aldeia (Coord)</th>
-                <th>Distância (campos)</th>
-                <th>Sugestão de apoio</th>
+        let tabela = `<table class="vis" style="width:100%; font-size:11px; border-collapse: collapse;">
+            <thead><tr style="background-color: #f0f0f0;">
+                <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Inimiga</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Sua Aldeia</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Distância</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Sugestão</th>
             </tr></thead><tbody>`;
 
         const contagem = {};
@@ -208,33 +260,54 @@
             const distInteiro = Math.round(dist);
 
             tabela += `<tr>
-                <td><a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.coord}</a></td>
-                <td><a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.coord}</a></td>
-                <td>${distInteiro}</td>
-                <td>${tropas}</td>
+                <td style="border: 1px solid #ccc; padding: 4px;">
+                    <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">
+                        ${inimiga.name} (${inimiga.coord})
+                    </a>
+                </td>
+                <td style="border: 1px solid #ccc; padding: 4px;">
+                    <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">
+                        ${referencia.name} (${referencia.coord})
+                    </a>
+                </td>
+                <td style="border: 1px solid #ccc; padding: 4px; text-align: center;">${distInteiro}</td>
+                <td style="border: 1px solid #ccc; padding: 4px;">${tropas}</td>
             </tr>`;
         });
 
         tabela += "</tbody></table>";
-        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas:</p>` + tabela;
+        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas (mostrando ${start+1}-${end}):</p>` + tabela;
 
+        const totalPages = Math.ceil(aldeiasComDistancia.length / pageSize);
         paginacao.innerHTML = `
             <button class="btn" id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
-            <span> Página ${currentPage + 1} de ${Math.ceil(aldeiasComDistancia.length / pageSize)} </span>
-            <button class="btn" id="nextPage" ${(currentPage+1)*pageSize >= aldeiasComDistancia.length ? 'disabled' : ''}>Próxima &gt;</button>
+            <span> Página ${currentPage + 1} de ${totalPages} </span>
+            <button class="btn" id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Próxima &gt;</button>
         `;
 
-        document.getElementById("prevPage").addEventListener("click", () => {
-            if (currentPage > 0) { currentPage--; renderPage(); }
+        document.getElementById("prevPage")?.addEventListener("click", () => {
+            if (currentPage > 0) { 
+                currentPage--; 
+                renderPage(); 
+            }
         });
-        document.getElementById("nextPage").addEventListener("click", () => {
-            if ((currentPage+1)*pageSize < aldeiasComDistancia.length) { currentPage++; renderPage(); }
+        
+        document.getElementById("nextPage")?.addEventListener("click", () => {
+            if (currentPage < totalPages - 1) { 
+                currentPage++; 
+                renderPage(); 
+            }
         });
     }
 
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const tags = tagsContainer.querySelectorAll('.tag');
-        if (tags.length === 0) return;
+        if (tags.length === 0) {
+            document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador ou tribo.</span>`;
+            document.getElementById("paginacao").innerHTML = "";
+            aldeiasComDistancia = [];
+            return;
+        }
         
         let playerIds = [];
 
@@ -245,7 +318,9 @@
             if (tipo === 'Jogador') {
                 playerIds.push(parseInt(id));
             } else if (tipo === 'Tribo') {
-                const idsTribo = Object.values(players).filter(p => p.allyId === parseInt(id)).map(p => p.id);
+                const idsTribo = Object.values(players)
+                    .filter(p => p.allyId === parseInt(id))
+                    .map(p => p.id);
                 playerIds.push(...idsTribo);
             }
         });
@@ -267,13 +342,31 @@
             return;
         }
 
-        aldeiasComDistancia = aldeiasInimigas.map(inimiga => {
-            const referencia = minhasAldeias.reduce((prev, atual) =>
-                distanciaCampos(atual, inimiga) < distanciaCampos(prev, inimiga) ? atual : prev
-            );
-            const dist = distanciaCampos(referencia, inimiga);
-            return { inimiga, referencia, dist };
-        }).sort((a, b) => a.dist - b.dist);
+        // Calcular distâncias
+        aldeiasComDistancia = [];
+        aldeiasInimigas.forEach(inimiga => {
+            let menorDistancia = Infinity;
+            let aldeiaMaisProxima = null;
+            
+            minhasAldeias.forEach(minha => {
+                const dist = distanciaCampos(minha, inimiga);
+                if (dist < menorDistancia) {
+                    menorDistancia = dist;
+                    aldeiaMaisProxima = minha;
+                }
+            });
+            
+            if (aldeiaMaisProxima) {
+                aldeiasComDistancia.push({
+                    inimiga,
+                    referencia: aldeiaMaisProxima,
+                    dist: menorDistancia
+                });
+            }
+        });
+
+        // Ordenar por distância
+        aldeiasComDistancia.sort((a, b) => a.dist - b.dist);
 
         currentPage = 0;
         renderPage();
