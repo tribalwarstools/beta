@@ -67,7 +67,7 @@
             <datalist id="opcoesList"></datalist>
             <button id="buscarAldeias" class="btn">Buscar</button>
             <button id="limparTudo" class="btn" style="margin-left: 5px;">Limpar</button>
-            <div id="resultado" style="margin-top: 10px;"></div>
+            <div id="resultado" style="margin-top: 10px; overflow-x: auto;"></div>
             <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
     `;
