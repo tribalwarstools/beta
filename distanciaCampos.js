@@ -53,7 +53,7 @@
     // --- HTML do painel ---
     const html = `
         <div style="font-family: Verdana; font-size: 12px;">
-            <label><b>Nome do jogador ou tribo:</b></label><br>
+            <label><b>Nome do jogador ou tribo (pode separar por ',' ou ';'):</b></label><br>
             <input id="playerNameInput" type="text" style="width: 400px; margin-bottom: 6px;" />
             <button id="buscarAldeias" class="btn" style="margin-left: 5px;">Buscar</button>
             <div id="resultado" style="margin-top: 10px;"></div>
@@ -127,23 +127,26 @@
 
     // --- Evento do botão de busca ---
     document.getElementById("buscarAldeias").addEventListener("click", () => {
-        const nomeAlvo = document.getElementById("playerNameInput").value.trim().toLowerCase();
-        if (!nomeAlvo) return;
+        const input = document.getElementById("playerNameInput").value.trim().toLowerCase();
+        if (!input) return;
 
-        // Buscar jogadores
-        const jogadoresEncontrados = Object.values(players).filter(p => p.name.toLowerCase().includes(nomeAlvo));
-
-        // Buscar tribos
-        const tribosEncontradas = Object.values(tribos).filter(t => t.name.toLowerCase().includes(nomeAlvo));
+        // Separar nomes por ',' ou ';'
+        const nomesAlvo = input.split(/[,;]+/).map(n => n.trim()).filter(n => n);
 
         let playerIds = [];
 
-        if (jogadoresEncontrados.length > 0) playerIds.push(...jogadoresEncontrados.map(p => p.id));
-        tribosEncontradas.forEach(t => {
-            const idsTribo = Object.values(players).filter(p => p.allyId === t.id).map(p => p.id);
-            playerIds.push(...idsTribo);
+        nomesAlvo.forEach(nomeAlvo => {
+            const jogadoresEncontrados = Object.values(players).filter(p => p.name.toLowerCase().includes(nomeAlvo));
+            const tribosEncontradas = Object.values(tribos).filter(t => t.name.toLowerCase().includes(nomeAlvo));
+
+            if (jogadoresEncontrados.length > 0) playerIds.push(...jogadoresEncontrados.map(p => p.id));
+            tribosEncontradas.forEach(t => {
+                const idsTribo = Object.values(players).filter(p => p.allyId === t.id).map(p => p.id);
+                playerIds.push(...idsTribo);
+            });
         });
 
+        // Remover duplicados
         playerIds = [...new Set(playerIds)];
 
         if (playerIds.length === 0) {
@@ -155,7 +158,7 @@
 
         const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
         if (aldeiasInimigas.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para este jogador/tribo.</span>`;
+            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para este(s) jogador(es)/tribo(s).</span>`;
             document.getElementById("paginacao").innerHTML = "";
             aldeiasComDistancia = [];
             return;
