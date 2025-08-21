@@ -90,8 +90,8 @@
                        style="border: none; outline: none; flex-grow: 1; min-width: 100px;" />
             </div>
             <datalist id="opcoesList"></datalist>
-            <button id="buscarAldeias" class="btn">Buscar</button>
-            <button id="limparTudo" class="btn" style="margin-left: 5px;">Limpar</button>
+            <button id="buscarAldeias" class="btn btn-confirm-yes">Buscar</button>
+            <button id="limparTudo" class="btn btn-confirm-no" style="margin-left: 5px;">Limpar</button>
             <div id="resultado" style="margin-top: 10px; max-height: 400px; overflow-y: auto;"></div>
             <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
