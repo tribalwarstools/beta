@@ -1,7 +1,6 @@
 (async function () {
     if (!window.game_data) return alert("Execute este script dentro do Tribal Wars.");
 
-    // Função para decodificar caracteres especiais (como %C3%A7 para ç)
     function decodeSpecialChars(str) {
         return decodeURIComponent(str.replace(/\+/g, " "));
     }
@@ -35,27 +34,13 @@
         };
     });
 
-    // --- Preparar dados para a datalist ---
+    // --- Preparar opções ---
     const todasOpcoes = [];
-    
-    // Adicionar jogadores
     Object.values(players).forEach(player => {
-        todasOpcoes.push({
-            id: player.id, 
-            nome: player.name, 
-            tipo: 'Jogador',
-            display: `${player.name} (Jogador)`
-        });
+        todasOpcoes.push({ id: player.id, nome: player.name, tipo: 'Jogador', display: `${player.name} (Jogador)` });
     });
-    
-    // Adicionar tribos
     Object.values(tribos).forEach(tribo => {
-        todasOpcoes.push({
-            id: tribo.id, 
-            nome: tribo.name, 
-            tipo: 'Tribo',
-            display: `${tribo.name} [${tribo.tag}] (Tribo)`
-        });
+        todasOpcoes.push({ id: tribo.id, nome: tribo.name, tipo: 'Tribo', display: `${tribo.name} [${tribo.tag}] (Tribo)` });
     });
 
     // --- Todas aldeias ---
@@ -73,15 +58,12 @@
         };
     });
 
-    // --- Suas aldeias ---
     const minhasAldeias = villages.filter(v => v.playerId === game_data.player.id);
-
-    // --- Função distância Euclidiana ---
     const distanciaCampos = (a, b) => Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
 
-    // --- HTML do painel ---
+    // --- HTML ---
     const html = `
-        <div style="font-family: Verdana; font-size: 12px;width: 500px;">
+        <div style="font-family: Verdana; font-size: 12px;width: 520px;">
             <label><b>Selecione jogadores ou tribos:</b></label><br>
             <div id="tagsContainer" style="border: 1px solid #ccc; padding: 5px; min-height: 30px; margin-bottom: 6px; 
                  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;">
@@ -90,6 +72,13 @@
                        style="border: none; outline: none; flex-grow: 1; min-width: 100px;" />
             </div>
             <datalist id="opcoesList"></datalist>
+            
+            <div style="margin: 5px 0;">
+                <label><b>Basear em:</b></label><br>
+                <label><input type="radio" name="basearEm" value="inimigo" checked> Aldeias inimigas</label><br>
+                <label><input type="radio" name="basearEm" value="minhas"> Minhas aldeias</label>
+            </div>
+
             <button id="buscarAldeias" class="btn btn-confirm-yes">Buscar</button>
             <button id="limparTudo" class="btn btn-confirm-no" style="margin-left: 5px;">Limpar</button>
             <div id="resultado" style="margin-top: 10px; max-height: 400px; overflow-y: auto;"></div>
@@ -97,11 +86,9 @@
         </div>
     `;
     
-    // Usando o Dialog do Tribal Wars se disponível
     if (typeof Dialog !== 'undefined') {
-        Dialog.show("Distância entre aldeias (campos)", html);
+        Dialog.show("distAldeias", html);
     } else {
-        // Fallback caso Dialog não esteja disponível
         const dialog = document.createElement('div');
         dialog.innerHTML = html;
         dialog.style.position = 'fixed';
@@ -115,7 +102,7 @@
         document.body.appendChild(dialog);
     }
 
-    // --- Preencher a datalist com opções ---
+    // --- Preencher datalist ---
     const datalist = document.getElementById('opcoesList');
     todasOpcoes.forEach(opcao => {
         const option = document.createElement('option');
@@ -129,27 +116,22 @@
     const input = document.getElementById('playerNameInput');
     const selectedItems = new Set();
 
-    // --- Função para adicionar tag ---
     function adicionarTag(nome, tipo, id) {
         const uniqueId = `${tipo}-${id}`;
         if (selectedItems.has(uniqueId)) return;
-        
         selectedItems.add(uniqueId);
         
         const tag = document.createElement('div');
         tag.className = 'tag';
         tag.style = 'background: #e0e0e0; padding: 2px 8px; border-radius: 12px; display: flex; align-items: center;';
-        tag.innerHTML = `
-            <span style="margin-right: 5px;">${nome}</span>
-            <button type="button" style="background: none; border: none; cursor: pointer; font-size: 14px; color: #666;">×</button>
-        `;
+        tag.innerHTML = `<span style="margin-right: 5px;">${nome}</span>
+                         <button type="button" style="background: none; border: none; cursor: pointer; font-size: 14px; color: #666;">×</button>`;
         
         tag.setAttribute('data-nome', nome);
         tag.setAttribute('data-tipo', tipo);
         tag.setAttribute('data-id', id);
         tag.setAttribute('data-uniqueid', uniqueId);
         
-        // Botão para remover a tag
         tag.querySelector('button').addEventListener('click', function() {
             tagsContainer.removeChild(tag);
             selectedItems.delete(uniqueId);
@@ -160,41 +142,27 @@
         input.focus();
     }
 
-    // --- Event listener para o input ---
     input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && this.value.trim()) {
             e.preventDefault();
-            
-            // Encontrar a opção correspondente
             const opcao = todasOpcoes.find(o => 
                 o.display.toLowerCase().includes(this.value.trim().toLowerCase()) ||
                 o.nome.toLowerCase().includes(this.value.trim().toLowerCase())
             );
-            
-            if (opcao) {
-                adicionarTag(opcao.nome, opcao.tipo, opcao.id);
-            }
+            if (opcao) adicionarTag(opcao.nome, opcao.tipo, opcao.id);
         }
     });
 
-    // --- Event listener para o datalist (quando seleciona com mouse) ---
     input.addEventListener('input', function() {
-        const opcao = todasOpcoes.find(o => 
-            o.display === this.value || o.nome === this.value
-        );
-        
+        const opcao = todasOpcoes.find(o => o.display === this.value || o.nome === this.value);
         if (opcao) {
             const uniqueId = `${opcao.tipo}-${opcao.id}`;
-            if (!selectedItems.has(uniqueId)) {
-                adicionarTag(opcao.nome, opcao.tipo, opcao.id);
-            }
+            if (!selectedItems.has(uniqueId)) adicionarTag(opcao.nome, opcao.tipo, opcao.id);
         }
     });
 
-    // --- Botão Limpar Tudo ---
     document.getElementById('limparTudo').addEventListener('click', function() {
-        const tags = tagsContainer.querySelectorAll('.tag');
-        tags.forEach(tag => tagsContainer.removeChild(tag));
+        tagsContainer.querySelectorAll('.tag').forEach(tag => tagsContainer.removeChild(tag));
         selectedItems.clear();
         input.value = '';
         input.focus();
@@ -221,9 +189,7 @@
         else if (dist <= 5) baseLance = baseEspada = 10000;
 
         const mult = calcularMultiplicador(vezes, dist);
-        const lanceFinal = Math.ceil(baseLance * mult);
-        const espadaFinal = Math.ceil(baseEspada * mult);
-        return `${lanceFinal.toLocaleString()} ${lance}<br>${espadaFinal.toLocaleString()} ${espada}`;
+        return `${Math.ceil(baseLance * mult).toLocaleString()} ${lance}<br>${Math.ceil(baseEspada * mult).toLocaleString()} ${espada}`;
     }
 
     function renderPage() {
@@ -256,27 +222,20 @@
 
         subset.forEach(({inimiga, referencia, dist}) => {
             const vezes = contagem[referencia.coord] || 1;
-            const tropas = sugestaoTropas(dist, vezes);
-            const distInteiro = Math.round(dist);
-
             tabela += `<tr>
                 <td style="border: 1px solid #ccc; padding: 4px;">
-                    <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">
-                        ${inimiga.name} (${inimiga.coord})
-                    </a>
+                    <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.name} (${inimiga.coord})</a>
                 </td>
                 <td style="border: 1px solid #ccc; padding: 4px;">
-                    <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">
-                        ${referencia.name} (${referencia.coord})
-                    </a>
+                    <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.name} (${referencia.coord})</a>
                 </td>
-                <td style="border: 1px solid #ccc; padding: 4px; text-align: center;">${distInteiro}</td>
-                <td style="border: 1px solid #ccc; padding: 4px;">${tropas}</td>
+                <td style="border: 1px solid #ccc; text-align: center;">${Math.round(dist)}</td>
+                <td style="border: 1px solid #ccc; padding: 4px;">${sugestaoTropas(dist, vezes)}</td>
             </tr>`;
         });
 
         tabela += "</tbody></table>";
-        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> aldeias encontradas (mostrando ${start+1}-${end}):</p>` + tabela;
+        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> pares encontrados (mostrando ${start+1}-${end}):</p>` + tabela;
 
         const totalPages = Math.ceil(aldeiasComDistancia.length / pageSize);
         paginacao.innerHTML = `
@@ -285,23 +244,14 @@
             <button class="btn" id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Próxima &gt;</button>
         `;
 
-        document.getElementById("prevPage")?.addEventListener("click", () => {
-            if (currentPage > 0) { 
-                currentPage--; 
-                renderPage(); 
-            }
-        });
-        
-        document.getElementById("nextPage")?.addEventListener("click", () => {
-            if (currentPage < totalPages - 1) { 
-                currentPage++; 
-                renderPage(); 
-            }
-        });
+        document.getElementById("prevPage")?.addEventListener("click", () => { if (currentPage > 0) { currentPage--; renderPage(); }});
+        document.getElementById("nextPage")?.addEventListener("click", () => { if (currentPage < totalPages - 1) { currentPage++; renderPage(); }});
     }
 
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const tags = tagsContainer.querySelectorAll('.tag');
+        const basearEm = document.querySelector('input[name="basearEm"]:checked').value;
+
         if (tags.length === 0) {
             document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador ou tribo.</span>`;
             document.getElementById("paginacao").innerHTML = "";
@@ -310,64 +260,43 @@
         }
         
         let playerIds = [];
-
         tags.forEach(tag => {
             const tipo = tag.getAttribute('data-tipo');
-            const id = tag.getAttribute('data-id');
-
-            if (tipo === 'Jogador') {
-                playerIds.push(parseInt(id));
-            } else if (tipo === 'Tribo') {
-                const idsTribo = Object.values(players)
-                    .filter(p => p.allyId === parseInt(id))
-                    .map(p => p.id);
-                playerIds.push(...idsTribo);
+            const id = parseInt(tag.getAttribute('data-id'));
+            if (tipo === 'Jogador') playerIds.push(id);
+            else if (tipo === 'Tribo') {
+                playerIds.push(...Object.values(players).filter(p => p.allyId === id).map(p => p.id));
             }
         });
-
         playerIds = [...new Set(playerIds)];
 
-        if (playerIds.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: red;">Nenhum jogador ou tribo selecionado.</span>`;
-            document.getElementById("paginacao").innerHTML = "";
-            aldeiasComDistancia = [];
-            return;
-        }
-
         const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
-        if (aldeiasInimigas.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: orange;">Nenhuma aldeia encontrada para os selecionados.</span>`;
-            document.getElementById("paginacao").innerHTML = "";
-            aldeiasComDistancia = [];
-            return;
+
+        aldeiasComDistancia = [];
+
+        if (basearEm === "inimigo") {
+            // inimigo → minha aldeia mais próxima
+            aldeiasInimigas.forEach(inimiga => {
+                let menorDistancia = Infinity, aldeiaMaisProxima = null;
+                minhasAldeias.forEach(minha => {
+                    const dist = distanciaCampos(minha, inimiga);
+                    if (dist < menorDistancia) { menorDistancia = dist; aldeiaMaisProxima = minha; }
+                });
+                if (aldeiaMaisProxima) aldeiasComDistancia.push({ inimiga, referencia: aldeiaMaisProxima, dist: menorDistancia });
+            });
+        } else {
+            // minhas aldeias → inimigo mais próximo
+            minhasAldeias.forEach(minha => {
+                let menorDistancia = Infinity, inimigaMaisProxima = null;
+                aldeiasInimigas.forEach(inimiga => {
+                    const dist = distanciaCampos(minha, inimiga);
+                    if (dist < menorDistancia) { menorDistancia = dist; inimigaMaisProxima = inimiga; }
+                });
+                if (inimigaMaisProxima) aldeiasComDistancia.push({ inimiga: inimigaMaisProxima, referencia: minha, dist: menorDistancia });
+            });
         }
 
-        // Calcular distâncias
-        aldeiasComDistancia = [];
-        aldeiasInimigas.forEach(inimiga => {
-            let menorDistancia = Infinity;
-            let aldeiaMaisProxima = null;
-            
-            minhasAldeias.forEach(minha => {
-                const dist = distanciaCampos(minha, inimiga);
-                if (dist < menorDistancia) {
-                    menorDistancia = dist;
-                    aldeiaMaisProxima = minha;
-                }
-            });
-            
-            if (aldeiaMaisProxima) {
-                aldeiasComDistancia.push({
-                    inimiga,
-                    referencia: aldeiaMaisProxima,
-                    dist: menorDistancia
-                });
-            }
-        });
-
-        // Ordenar por distância
         aldeiasComDistancia.sort((a, b) => a.dist - b.dist);
-
         currentPage = 0;
         renderPage();
     });
