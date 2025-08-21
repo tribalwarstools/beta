@@ -61,9 +61,9 @@
     const minhasAldeias = villages.filter(v => v.playerId === game_data.player.id);
     const distanciaCampos = (a, b) => Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
 
-    // --- HTML ---
+    // --- HTML (SIMPLIFICADO) ---
     const html = `
-        <div style="font-family: Verdana; font-size: 12px;width: 520px;">
+        <div style="font-family: Verdana; font-size: 12px;width: 500px;">
             <label><b>Selecione jogadores ou tribos:</b></label><br>
             <div id="tagsContainer" style="border: 1px solid #ccc; padding: 5px; min-height: 30px; margin-bottom: 6px; 
                  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;">
@@ -72,12 +72,6 @@
                        style="border: none; outline: none; flex-grow: 1; min-width: 100px;" />
             </div>
             <datalist id="opcoesList"></datalist>
-            
-            <div style="margin: 5px 0;">
-                <label><b>Basear em:</b></label><br>
-                <label><input type="radio" name="basearEm" value="inimigo" checked> Aldeias inimigas</label><br>
-                <label><input type="radio" name="basearEm" value="minhas"> Minhas aldeias</label>
-            </div>
 
             <button id="buscarAldeias" class="btn btn-confirm-yes">Buscar</button>
             <button id="limparTudo" class="btn btn-confirm-no" style="margin-left: 5px;">Limpar</button>
@@ -87,7 +81,7 @@
     `;
     
     if (typeof Dialog !== 'undefined') {
-        Dialog.show("distAldeias", html);
+        Dialog.show("Distância entre aldeias", html);
     } else {
         const dialog = document.createElement('div');
         dialog.innerHTML = html;
@@ -271,7 +265,7 @@
         const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
         aldeiasComDistancia = [];
 
-        // --- Todas combinações de pares ---
+        // --- TODAS COMBINAÇÕES DE PARES ---
         minhasAldeias.forEach(minha => {
             aldeiasInimigas.forEach(inimiga => {
                 const dist = distanciaCampos(minha, inimiga);
