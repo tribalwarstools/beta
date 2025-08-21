@@ -34,7 +34,7 @@
         };
     });
 
-    // --- Preparar opções ---
+    // --- Preparar opções para datalist ---
     const todasOpcoes = [];
     Object.values(players).forEach(player => {
         todasOpcoes.push({ id: player.id, nome: player.name, tipo: 'Jogador', display: `${player.name} (Jogador)` });
@@ -250,15 +250,13 @@
 
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const tags = tagsContainer.querySelectorAll('.tag');
-        const basearEm = document.querySelector('input[name="basearEm"]:checked').value;
-
         if (tags.length === 0) {
             document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador ou tribo.</span>`;
             document.getElementById("paginacao").innerHTML = "";
             aldeiasComDistancia = [];
             return;
         }
-        
+
         let playerIds = [];
         tags.forEach(tag => {
             const tipo = tag.getAttribute('data-tipo');
@@ -271,30 +269,15 @@
         playerIds = [...new Set(playerIds)];
 
         const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
-
         aldeiasComDistancia = [];
 
-        if (basearEm === "inimigo") {
-            // inimigo → minha aldeia mais próxima
+        // --- Todas combinações de pares ---
+        minhasAldeias.forEach(minha => {
             aldeiasInimigas.forEach(inimiga => {
-                let menorDistancia = Infinity, aldeiaMaisProxima = null;
-                minhasAldeias.forEach(minha => {
-                    const dist = distanciaCampos(minha, inimiga);
-                    if (dist < menorDistancia) { menorDistancia = dist; aldeiaMaisProxima = minha; }
-                });
-                if (aldeiaMaisProxima) aldeiasComDistancia.push({ inimiga, referencia: aldeiaMaisProxima, dist: menorDistancia });
+                const dist = distanciaCampos(minha, inimiga);
+                aldeiasComDistancia.push({ inimiga, referencia: minha, dist });
             });
-        } else {
-            // minhas aldeias → inimigo mais próximo
-            minhasAldeias.forEach(minha => {
-                let menorDistancia = Infinity, inimigaMaisProxima = null;
-                aldeiasInimigas.forEach(inimiga => {
-                    const dist = distanciaCampos(minha, inimiga);
-                    if (dist < menorDistancia) { menorDistancia = dist; inimigaMaisProxima = inimiga; }
-                });
-                if (inimigaMaisProxima) aldeiasComDistancia.push({ inimiga: inimigaMaisProxima, referencia: minha, dist: menorDistancia });
-            });
-        }
+        });
 
         aldeiasComDistancia.sort((a, b) => a.dist - b.dist);
         currentPage = 0;
