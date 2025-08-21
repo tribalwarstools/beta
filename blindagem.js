@@ -223,7 +223,7 @@
         const mult = calcularMultiplicador(vezes, dist);
         const lanceFinal = Math.ceil(baseLance * mult);
         const espadaFinal = Math.ceil(baseEspada * mult);
-        return `${lanceFinal.toLocaleString()} ${lance} ${espadaFinal.toLocaleString()} ${espada}`;
+        return `${lanceFinal.toLocaleString()} ${lance}<br>${espadaFinal.toLocaleString()} ${espada}`;
     }
 
     function renderPage() {
