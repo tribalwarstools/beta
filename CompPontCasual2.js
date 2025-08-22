@@ -22,6 +22,14 @@
         };
     });
 
+    // --- Buscar tribos (/map/tribe.txt) ---
+    const tribeRaw = await fetch('/map/tribe.txt').then(r => r.text());
+    const tribosMap = {};
+    tribeRaw.trim().split("\n").forEach(linha => {
+        const [id, nome, , , , , ,] = linha.split(",");
+        tribosMap[id] = decodeURIComponent((nome || "").replace(/\+/g, " "));
+    });
+
     // --- Função para verificar ataque ---
     function estaBloqueado(pontosMeus, pontosOutro, limitePct) {
         if (limitePct <= 0) return false; // limite 0 = ninguém bloqueado
@@ -172,13 +180,14 @@
         
         document.body.insertAdjacentHTML('beforeend', panelHTML);
         
-        // Preencher filtro de tribos
-        const tribos = [...new Set(jogadores.map(j => j.tribo))].filter(t => t !== 0).sort();
+        // Preencher filtro de tribos com nomes
+        const tribosUnicas = [...new Set(jogadores.map(j => j.tribo))].filter(t => t !== 0).sort();
         const triboFilter = document.getElementById('triboFilter');
-        tribos.forEach(tribo => {
+        
+        tribosUnicas.forEach(triboId => {
             const option = document.createElement('option');
-            option.value = tribo;
-            option.textContent = `Tribo ${tribo}`;
+            option.value = triboId;
+            option.textContent = tribosMap[triboId] || `Tribo ${triboId}`;
             triboFilter.appendChild(option);
         });
         
@@ -288,6 +297,10 @@
             } else if (campo === 'status') {
                 valorA = podeAtacar(minhaPontuacao, a.pontos, limitePercentual) ? 1 : 0;
                 valorB = podeAtacar(minhaPontuacao, b.pontos, limitePercentual) ? 1 : 0;
+            } else if (campo === 'tribo') {
+                // Ordenar por nome da tribo em vez do ID
+                valorA = tribosMap[a.tribo] || `Tribo ${a.tribo}`;
+                valorB = tribosMap[b.tribo] || `Tribo ${b.tribo}`;
             } else {
                 valorA = a[campo];
                 valorB = b[campo];
@@ -331,6 +344,7 @@
             const statusClass = liberado ? 'style="color: #27ae60;"' : 'style="color: #e74c3c;"';
             const statusText = liberado ? 'Liberado' : 'Bloqueado';
             const link = `game.php?screen=info_player&id=${j.id}`;
+            const nomeTribo = tribosMap[j.tribo] || (j.tribo ? `Tribo ${j.tribo}` : '-');
             
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -339,7 +353,7 @@
                 </td>
                 <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${j.pontos.toLocaleString()}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${j.aldeias}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${j.tribo || '-'}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${nomeTribo}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${j.rank}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;" ${statusClass}>${statusText}</td>
             `;
@@ -362,7 +376,7 @@
         
         // Botão anterior
         if (paginaAtual > 1) {
-            html += `<button style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;" onclick="paginaAtual--; renderizarTabela();">‹</button>`;
+            html += `<button class="pagina-btn" data-pagina="${paginaAtual - 1}" style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;">‹</button>`;
         }
         
         // Páginas
@@ -371,18 +385,26 @@
         
         for (let i = inicioPagina; i <= fimPagina; i++) {
             if (i === paginaAtual) {
-                html += `<button style="padding: 5px 10px; border: 1px solid #3498db; background: #3498db; color: white; cursor: pointer;">${i}</button>`;
+                html += `<button class="pagina-btn" data-pagina="${i}" style="padding: 5px 10px; border: 1px solid #3498db; background: #3498db; color: white; cursor: pointer;">${i}</button>`;
             } else {
-                html += `<button style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;" onclick="paginaAtual = ${i}; renderizarTabela();">${i}</button>`;
+                html += `<button class="pagina-btn" data-pagina="${i}" style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;">${i}</button>`;
             }
         }
         
         // Próximo botão
         if (paginaAtual < totalPaginas) {
-            html += `<button style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;" onclick="paginaAtual++; renderizarTabela();">›</button>`;
+            html += `<button class="pagina-btn" data-pagina="${paginaAtual + 1}" style="padding: 5px 10px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer;">›</button>`;
         }
         
         paginacao.innerHTML = html;
+        
+        // Adicionar event listeners aos botões de paginação
+        paginacao.querySelectorAll('.pagina-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                paginaAtual = parseInt(btn.getAttribute('data-pagina'));
+                renderizarTabela();
+            });
+        });
     }
     
     // Iniciar a interface
