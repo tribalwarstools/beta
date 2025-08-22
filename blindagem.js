@@ -186,84 +186,61 @@
         return `${Math.ceil(baseLance * mult).toLocaleString()} ${lance}<br>${Math.ceil(baseEspada * mult).toLocaleString()} ${espada}`;
     }
 
-function renderPage() {
-    const resultado = document.getElementById("resultado");
-    const paginacao = document.getElementById("paginacao");
-    resultado.innerHTML = "";
+    function renderPage() {
+        const resultado = document.getElementById("resultado");
+        const paginacao = document.getElementById("paginacao");
+        resultado.innerHTML = "";
 
-    if (aldeiasComDistancia.length === 0) {
-        resultado.innerHTML = "<p>Nenhuma aldeia encontrada.</p>";
-        paginacao.innerHTML = "";
-        return;
+        if (aldeiasComDistancia.length === 0) {
+            resultado.innerHTML = "<p>Nenhuma aldeia encontrada.</p>";
+            paginacao.innerHTML = "";
+            return;
+        }
+
+        const start = currentPage * pageSize;
+        const end = Math.min(start + pageSize, aldeiasComDistancia.length);
+        const subset = aldeiasComDistancia.slice(start, end);
+
+        let tabela = `<table class="vis" style="width:100%; font-size:11px; border-collapse: collapse;">
+            <thead><tr style="background-color: #f0f0f0;">
+                <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Inimiga</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Sua Aldeia</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Distância</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Sugestão</th>
+            </tr></thead><tbody>`;
+
+        const contagem = {};
+        subset.forEach(({referencia}) => {
+            contagem[referencia.coord] = (contagem[referencia.coord] || 0) + 1;
+        });
+
+        subset.forEach(({inimiga, referencia, dist}) => {
+            const vezes = contagem[referencia.coord] || 1;
+            tabela += `<tr>
+                <td style="border: 1px solid #ccc; padding: 4px;">
+                    <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.name} (${inimiga.coord})</a>
+                </td>
+                <td style="border: 1px solid #ccc; padding: 4px;">
+                    <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.name} (${referencia.coord})</a>
+                </td>
+                <td style="border: 1px solid #ccc; text-align: center;">${Math.round(dist)}</td>
+                <td style="border: 1px solid #ccc; padding: 4px;">${sugestaoTropas(dist, vezes)}</td>
+            </tr>`;
+        });
+
+        tabela += "</tbody></table>";
+        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> pares encontrados (mostrando ${start+1}-${end}):</p>` + tabela;
+
+        const totalPages = Math.ceil(aldeiasComDistancia.length / pageSize);
+        paginacao.innerHTML = `
+            <button class="btn" id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
+            <span> Página ${currentPage + 1} de ${totalPages} </span>
+            <button class="btn" id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Próxima &gt;</button>
+        `;
+
+        document.getElementById("prevPage")?.addEventListener("click", () => { if (currentPage > 0) { currentPage--; renderPage(); }});
+        document.getElementById("nextPage")?.addEventListener("click", () => { if (currentPage < totalPages - 1) { currentPage++; renderPage(); }});
     }
-
-    const start = currentPage * pageSize;
-    const end = Math.min(start + pageSize, aldeiasComDistancia.length);
-    const subset = aldeiasComDistancia.slice(start, end);
-
-    let tabela = `<table class="vis" style="width:100%; font-size:11px; border-collapse: collapse;">
-        <thead><tr style="background-color: #f0f0f0;">
-            <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Inimiga</th>
-            <th style="border: 1px solid #ccc; padding: 4px;">Sua Aldeia</th>
-            <th style="border: 1px solid #ccc; padding: 4px;">Distância</th>
-            <th style="border: 1px solid #ccc; padding: 4px;">Sugestão</th>
-        </tr></thead><tbody>`;
-
-    const contagem = {};
-    subset.forEach(({referencia}) => {
-        contagem[referencia.coord] = (contagem[referencia.coord] || 0) + 1;
-    });
-
-    subset.forEach(({inimiga, referencia, dist}) => {
-        const vezes = contagem[referencia.coord] || 1;
-        tabela += `<tr>
-            <td style="border: 1px solid #ccc; padding: 4px;">
-                <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.name} (${inimiga.coord})</a>
-            </td>
-            <td style="border: 1px solid #ccc; padding: 4px;">
-                <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.name} (${referencia.coord})</a>
-            </td>
-            <td style="border: 1px solid #ccc; text-align: center;">${Math.round(dist)}</td>
-            <td style="border: 1px solid #ccc; padding: 4px;">${sugestaoTropas(dist, vezes)}</td>
-        </tr>`;
-    });
-
-    tabela += "</tbody></table>";
-
-    // AQUI insere os botões de cópia
-    resultado.innerHTML = `
-        <p><b>${aldeiasComDistancia.length}</b> pares encontrados (mostrando ${start+1}-${end}):</p>
-        <div style="margin-bottom:5px;">
-            <button id="copiarMinhas" class="btn">📋 Copiar Minhas Aldeias</button>
-            <button id="copiarInimigas" class="btn">📋 Copiar Inimigas</button>
-        </div>
-        ${tabela}
-    `;
-
-    // Eventos dos botões
-    document.getElementById("copiarMinhas").addEventListener("click", () => {
-        const coords = [...new Set(subset.map(p => p.referencia.coord))].join(" ");
-        navigator.clipboard.writeText(coords);
-        UI.SuccessMessage("Coordenadas das suas aldeias copiadas!");
-    });
-
-    document.getElementById("copiarInimigas").addEventListener("click", () => {
-        const coords = [...new Set(subset.map(p => p.inimiga.coord))].join(" ");
-        navigator.clipboard.writeText(coords);
-        UI.SuccessMessage("Coordenadas inimigas copiadas!");
-    });
-
-    const totalPages = Math.ceil(aldeiasComDistancia.length / pageSize);
-    paginacao.innerHTML = `
-        <button class="btn" id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&lt; Anterior</button>
-        <span> Página ${currentPage + 1} de ${totalPages} </span>
-        <button class="btn" id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Próxima &gt;</button>
-    `;
-
-    document.getElementById("prevPage")?.addEventListener("click", () => { if (currentPage > 0) { currentPage--; renderPage(); }});
-    document.getElementById("nextPage")?.addEventListener("click", () => { if (currentPage < totalPages - 1) { currentPage++; renderPage(); }});
-}
-
 
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const tags = tagsContainer.querySelectorAll('.tag');
