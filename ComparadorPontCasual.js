@@ -22,6 +22,18 @@
         };
     });
 
+    // --- Buscar tribos (/map/ally.txt) ---
+    let tribosMap = {};
+    try {
+        const allyRaw = await fetch('/map/ally.txt').then(r => r.text());
+        allyRaw.trim().split("\n").forEach(linha => {
+            const [id, nome] = linha.split(",");
+            tribosMap[+id] = decodeURIComponent((nome || "").replace(/\+/g, " "));
+        });
+    } catch (e) {
+        console.warn("Não foi possível carregar nomes das tribos:", e);
+    }
+
     // --- Funções ---
     function estaBloqueado(pontosMeus, pontosOutro, limitePct) {
         if (limitePct <= 0) return false;
@@ -46,6 +58,14 @@
     function abrirPainel() {
         const alcance = calcularAlcance(minhaPontuacao, limitePercentual);
 
+        // Lista de tribos para select
+        const tribosUnicas = Array.from(new Set(jogadores.map(j => j.tribo).filter(t => t > 0))).sort((a,b)=>a-b);
+        let optionsTribos = `<option value="0">Todas</option>`;
+        tribosUnicas.forEach(t => {
+            const nome = tribosMap[t] || `Tribo ${t}`;
+            optionsTribos += `<option value="${t}">${nome}</option>`;
+        });
+
         const html = `
             <h2>Comparador de Pontuação (Casual)</h2>
             <p>Sua pontuação: <input id="minhaPontuacaoInput" type="number" value="${minhaPontuacao}" style="width:120px"></p>
@@ -65,7 +85,10 @@
 
             <div style="margin-top:10px;">
                 <label>🔍 Buscar jogador: 
-                    <input id="filtroInput" type="text" placeholder="Digite o nome..." style="width:220px">
+                    <input id="filtroInput" type="text" placeholder="Digite o nome..." style="width:180px">
+                </label>
+                <label style="margin-left:10px;">Tribo:
+                    <select id="filtroTribo">${optionsTribos}</select>
                 </label>
             </div>
 
@@ -94,6 +117,7 @@
         };
 
         document.getElementById("filtroInput").oninput = () => analisar();
+        document.getElementById("filtroTribo").onchange = () => analisar();
 
         analisar(); // primeira renderização
     }
@@ -102,6 +126,7 @@
     function analisar() {
         const res = document.getElementById("resultado");
         const filtro = (document.getElementById("filtroInput")?.value || "").toLowerCase();
+        const triboFiltro = parseInt(document.getElementById("filtroTribo")?.value || "0", 10);
         const alcance = calcularAlcance(minhaPontuacao, limitePercentual);
 
         const alcHtml = `<p style="margin:6px 0 10px;">
@@ -111,12 +136,13 @@
         let saida = `${alcHtml}
             <p style="margin:0 0 6px;"><small>Limite atual: <b>${limitePercentual}%</b> (regra de <i>diferença</i> baseada no menor)</small></p>
             <table class="vis tw-table" width="100%">
-                <tr><th>Jogador</th><th>Pontos</th><th>Status</th></tr>`;
+                <tr><th>Jogador</th><th>Pontos</th><th>Status</th><th>Tribo</th></tr>`;
 
         const ordenados = jogadores.slice().sort((a, b) => Math.abs(a.pontos - minhaPontuacao) - Math.abs(b.pontos - minhaPontuacao));
 
         ordenados.forEach(j => {
             if (filtro && !j.nome.toLowerCase().includes(filtro)) return;
+            if (triboFiltro && j.tribo !== triboFiltro) return;
 
             const liberado = podeAtacar(minhaPontuacao, j.pontos, limitePercentual);
             if (onlyLiberados && !liberado) return;
@@ -124,11 +150,13 @@
             const cls = liberado ? "tw-ok" : "tw-no";
             const status = liberado ? "✅ Ataque Liberado" : "❌ Bloqueado";
             const link = `game.php?screen=info_player&id=${j.id}`;
+            const nomeTribo = j.tribo ? (tribosMap[j.tribo] || `Tribo ${j.tribo}`) : "-";
 
             saida += `<tr class="${cls}">
                         <td><a href="${link}">${j.nome}</a></td>
                         <td>${j.pontos.toLocaleString()}</td>
                         <td>${status}</td>
+                        <td>${nomeTribo}</td>
                       </tr>`;
         });
 
