@@ -22,16 +22,16 @@
         };
     });
 
-    // --- Buscar tribos (/map/ally.txt) ---
+    // --- Buscar tags das tribos (/map/ally.txt) ---
     let tribosMap = {};
     try {
         const allyRaw = await fetch('/map/ally.txt').then(r => r.text());
         allyRaw.trim().split("\n").forEach(linha => {
-            const [id, nome] = linha.split(",");
-            tribosMap[+id] = decodeURIComponent((nome || "").replace(/\+/g, " "));
+            const [id, nome, tag] = linha.split(",");
+            tribosMap[+id] = decodeURIComponent((tag || `T${id}`).replace(/\+/g," "));
         });
     } catch (e) {
-        console.warn("Não foi possível carregar nomes das tribos:", e);
+        console.warn("Não foi possível carregar tags das tribos:", e);
     }
 
     // --- Funções ---
@@ -62,8 +62,8 @@
         const tribosUnicas = Array.from(new Set(jogadores.map(j => j.tribo).filter(t => t > 0))).sort((a,b)=>a-b);
         let optionsTribos = `<option value="0">Todas</option>`;
         tribosUnicas.forEach(t => {
-            const nome = tribosMap[t] || `Tribo ${t}`;
-            optionsTribos += `<option value="${t}">${nome}</option>`;
+            const tag = tribosMap[t] || `T${t}`;
+            optionsTribos += `<option value="${t}">${tag}</option>`;
         });
 
         const html = `
@@ -136,7 +136,7 @@
         let saida = `${alcHtml}
             <p style="margin:0 0 6px;"><small>Limite atual: <b>${limitePercentual}%</b> (regra de <i>diferença</i> baseada no menor)</small></p>
             <table class="vis tw-table" width="100%">
-                <tr><th>Jogador</th><th>Pontos</th><th>Status</th><th>Tribo</th></tr>`;
+                <tr><th>Jogador</th><th>Pontos</th><th>Tribo</th><th>Status</th></tr>`;
 
         const ordenados = jogadores.slice().sort((a, b) => Math.abs(a.pontos - minhaPontuacao) - Math.abs(b.pontos - minhaPontuacao));
 
@@ -150,13 +150,13 @@
             const cls = liberado ? "tw-ok" : "tw-no";
             const status = liberado ? "✅ Ataque Liberado" : "❌ Bloqueado";
             const link = `game.php?screen=info_player&id=${j.id}`;
-            const nomeTribo = j.tribo ? (tribosMap[j.tribo] || `Tribo ${j.tribo}`) : "-";
+            const tagTribo = j.tribo ? (tribosMap[j.tribo] || `T${j.tribo}`) : "-";
 
             saida += `<tr class="${cls}">
                         <td><a href="${link}">${j.nome}</a></td>
                         <td>${j.pontos.toLocaleString()}</td>
+                        <td>${tagTribo}</td>
                         <td>${status}</td>
-                        <td>${nomeTribo}</td>
                       </tr>`;
         });
 
