@@ -5,8 +5,8 @@
     let limitePercentual = parseFloat(localStorage.getItem("casualLimitePercentual")) || 300; 
     let onlyLiberados = localStorage.getItem("casualOnlyLiberados") === "1";
 
-    // --- Sua pontuação ---
-    const minhaPontuacao = parseInt(game_data.player.points, 10);
+    // --- Sua pontuação (editável) ---
+    let minhaPontuacao = parseInt(game_data.player.points, 10);
 
     // --- Buscar jogadores (/map/player.txt) ---
     const playerRaw = await fetch('/map/player.txt').then(r => r.text());
@@ -22,9 +22,9 @@
         };
     });
 
-    // --- Função para verificar ataque ---
+    // --- Funções ---
     function estaBloqueado(pontosMeus, pontosOutro, limitePct) {
-        if (limitePct <= 0) return false; // limite 0 = ninguém bloqueado
+        if (limitePct <= 0) return false;
         const menor = Math.min(pontosMeus, pontosOutro);
         const maxPermitido = menor * (limitePct / 100);
         return Math.abs(pontosMeus - pontosOutro) > maxPermitido;
@@ -34,9 +34,8 @@
         return !estaBloqueado(p1, p2, limitePct);
     }
 
-    // --- Calcula alcance permitido ---
     function calcularAlcance(pontos, limitePct) {
-        if (limitePct <= 0) return { min: "Todos", max: "Todos" }; // todos liberados
+        if (limitePct <= 0) return { min: "Todos", max: "Todos" };
         const L = limitePct / 100;
         const min = Math.floor(pontos / (1 + L));
         const max = Math.floor(pontos * (1 + L));
@@ -49,7 +48,7 @@
 
         const html = `
             <h2>Comparador de Pontuação (Casual)</h2>
-            <p>Sua pontuação: <b>${minhaPontuacao.toLocaleString()}</b></p>
+            <p>Sua pontuação: <input id="minhaPontuacaoInput" type="number" value="${minhaPontuacao}" style="width:120px"></p>
 
             <label>Limite atual (%):
                 <input id="limiteInput" type="number" value="${limitePercentual}" min="0" max="1000" style="width:90px">
@@ -80,7 +79,9 @@
         `;
         Dialog.show("painel_casual", html);
 
+        // --- Eventos ---
         document.getElementById("salvarBtn").onclick = () => {
+            minhaPontuacao = parseInt(document.getElementById("minhaPontuacaoInput").value, 10) || 0;
             limitePercentual = parseFloat(document.getElementById("limiteInput").value) || 0;
             localStorage.setItem("casualLimitePercentual", String(limitePercentual));
             analisar();
