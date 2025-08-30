@@ -34,15 +34,6 @@
         };
     });
 
-    // --- Preparar opções para datalist ---
-    const todasOpcoes = [];
-    Object.values(players).forEach(player => {
-        todasOpcoes.push({ id: player.id, nome: player.name, tipo: 'Jogador', display: `${player.name} (Jogador)` });
-    });
-    Object.values(tribos).forEach(tribo => {
-        todasOpcoes.push({ id: tribo.id, nome: tribo.name, tipo: 'Tribo', display: `${tribo.name} [${tribo.tag}] (Tribo)` });
-    });
-
     // --- Todas aldeias ---
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, playerId, points, rank] = line.split(',');
@@ -58,17 +49,32 @@
         };
     });
 
+    // --- Criar mapa de coordenadas para aldeias ---
+    const coordMap = {};
+    villages.forEach(village => {
+        coordMap[village.coord] = village;
+    });
+
     const minhasAldeias = villages.filter(v => v.playerId === game_data.player.id);
     const distanciaCampos = (a, b) => Math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2);
 
-    // --- HTML (SIMPLIFICADO) ---
+    // --- Preparar opções para datalist ---
+    const todasOpcoes = [];
+    Object.values(players).forEach(player => {
+        todasOpcoes.push({ id: player.id, nome: player.name, tipo: 'Jogador', display: `${player.name} (Jogador)` });
+    });
+    Object.values(tribos).forEach(tribo => {
+        todasOpcoes.push({ id: tribo.id, nome: tribo.name, tipo: 'Tribo', display: `${tribo.name} [${tribo.tag}] (Tribo)` });
+    });
+
+    // --- HTML ---
     const html = `
         <div style="font-family: Verdana; font-size: 12px;width: 500px;">
-            <label><b>Selecione jogadores ou tribos:</b></label><br>
+            <label><b>Selecione jogadores, tribos ou digite coordenadas (ex: 500|500):</b></label><br>
             <div id="tagsContainer" style="border: 1px solid #ccc; padding: 5px; min-height: 30px; margin-bottom: 6px; 
                  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;">
                 <input id="playerNameInput" type="text" list="opcoesList" 
-                       placeholder="Digite e pressione Enter..." 
+                       placeholder="Digite nome, tag ou coordenadas..." 
                        style="border: none; outline: none; flex-grow: 1; min-width: 100px;" />
             </div>
             <datalist id="opcoesList"></datalist>
@@ -110,8 +116,8 @@
     const input = document.getElementById('playerNameInput');
     const selectedItems = new Set();
 
-    function adicionarTag(nome, tipo, id) {
-        const uniqueId = `${tipo}-${id}`;
+    function adicionarTag(nome, tipo, id, coord = null) {
+        const uniqueId = coord ? `coord-${coord}` : `${tipo}-${id}`;
         if (selectedItems.has(uniqueId)) return;
         selectedItems.add(uniqueId);
         
@@ -124,6 +130,7 @@
         tag.setAttribute('data-nome', nome);
         tag.setAttribute('data-tipo', tipo);
         tag.setAttribute('data-id', id);
+        if (coord) tag.setAttribute('data-coord', coord);
         tag.setAttribute('data-uniqueid', uniqueId);
         
         tag.querySelector('button').addEventListener('click', function() {
@@ -136,22 +143,63 @@
         input.focus();
     }
 
+    function isValidCoord(coord) {
+        const coordRegex = /^\d{1,3}\|\d{1,3}$/;
+        if (!coordRegex.test(coord)) return false;
+        
+        const [x, y] = coord.split('|').map(Number);
+        return x >= 0 && x <= 1000 && y >= 0 && y <= 1000;
+    }
+
     input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && this.value.trim()) {
             e.preventDefault();
+            const value = this.value.trim();
+            
+            // Verificar se é uma coordenada completa
+            if (isValidCoord(value)) {
+                adicionarTag(value, 'Coordenada', null, value);
+                return;
+            }
+            
+            // Se não for coordenada completa, verificar se é um jogador ou tribo
             const opcao = todasOpcoes.find(o => 
-                o.display.toLowerCase().includes(this.value.trim().toLowerCase()) ||
-                o.nome.toLowerCase().includes(this.value.trim().toLowerCase())
+                o.display.toLowerCase() === value.toLowerCase() ||
+                o.nome.toLowerCase() === value.toLowerCase()
             );
-            if (opcao) adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+            
+            if (opcao) {
+                adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+            }
         }
     });
 
-    input.addEventListener('input', function() {
-        const opcao = todasOpcoes.find(o => o.display === this.value || o.nome === this.value);
-        if (opcao) {
-            const uniqueId = `${opcao.tipo}-${opcao.id}`;
-            if (!selectedItems.has(uniqueId)) adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+    // Remover o evento input que estava causando o problema
+    // e substituir por um evento de blur (quando perde o foco)
+    input.addEventListener('blur', function() {
+        if (this.value.trim()) {
+            const value = this.value.trim();
+            
+            // Verificar se é uma coordenada completa
+            if (isValidCoord(value)) {
+                const uniqueId = `coord-${value}`;
+                if (!selectedItems.has(uniqueId)) {
+                    adicionarTag(value, 'Coordenada', null, value);
+                }
+                return;
+            }
+            
+            // Verificar se é um jogador ou tribo exato
+            const opcao = todasOpcoes.find(o => 
+                o.display === value || o.nome === value
+            );
+            
+            if (opcao) {
+                const uniqueId = `${opcao.tipo}-${opcao.id}`;
+                if (!selectedItems.has(uniqueId)) {
+                    adicionarTag(opcao.nome, opcao.tipo, opcao.id);
+                }
+            }
         }
     });
 
@@ -165,26 +213,6 @@
     const pageSize = 50;
     let aldeiasComDistancia = [];
     let currentPage = 0;
-
-    function calcularMultiplicador(vezes, dist) {
-        if (dist > 5) return 1;
-        if (vezes === 1) return 1;
-        if (vezes === 2) return dist <= 3 ? 1.5 : 1.2;
-        return dist <= 3 ? 2 : 1.5;
-    }
-
-    function sugestaoTropas(dist, vezes) {
-        const lance = '<img src="/graphic/unit/unit_spear.png" title="Lanceiro" style="height:16px; vertical-align:middle; margin-right:2px;">';
-        const espada = '<img src="/graphic/unit/unit_sword.png" title="Espadachim" style="height:16px; vertical-align:middle; margin-right:2px;">';
-        let baseLance = 5000, baseEspada = 5000;
-
-        if (dist <= 1) baseLance = baseEspada = 20000;
-        else if (dist <= 3) baseLance = baseEspada = 15000;
-        else if (dist <= 5) baseLance = baseEspada = 10000;
-
-        const mult = calcularMultiplicador(vezes, dist);
-        return `${Math.ceil(baseLance * mult).toLocaleString()} ${lance}<br>${Math.ceil(baseEspada * mult).toLocaleString()} ${espada}`;
-    }
 
     function renderPage() {
         const resultado = document.getElementById("resultado");
@@ -206,16 +234,9 @@
                 <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Inimiga</th>
                 <th style="border: 1px solid #ccc; padding: 4px;">Sua Aldeia</th>
                 <th style="border: 1px solid #ccc; padding: 4px;">Distância</th>
-                <th style="border: 1px solid #ccc; padding: 4px;">Sugestão</th>
             </tr></thead><tbody>`;
 
-        const contagem = {};
-        subset.forEach(({referencia}) => {
-            contagem[referencia.coord] = (contagem[referencia.coord] || 0) + 1;
-        });
-
         subset.forEach(({inimiga, referencia, dist}) => {
-            const vezes = contagem[referencia.coord] || 1;
             tabela += `<tr>
                 <td style="border: 1px solid #ccc; padding: 4px;">
                     <a href="/game.php?village=${inimiga.id}&screen=info_village&id=${inimiga.id}" target="_blank">${inimiga.name} (${inimiga.coord})</a>
@@ -224,7 +245,6 @@
                     <a href="/game.php?village=${referencia.id}&screen=info_village&id=${referencia.id}" target="_blank">${referencia.name} (${referencia.coord})</a>
                 </td>
                 <td style="border: 1px solid #ccc; text-align: center;">${Math.round(dist)}</td>
-                <td style="border: 1px solid #ccc; padding: 4px;">${sugestaoTropas(dist, vezes)}</td>
             </tr>`;
         });
 
@@ -245,27 +265,45 @@
     document.getElementById("buscarAldeias").addEventListener("click", () => {
         const tags = tagsContainer.querySelectorAll('.tag');
         if (tags.length === 0) {
-            document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador ou tribo.</span>`;
+            document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador, tribo ou coordenada.</span>`;
             document.getElementById("paginacao").innerHTML = "";
             aldeiasComDistancia = [];
             return;
         }
 
-        let playerIds = [];
+        let aldeiasInimigas = [];
+        
         tags.forEach(tag => {
             const tipo = tag.getAttribute('data-tipo');
-            const id = parseInt(tag.getAttribute('data-id'));
-            if (tipo === 'Jogador') playerIds.push(id);
+            const id = tag.getAttribute('data-id');
+            const coord = tag.getAttribute('data-coord');
+            
+            if (tipo === 'Jogador') {
+                // Adicionar todas aldeias do jogador
+                aldeiasInimigas.push(...villages.filter(v => v.playerId === parseInt(id)));
+            } 
             else if (tipo === 'Tribo') {
-                playerIds.push(...Object.values(players).filter(p => p.allyId === id).map(p => p.id));
+                // Adicionar todas aldeias da tribo
+                const playerIds = Object.values(players).filter(p => p.allyId === parseInt(id)).map(p => p.id);
+                aldeiasInimigas.push(...villages.filter(v => playerIds.includes(v.playerId)));
+            }
+            else if (tipo === 'Coordenada' && coord) {
+                // Adicionar aldeia específica pela coordenada
+                const aldeia = coordMap[coord];
+                if (aldeia) {
+                    aldeiasInimigas.push(aldeia);
+                }
             }
         });
-        playerIds = [...new Set(playerIds)];
 
-        const aldeiasInimigas = villages.filter(v => playerIds.includes(v.playerId));
+        // Remover duplicatas
+        aldeiasInimigas = aldeiasInimigas.filter((v, i, a) => 
+            a.findIndex(t => t.id === v.id) === i
+        );
+
         aldeiasComDistancia = [];
 
-        // --- TODAS COMBINAÇÕES DE PARES ---
+        // Calcular distâncias para todas combinações
         minhasAldeias.forEach(minha => {
             aldeiasInimigas.forEach(inimiga => {
                 const dist = distanciaCampos(minha, inimiga);
