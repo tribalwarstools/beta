@@ -222,8 +222,8 @@
         
         contadoresDiv.innerHTML = `
             <div style="display: flex; justify-content: space-between;">
-                <span><b>Aldeias Próprias:</b> ${totalMinhasAldeias}</span>
-                <span><b>Aldeias Inimigas:</b> ${totalAldeiasInimigas}</span>
+                <span><b>Suas Aldeias:</b> ${totalMinhasAldeias}</span>
+                <span><b>Aldeias Alvo:</b> ${totalAldeiasInimigas}</span>
                 <span><b>Total de Pares:</b> ${totalMinhasAldeias * totalAldeiasInimigas}</span>
             </div>
         `;
@@ -246,7 +246,7 @@
 
         let tabela = `<table class="vis" style="width:100%; font-size:11px; border-collapse: collapse;">
             <thead><tr style="background-color: #f0f0f0;">
-                <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Inimiga</th>
+                <th style="border: 1px solid #ccc; padding: 4px;">Aldeia Alvo</th>
                 <th style="border: 1px solid #ccc; padding: 4px;">Sua Aldeia</th>
                 <th style="border: 1px solid #ccc; padding: 4px;">Distância</th>
             </tr></thead><tbody>`;
@@ -264,7 +264,7 @@
         });
 
         tabela += "</tbody></table>";
-        resultado.innerHTML = `<p><b>${aldeiasComDistancia.length}</b> pares encontrados (mostrando ${start+1}-${end}):</p>` + tabela;
+        resultado.innerHTML = `<p>Mostrando ${start+1}-${end} de ${aldeiasComDistancia.length} pares:</p>` + tabela;
 
         const totalPages = Math.ceil(aldeiasComDistancia.length / pageSize);
         paginacao.innerHTML = `
