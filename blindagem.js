@@ -81,6 +81,7 @@
 
             <button id="buscarAldeias" class="btn btn-confirm-yes">Buscar</button>
             <button id="limparTudo" class="btn btn-confirm-no" style="margin-left: 5px;">Limpar</button>
+            <div id="contadores" style="margin-top: 10px; padding: 5px; background-color: #f5f5f5; border-radius: 3px;"></div>
             <div id="resultado" style="margin-top: 10px; max-height: 400px; overflow-y: auto;"></div>
             <div id="paginacao" style="margin-top: 5px; text-align:center;"></div>
         </div>
@@ -214,6 +215,20 @@
     let aldeiasComDistancia = [];
     let currentPage = 0;
 
+    function atualizarContadores(aldeiasInimigas) {
+        const contadoresDiv = document.getElementById("contadores");
+        const totalAldeiasInimigas = aldeiasInimigas.length;
+        const totalMinhasAldeias = minhasAldeias.length;
+        
+        contadoresDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between;">
+                <span><b>Aldeias Próprias:</b> ${totalMinhasAldeias}</span>
+                <span><b>Aldeias Inimigas:</b> ${totalAldeiasInimigas}</span>
+                <span><b>Total de Pares:</b> ${totalMinhasAldeias * totalAldeiasInimigas}</span>
+            </div>
+        `;
+    }
+
     function renderPage() {
         const resultado = document.getElementById("resultado");
         const paginacao = document.getElementById("paginacao");
@@ -267,6 +282,7 @@
         if (tags.length === 0) {
             document.getElementById("resultado").innerHTML = `<span style="color: red;">Selecione pelo menos um jogador, tribo ou coordenada.</span>`;
             document.getElementById("paginacao").innerHTML = "";
+            document.getElementById("contadores").innerHTML = "";
             aldeiasComDistancia = [];
             return;
         }
@@ -300,6 +316,9 @@
         aldeiasInimigas = aldeiasInimigas.filter((v, i, a) => 
             a.findIndex(t => t.id === v.id) === i
         );
+
+        // Atualizar contadores
+        atualizarContadores(aldeiasInimigas);
 
         aldeiasComDistancia = [];
 
