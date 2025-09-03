@@ -56,6 +56,7 @@
         }
       }
     },
+    
     {
       nome: 'Comparador(Casual)',
       func: () => {
@@ -70,6 +71,22 @@
         $.getScript('https://tribalwarstools.github.io/ConstruirEdificios/construirEdificios.js')
           .done(() => UI.InfoMessage('✅ Script Construir Edifícios carregado com sucesso!', 3000, 'success'))
           .fail(() => UI.InfoMessage('❌ Erro ao carregar o script Construir Edifícios.', 5000, 'error'));
+      },
+    },
+    {
+      nome: 'Configurar Tropas',
+      func: () => {
+        $.getScript('https://tribalwarstools.github.io/ConfigTropas/ConfigTropas.js')
+          .done(() => UI.InfoMessage('✅ Script Configurar Tropas carregado!', 3000, 'success'))
+          .fail(() => UI.InfoMessage('❌ Erro ao carregar script Configurar Tropas.', 5000, 'error'));
+      },
+    },
+    {
+      nome: 'Blindagem',
+      func: () => {
+        $.getScript('https://tribalwarstools.github.io/beta/blindagem.js')
+          .done(() => UI.InfoMessage('✅ Script Blindagem carregado!', 3000, 'success'))
+          .fail(() => UI.InfoMessage('❌ Erro ao carregar script Blindagem.', 5000, 'error'));
       },
     },
     {
