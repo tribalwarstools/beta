@@ -3,11 +3,15 @@
   const scripts = [
 {
   nome: 'Anti-Logoff',
-  toggle: true, // ON/OFF
+  toggle: true,
   func: () => {
-    if (!window.antilogoffAtivo) {
+    const chave = 'antilogoffAtivo';
+    const ativo = localStorage.getItem(chave) === 'true';
+
+    if (!ativo) {
+      localStorage.setItem(chave, 'true');
       window.antilogoffAtivo = true;
-      // Carrega o script externo
+
       $.getScript('https://tribalwarstools.github.io/beta/antilogoff.js')
         .done(() => {
           if (window.AntiLogoff && typeof window.AntiLogoff.iniciar === 'function') {
@@ -17,17 +21,21 @@
         })
         .fail(() => {
           window.antilogoffAtivo = false;
+          localStorage.setItem(chave, 'false');
           UI.InfoMessage('❌ Erro ao carregar Anti-Logoff!', 5000, 'error');
         });
     } else {
       window.antilogoffAtivo = false;
+      localStorage.setItem(chave, 'false');
       if (window.AntiLogoff && typeof window.AntiLogoff.desativar === 'function') {
         window.AntiLogoff.desativar();
       }
       UI.InfoMessage('🛑 Anti-Logoff desativado!', 3000, 'error');
     }
-  }
+  },
+  estado: () => localStorage.getItem('antilogoffAtivo') === 'true'
 },
+
 
     {
       nome: 'Etiquetador',
