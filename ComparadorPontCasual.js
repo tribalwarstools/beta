@@ -8,6 +8,10 @@
     // --- Sua pontuação (editável) ---
     let minhaPontuacao = parseInt(game_data.player.points, 10);
 
+    // --- Paginação ---
+    let paginaAtual = 1;
+    const porPagina = 50;
+
     // --- Buscar jogadores (/map/player.txt) ---
     const playerRaw = await fetch('/map/player.txt').then(r => r.text());
     const jogadores = playerRaw.trim().split("\n").map(linha => {
@@ -73,7 +77,7 @@
             <label>Limite atual (%):
                 <input id="limiteInput" type="number" value="${limitePercentual}" min="0" max="1000" style="width:90px">
             </label>
-            <button id="salvarBtn">Salvar</button>
+            <button id="salvarBtn" class="btn btn-confirm-yes">Salvar</button>
             <label style="margin-left:12px;">
                 <input id="chkLiberados" type="checkbox" ${onlyLiberados ? "checked" : ""}>
                 Mostrar só liberados
@@ -98,6 +102,7 @@
                 .tw-ok { background: rgba(60, 179, 113, 0.18); }
                 .tw-no { background: rgba(220, 20, 60, 0.12); }
                 .tw-table th, .tw-table td { padding: 4px 6px; }
+                .paginacao button { margin:0 4px; }
             </style>
         `;
         Dialog.show("painel_casual", html);
@@ -107,17 +112,19 @@
             minhaPontuacao = parseInt(document.getElementById("minhaPontuacaoInput").value, 10) || 0;
             limitePercentual = parseFloat(document.getElementById("limiteInput").value) || 0;
             localStorage.setItem("casualLimitePercentual", String(limitePercentual));
+            paginaAtual = 1;
             analisar();
         };
 
         document.getElementById("chkLiberados").onchange = (e) => {
             onlyLiberados = e.target.checked;
             localStorage.setItem("casualOnlyLiberados", onlyLiberados ? "1" : "0");
+            paginaAtual = 1;
             analisar();
         };
 
-        document.getElementById("filtroInput").oninput = () => analisar();
-        document.getElementById("filtroTribo").onchange = () => analisar();
+        document.getElementById("filtroInput").oninput = () => { paginaAtual = 1; analisar(); };
+        document.getElementById("filtroTribo").onchange = () => { paginaAtual = 1; analisar(); };
 
         analisar(); // primeira renderização
     }
@@ -133,20 +140,30 @@
             <small><b>Alcance recalculado</b>: ${alcance.min} – ${alcance.max}</small>
         </p>`;
 
+        let filtrados = jogadores.slice().sort((a, b) => Math.abs(a.pontos - minhaPontuacao) - Math.abs(b.pontos - minhaPontuacao));
+
+        filtrados = filtrados.filter(j => {
+            if (filtro && !j.nome.toLowerCase().includes(filtro)) return false;
+            if (triboFiltro && j.tribo !== triboFiltro) return false;
+            const liberado = podeAtacar(minhaPontuacao, j.pontos, limitePercentual);
+            if (onlyLiberados && !liberado) return false;
+            return true;
+        });
+
+        const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+        if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
+
+        const inicio = (paginaAtual - 1) * porPagina;
+        const fim = inicio + porPagina;
+        const pagina = filtrados.slice(inicio, fim);
+
         let saida = `${alcHtml}
-            <p style="margin:0 0 6px;"><small>Limite atual: <b>${limitePercentual}%</b> (regra de <i>diferença</i> baseada no menor)</small></p>
+            <p style="margin:0 0 6px;"><small>Limite atual: <b>${limitePercentual}%</b></small></p>
             <table class="vis tw-table" width="100%">
                 <tr><th>Jogador</th><th>Pontos</th><th>Tribo</th><th>Status</th></tr>`;
 
-        const ordenados = jogadores.slice().sort((a, b) => Math.abs(a.pontos - minhaPontuacao) - Math.abs(b.pontos - minhaPontuacao));
-
-        ordenados.forEach(j => {
-            if (filtro && !j.nome.toLowerCase().includes(filtro)) return;
-            if (triboFiltro && j.tribo !== triboFiltro) return;
-
+        pagina.forEach(j => {
             const liberado = podeAtacar(minhaPontuacao, j.pontos, limitePercentual);
-            if (onlyLiberados && !liberado) return;
-
             const cls = liberado ? "tw-ok" : "tw-no";
             const status = liberado ? "✅ Ataque Liberado" : "❌ Bloqueado";
             const link = `game.php?screen=info_player&id=${j.id}`;
@@ -161,7 +178,32 @@
         });
 
         saida += `</table>`;
+
+        // --- Navegação ---
+        saida += `
+            <div class="paginacao" style="margin-top:8px; text-align:center;">
+                <button class="btn btn" id="btnPrev" ${paginaAtual <= 1 ? "disabled" : ""}>Anterior</button>
+                <span style="margin:0 8px;">Página ${paginaAtual} / ${totalPaginas}</span>
+                <button class="btn btn" id="btnNext" ${paginaAtual >= totalPaginas ? "disabled" : ""}>Próxima</button>
+            </div>
+        `;
+
         res.innerHTML = saida;
+
+        // Eventos paginação
+        document.getElementById("btnPrev")?.addEventListener("click", () => {
+            if (paginaAtual > 1) {
+                paginaAtual--;
+                analisar();
+            }
+        });
+
+        document.getElementById("btnNext")?.addEventListener("click", () => {
+            if (paginaAtual < totalPaginas) {
+                paginaAtual++;
+                analisar();
+            }
+        });
     }
 
     abrirPainel();
