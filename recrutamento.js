@@ -17,6 +17,7 @@
     #${prefix}topBtns button { width: 120px; margin: 0 4px; }
     #${prefix}percent-container { text-align:center; margin-bottom:6px; }
     #${prefix}percent { width: 50px; text-align: center; }
+    .${prefix}ignore-checkbox { margin-left: 4px; transform: scale(1.1); }
     `;
     const style = document.createElement('style');
     style.textContent = css;
@@ -31,7 +32,7 @@
             <h4>Recrutamento Rápido</h4>
             <div id="${prefix}percent-container">
                 <label for="${prefix}percent">%</label>
-                <input id="${prefix}percent" type="number" min="0" max="100" value="100" class="${prefix}input">
+                <input id="${prefix}percent" type="number" min="0" max="100" value="1" class="${prefix}input">
                 <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular %</button>
             </div>
             <div id="${prefix}topBtns">
@@ -86,12 +87,19 @@
             input.max = maxDisponivel;
             input.value = maxDisponivel;
             input.className = `${prefix}input`;
-            inputsMap[unit.codigo] = { input, max: maxDisponivel, coluna: colunaRecrutar };
+
+            const ignore = document.createElement('input');
+            ignore.type = 'checkbox';
+            ignore.className = `${prefix}ignore-checkbox`;
+            ignore.title = 'Ignorar esta unidade';
+
+            inputsMap[unit.codigo] = { input, max: maxDisponivel, coluna: colunaRecrutar, ignore };
 
             const btn = document.createElement('button');
             btn.className = `${prefix}btn`;
             btn.textContent = unit.nome;
             btn.addEventListener('click', () => {
+                if (ignore.checked) return; // ignora se marcado
                 const qty = parseInt(input.value) || 0;
                 const inputTabela = colunaRecrutar.querySelector('input.recruit_unit');
                 if (inputTabela) {
@@ -102,6 +110,7 @@
             });
 
             container.appendChild(input);
+            container.appendChild(ignore);
             container.appendChild(btn);
             painel.querySelector(`#${prefix}conteudo`).appendChild(container);
         });
@@ -110,7 +119,9 @@
         document.getElementById(`${prefix}btn-calcular`).addEventListener('click', () => {
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
-                inputsMap[codigo].input.value = Math.floor(inputsMap[codigo].max * pct / 100);
+                if (!inputsMap[codigo].ignore.checked) { // respeita checkbox
+                    inputsMap[codigo].input.value = Math.floor(inputsMap[codigo].max * pct / 100);
+                }
             });
         });
 
@@ -120,8 +131,8 @@
 
         function preencherERecrutar(unidades) {
             unidades.forEach(codigo => {
-                if (inputsMap[codigo]) {
-                    const val = parseInt(inputsMap[codigo].input.value) || 0; // usa o valor já calculado
+                if (inputsMap[codigo] && !inputsMap[codigo].ignore.checked) {
+                    const val = parseInt(inputsMap[codigo].input.value) || 0;
                     const inputTabela = inputsMap[codigo].coluna.querySelector('input.recruit_unit');
                     if (inputTabela) inputTabela.value = val;
                 }
