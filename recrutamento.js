@@ -10,14 +10,13 @@
     #${prefix}toggle { position: absolute; top: 0; right: -28px; width: 28px; height: 40px; background: #5c4023; border: 2px solid #654321; border-left: none; border-radius: 0 6px 6px 0; color: #f1e1c1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; box-shadow: 2px 2px 6px #000; }
     #${prefix}conteudo { padding: 8px; width: 280px; }
     #${prefix}conteudo h4 { margin: 0 0 6px 0; font-size: 13px; text-align: center; border-bottom: 1px solid #654321; padding-bottom: 4px; }
-    .${prefix}btn { display: inline-block; width: 120px; margin: 2px 2px 2px 0; background: #5c4023; border: 1px solid #3c2f2f; border-radius: 6px; color: #f1e1c1; padding: 4px; cursor: pointer; font-size: 12px; text-align: center; }
-    .${prefix}input { width: 60px; padding: 2px; font-size: 12px; border-radius: 4px; border: 1px solid #654321; margin-right: 4px; text-align: center; }
+    .${prefix}btn { background: #5c4023; border: 1px solid #3c2f2f; border-radius: 6px; color: #f1e1c1; padding: 4px; cursor: pointer; font-size: 12px; text-align: center; }
+    .${prefix}input { width: 60px; padding: 2px; font-size: 12px; border-radius: 4px; border: 1px solid #654321; text-align: center; margin-right: 4px; }
     .${prefix}btn:hover { filter: brightness(1.1); }
     #${prefix}painel.ativo { transform: translateX(0); }
-    #${prefix}topBtns { text-align: center; margin-bottom: 6px; }
-    #${prefix}topBtns button { width: 120px; margin: 0 4px; }
-    #${prefix}percent-container { text-align:center; margin-bottom:6px; }
-    #${prefix}percent { width: 50px; text-align: center; }
+    #${prefix}percent-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    #${prefix}topBtns { display: flex; gap: 4px; }
+    #${prefix}topBtns button { flex: 1; }
     .${prefix}ignore-checkbox { margin-left: 4px; transform: scale(1.1); }
     #${prefix}bottomBtns { text-align: center; margin-top: 6px; }
     #${prefix}bottomBtns button { width: 120px; margin: 2px 2px; }
@@ -36,8 +35,10 @@
             <div id="${prefix}percent-container">
                 <label for="${prefix}percent">%</label>
                 <input id="${prefix}percent" type="number" min="0" max="100" value="1" class="${prefix}input">
-                <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular</button>
-                <button id="${prefix}btn-salvar" class="${prefix}btn">Salvar</button>
+                <div id="${prefix}topBtns">
+                    <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular</button>
+                    <button id="${prefix}btn-salvar" class="${prefix}btn">Salvar</button>
+                </div>
             </div>
             <!-- Inputs das unidades serão inseridos aqui -->
             <div id="${prefix}unidades-container"></div>
