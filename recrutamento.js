@@ -40,7 +40,6 @@
                     <button id="${prefix}btn-salvar" class="${prefix}btn">Salvar</button>
                 </div>
             </div>
-            <!-- Inputs das unidades serão inseridos aqui -->
             <div id="${prefix}unidades-container"></div>
             <div id="${prefix}bottomBtns">
                 <button id="${prefix}btn-defesa" class="${prefix}btn">Defesa</button>
@@ -111,7 +110,6 @@
             if (!linha) return;
 
             const colunaRecrutar = linha.querySelectorAll('td')[3];
-            const maxDisponivel = parseInt(colunaRecrutar.querySelector('a')?.textContent.replace(/[()]/g,'') || '0');
 
             const container = document.createElement('div');
             container.style.marginBottom = '4px';
@@ -119,8 +117,6 @@
             const input = document.createElement('input');
             input.type = 'number';
             input.min = 0;
-            input.max = maxDisponivel;
-            input.value = maxDisponivel;
             input.className = `${prefix}input`;
 
             const ignore = document.createElement('input');
@@ -128,7 +124,7 @@
             ignore.className = `${prefix}ignore-checkbox`;
             ignore.title = 'Ignorar esta unidade';
 
-            inputsMap[unit.codigo] = { input, max: maxDisponivel, coluna: colunaRecrutar, ignore };
+            inputsMap[unit.codigo] = { input, coluna: colunaRecrutar, ignore };
 
             const btn = document.createElement('button');
             btn.className = `${prefix}btn`;
@@ -156,7 +152,10 @@
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
                 if (!inputsMap[codigo].ignore.checked) {
-                    inputsMap[codigo].input.value = Math.floor(inputsMap[codigo].max * pct / 100);
+                    // Pega quantidade disponível atual direto da tabela
+                    const coluna = inputsMap[codigo].coluna;
+                    const maxAtual = parseInt(coluna.querySelector('a')?.textContent.replace(/[()]/g,'') || '0');
+                    inputsMap[codigo].input.value = Math.floor(maxAtual * pct / 100);
                 }
             });
         });
