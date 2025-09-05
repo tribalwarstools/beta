@@ -2,6 +2,7 @@
     'use strict';
 
     const prefix = 'twra_';
+    const STORAGE_KEY = `${prefix}config`;
 
     // --- CSS do painel ---
     const css = `
@@ -38,6 +39,7 @@
             <div id="${prefix}topBtns">
                 <button id="${prefix}btn-defesa" class="${prefix}btn">Defesa</button>
                 <button id="${prefix}btn-ataque" class="${prefix}btn">Ataque</button>
+                <button id="${prefix}btn-salvar" class="${prefix}btn">💾 Salvar Config</button>
             </div>
         </div>
     `;
@@ -62,6 +64,32 @@
     ];
 
     const inputsMap = {};
+
+    function salvarConfiguracao() {
+        const config = {};
+        Object.keys(inputsMap).forEach(codigo => {
+            config[codigo] = {
+                valor: parseInt(inputsMap[codigo].input.value) || 0,
+                ignore: inputsMap[codigo].ignore.checked
+            };
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        UI.InfoMessage('✅ Configuração salva!', 2000, 'success');
+    }
+
+    function carregarConfiguracao() {
+        const configStr = localStorage.getItem(STORAGE_KEY);
+        if (!configStr) return;
+        try {
+            const config = JSON.parse(configStr);
+            Object.keys(config).forEach(codigo => {
+                if (inputsMap[codigo]) {
+                    inputsMap[codigo].input.value = config[codigo].valor;
+                    inputsMap[codigo].ignore.checked = config[codigo].ignore;
+                }
+            });
+        } catch(e) { console.error('Erro ao carregar configuração:', e); }
+    }
 
     function iniciarPainel() {
         const tabela = document.querySelector('table.vis tbody tr');
@@ -99,14 +127,12 @@
             btn.className = `${prefix}btn`;
             btn.textContent = unit.nome;
             btn.addEventListener('click', () => {
-                if (ignore.checked) return; // ignora se marcado
+                if (ignore.checked) return;
                 const qty = parseInt(input.value) || 0;
                 const inputTabela = colunaRecrutar.querySelector('input.recruit_unit');
-                if (inputTabela) {
-                    inputTabela.value = qty;
-                    const btnGlobal = document.querySelector('input.btn-recruit[type="submit"]');
-                    if (btnGlobal) btnGlobal.click();
-                }
+                if (inputTabela) inputTabela.value = qty;
+                const btnGlobal = document.querySelector('input.btn-recruit[type="submit"]');
+                if (btnGlobal) btnGlobal.click();
             });
 
             container.appendChild(input);
@@ -115,11 +141,14 @@
             painel.querySelector(`#${prefix}conteudo`).appendChild(container);
         });
 
-        // --- Botão calcular %
+        // --- Carrega configuração salva ---
+        carregarConfiguracao();
+
+        // --- Botão calcular % ---
         document.getElementById(`${prefix}btn-calcular`).addEventListener('click', () => {
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
-                if (!inputsMap[codigo].ignore.checked) { // respeita checkbox
+                if (!inputsMap[codigo].ignore.checked) {
                     inputsMap[codigo].input.value = Math.floor(inputsMap[codigo].max * pct / 100);
                 }
             });
@@ -143,6 +172,7 @@
 
         document.getElementById(`${prefix}btn-defesa`).addEventListener('click', () => preencherERecrutar(unidadesDefesa));
         document.getElementById(`${prefix}btn-ataque`).addEventListener('click', () => preencherERecrutar(unidadesAtaque));
+        document.getElementById(`${prefix}btn-salvar`).addEventListener('click', salvarConfiguracao);
     }
 
     iniciarPainel();
