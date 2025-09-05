@@ -6,7 +6,7 @@
 
     // --- CSS do painel ---
     const css = `
-    #${prefix}painel { position: fixed; top: 50px; left: 0; background: #2b2b2b; border: 2px solid #654321; border-left: none; border-radius: 0 10px 10px 0; box-shadow: 2px 2px 8px #000; font-family: Verdana, sans-serif; color: #f1e1c1; z-index: 9999; transition: transform 0.3s ease-in-out; transform: translateX(-280px); }
+    #${prefix}painel { position: fixed; top: 150px; left: 0; background: #2b2b2b; border: 2px solid #654321; border-left: none; border-radius: 0 10px 10px 0; box-shadow: 2px 2px 8px #000; font-family: Verdana, sans-serif; color: #f1e1c1; z-index: 9999; transition: transform 0.3s ease-in-out; transform: translateX(-280px); }
     #${prefix}toggle { position: absolute; top: 0; right: -28px; width: 28px; height: 40px; background: #5c4023; border: 2px solid #654321; border-left: none; border-radius: 0 6px 6px 0; color: #f1e1c1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; box-shadow: 2px 2px 6px #000; }
     #${prefix}conteudo { padding: 8px; width: 280px; }
     #${prefix}conteudo h4 { margin: 0 0 6px 0; font-size: 13px; text-align: center; border-bottom: 1px solid #654321; padding-bottom: 4px; }
