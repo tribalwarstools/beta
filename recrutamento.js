@@ -42,8 +42,7 @@
             </div>
             <div id="${prefix}unidades-container"></div>
             <div id="${prefix}bottomBtns">
-                <button id="${prefix}btn-defesa" class="${prefix}btn">Defesa</button>
-                <button id="${prefix}btn-ataque" class="${prefix}btn">Ataque</button>
+                <button id="${prefix}btn-recrutar" class="${prefix}btn">Recrutar</button>
             </div>
         </div>
     `;
@@ -81,7 +80,7 @@
         Object.keys(inputsMap).forEach(codigo => {
             config[codigo] = {
                 valor: parseInt(inputsMap[codigo].input.value) || 0,
-                ignore: inputsMap[codigo].ignore.checked
+                marcado: inputsMap[codigo].marcado.checked
             };
         });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
@@ -96,7 +95,7 @@
             Object.keys(config).forEach(codigo => {
                 if (inputsMap[codigo]) {
                     inputsMap[codigo].input.value = config[codigo].valor;
-                    inputsMap[codigo].ignore.checked = config[codigo].ignore;
+                    inputsMap[codigo].marcado.checked = config[codigo].marcado;
                 }
             });
         } catch(e) { console.error('Erro ao carregar configuração:', e); }
@@ -126,18 +125,18 @@
             input.min = 0;
             input.className = `${prefix}input`;
 
-            const ignore = document.createElement('input');
-            ignore.type = 'checkbox';
-            ignore.className = `${prefix}ignore-checkbox`;
-            ignore.title = 'Ignorar esta unidade';
+            const marcado = document.createElement('input');
+            marcado.type = 'checkbox';
+            marcado.className = `${prefix}ignore-checkbox`;
+            marcado.title = 'Marcar para incluir no recrutamento';
 
-            inputsMap[unit.codigo] = { input, coluna: colunaRecrutar, ignore };
+            inputsMap[unit.codigo] = { input, coluna: colunaRecrutar, marcado };
 
             const btn = document.createElement('button');
             btn.className = `${prefix}btn`;
             btn.textContent = unit.nome;
             btn.addEventListener('click', () => {
-                if (ignore.checked) return;
+                if (!marcado.checked) return; // só recruta se estiver marcado
                 const qty = parseInt(input.value) || 0;
                 const inputTabela = colunaRecrutar.querySelector('input.recruit_unit');
                 if (inputTabela) inputTabela.value = qty;
@@ -146,7 +145,7 @@
             });
 
             container.appendChild(input);
-            container.appendChild(ignore);
+            container.appendChild(marcado);
             container.appendChild(btn);
             containerUnidades.appendChild(container);
         });
@@ -157,20 +156,17 @@
         document.getElementById(`${prefix}btn-calcular`).addEventListener('click', () => {
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
-                if (!inputsMap[codigo].ignore.checked) {
+                if (inputsMap[codigo].marcado.checked) {
                     const maxAtual = getDisponivel(codigo);
                     inputsMap[codigo].input.value = Math.floor(maxAtual * pct / 100);
                 }
             });
         });
 
-        // --- Botões de Ataque e Defesa ---
-        const unidadesAtaque = ['axe', 'light', 'marcher', 'ram', 'catapult', 'spy'];
-        const unidadesDefesa = ['spear', 'sword', 'archer', 'spy', 'heavy', 'catapult'];
-
-        function preencherERecrutar(unidades) {
-            unidades.forEach(codigo => {
-                if (inputsMap[codigo] && !inputsMap[codigo].ignore.checked) {
+        // --- Botão Recrutar ---
+        document.getElementById(`${prefix}btn-recrutar`).addEventListener('click', () => {
+            Object.keys(inputsMap).forEach(codigo => {
+                if (inputsMap[codigo].marcado.checked) {
                     const val = parseInt(inputsMap[codigo].input.value) || 0;
                     const inputTabela = inputsMap[codigo].coluna.querySelector('input.recruit_unit');
                     if (inputTabela) inputTabela.value = val;
@@ -178,10 +174,8 @@
             });
             const btnGlobal = document.querySelector('input.btn-recruit[type="submit"]');
             if (btnGlobal) btnGlobal.click();
-        }
+        });
 
-        document.getElementById(`${prefix}btn-defesa`).addEventListener('click', () => preencherERecrutar(unidadesDefesa));
-        document.getElementById(`${prefix}btn-ataque`).addEventListener('click', () => preencherERecrutar(unidadesAtaque));
         document.getElementById(`${prefix}btn-salvar`).addEventListener('click', salvarConfiguracao);
     }
 
