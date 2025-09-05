@@ -69,6 +69,13 @@
 
     const inputsMap = {};
 
+    function getDisponivel(codigo) {
+        const el = document.getElementById(`${codigo}_0_a`);
+        if (!el) return 0;
+        const match = el.textContent.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+    }
+
     function salvarConfiguracao() {
         const config = {};
         Object.keys(inputsMap).forEach(codigo => {
@@ -144,7 +151,6 @@
             containerUnidades.appendChild(container);
         });
 
-        // --- Carrega configuração salva ---
         carregarConfiguracao();
 
         // --- Botão calcular % ---
@@ -152,9 +158,7 @@
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
                 if (!inputsMap[codigo].ignore.checked) {
-                    // Pega quantidade disponível atual direto da tabela
-                    const coluna = inputsMap[codigo].coluna;
-                    const maxAtual = parseInt(coluna.querySelector('a')?.textContent.replace(/[()]/g,'') || '0');
+                    const maxAtual = getDisponivel(codigo);
                     inputsMap[codigo].input.value = Math.floor(maxAtual * pct / 100);
                 }
             });
