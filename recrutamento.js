@@ -6,20 +6,25 @@
 
     // --- CSS do painel ---
     const css = `
-    #${prefix}painel { position: fixed; top: 150px; left: 0; background: #2b2b2b; border: 2px solid #654321; border-left: none; border-radius: 0 10px 10px 0; box-shadow: 2px 2px 8px #000; font-family: Verdana, sans-serif; color: #f1e1c1; z-index: 9997; transition: transform 0.3s ease-in-out; transform: translateX(-300px); }
+    #${prefix}painel { position: fixed; top: 150px; left: 0; width: 300px; background: #2b2b2b; border: 2px solid #654321; border-left: none; border-radius: 0 10px 10px 0; box-shadow: 2px 2px 8px #000; font-family: Verdana, sans-serif; color: #f1e1c1; z-index: 9997; transition: transform 0.3s ease-in-out; transform: translateX(-300px); }
     #${prefix}toggle { position: absolute; top: 0; right: -28px; width: 28px; height: 40px; background: #5c4023; border: 2px solid #654321; border-left: none; border-radius: 0 6px 6px 0; color: #f1e1c1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; box-shadow: 2px 2px 6px #000; }
-    #${prefix}conteudo { padding: 8px; width: 280px; }
+    #${prefix}conteudo { padding: 8px; }
     #${prefix}conteudo h4 { margin: 0 0 6px 0; font-size: 13px; text-align: center; border-bottom: 1px solid #654321; padding-bottom: 4px; }
     .${prefix}btn { background: #5c4023; border: 1px solid #3c2f2f; border-radius: 6px; color: #f1e1c1; padding: 4px; cursor: pointer; font-size: 12px; text-align: center; }
-    .${prefix}input { width: 60px; padding: 2px; font-size: 12px; border-radius: 4px; border: 1px solid #654321; text-align: center; margin-right: 4px; }
+    .${prefix}input { width: 50px; padding: 2px; font-size: 12px; border-radius: 4px; border: 1px solid #654321; text-align: center; }
     .${prefix}btn:hover { filter: brightness(1.1); }
     #${prefix}painel.ativo { transform: translateX(0); }
     #${prefix}percent-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     #${prefix}topBtns { display: flex; gap: 4px; }
     #${prefix}topBtns button { flex: 1; }
-    .${prefix}ignore-checkbox { margin-left: 4px; transform: scale(1.1); }
+    .${prefix}ignore-checkbox { transform: scale(1.2); margin-left: 4px; }
     #${prefix}bottomBtns { text-align: center; margin-top: 6px; }
     #${prefix}bottomBtns button { width: 120px; margin: 2px 2px; }
+    .${prefix}unit-line { display: flex; align-items: center; margin-bottom: 4px; }
+    .${prefix}unit-name { width: 120px; }
+    .${prefix}unit-checkbox { width: 20px; text-align: center; }
+    .${prefix}unit-input { width: 50px; margin: 0 4px; }
+    .${prefix}unit-btn { width: 70px; }
     `;
     const style = document.createElement('style');
     style.textContent = css;
@@ -59,9 +64,9 @@
         { codigo: 'axe', nome: 'Bárbaro' },
         { codigo: 'archer', nome: 'Arqueiro' },
         { codigo: 'spy', nome: 'Explorador' },
-        { codigo: 'light', nome: 'Cavalaria leve' },
-        { codigo: 'marcher', nome: 'Arqueiro a cavalo' },
-        { codigo: 'heavy', nome: 'Cavalaria pesada' },
+        { codigo: 'light', nome: 'Cavalaria L.' },
+        { codigo: 'marcher', nome: 'Arq. a cav.' },
+        { codigo: 'heavy', nome: 'Cav. Pesada' },
         { codigo: 'ram', nome: 'Aríete' },
         { codigo: 'catapult', nome: 'Catapulta' }
     ];
@@ -118,25 +123,28 @@
             const colunaRecrutar = linha.querySelectorAll('td')[3];
 
             const container = document.createElement('div');
-            container.style.marginBottom = '4px';
+            container.className = `${prefix}unit-line`;
+
+            const lbl = document.createElement('span');
+            lbl.textContent = unit.nome;
+            lbl.className = `${prefix}unit-name`;
+
+            const marcado = document.createElement('input');
+            marcado.type = 'checkbox';
+            marcado.className = `${prefix}ignore-checkbox ${prefix}unit-checkbox`;
+            marcado.title = 'Marcar para incluir no recrutamento';
 
             const input = document.createElement('input');
             input.type = 'number';
             input.min = 0;
-            input.className = `${prefix}input`;
-
-            const marcado = document.createElement('input');
-            marcado.type = 'checkbox';
-            marcado.className = `${prefix}ignore-checkbox`;
-            marcado.title = 'Marcar para incluir no recrutamento';
-
-            inputsMap[unit.codigo] = { input, coluna: colunaRecrutar, marcado };
+            input.className = `${prefix}input ${prefix}unit-input`;
 
             const btn = document.createElement('button');
-            btn.className = `${prefix}btn`;
-            btn.textContent = unit.nome;
+            btn.className = `${prefix}btn ${prefix}unit-btn`;
+            btn.textContent = '✔';
+            btn.title = 'Recrutar apenas esta unidade';
             btn.addEventListener('click', () => {
-                if (!marcado.checked) return; // só recruta se estiver marcado
+                if (!marcado.checked) return;
                 const qty = parseInt(input.value) || 0;
                 const inputTabela = colunaRecrutar.querySelector('input.recruit_unit');
                 if (inputTabela) inputTabela.value = qty;
@@ -144,15 +152,18 @@
                 if (btnGlobal) btnGlobal.click();
             });
 
-            container.appendChild(input);
+            container.appendChild(lbl);
             container.appendChild(marcado);
+            container.appendChild(input);
             container.appendChild(btn);
+
+            inputsMap[unit.codigo] = { input, coluna: colunaRecrutar, marcado };
+
             containerUnidades.appendChild(container);
         });
 
         carregarConfiguracao();
 
-        // --- Botão calcular % ---
         document.getElementById(`${prefix}btn-calcular`).addEventListener('click', () => {
             const pct = Math.min(Math.max(parseInt(percentInput.value) || 0, 0), 100);
             Object.keys(inputsMap).forEach(codigo => {
@@ -163,7 +174,6 @@
             });
         });
 
-        // --- Botão Recrutar ---
         document.getElementById(`${prefix}btn-recrutar`).addEventListener('click', () => {
             Object.keys(inputsMap).forEach(codigo => {
                 if (inputsMap[codigo].marcado.checked) {
