@@ -19,6 +19,8 @@
     #${prefix}percent-container { text-align:center; margin-bottom:6px; }
     #${prefix}percent { width: 50px; text-align: center; }
     .${prefix}ignore-checkbox { margin-left: 4px; transform: scale(1.1); }
+    #${prefix}bottomBtns { text-align: center; margin-top: 6px; }
+    #${prefix}bottomBtns button { width: 120px; margin: 2px 2px; }
     `;
     const style = document.createElement('style');
     style.textContent = css;
@@ -35,11 +37,13 @@
                 <label for="${prefix}percent">%</label>
                 <input id="${prefix}percent" type="number" min="0" max="100" value="1" class="${prefix}input">
                 <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular %</button>
+                <button id="${prefix}btn-salvar" class="${prefix}btn"> Salvar</button>
             </div>
-            <div id="${prefix}topBtns">
+            <!-- Inputs das unidades serão inseridos aqui -->
+            <div id="${prefix}unidades-container"></div>
+            <div id="${prefix}bottomBtns">
                 <button id="${prefix}btn-defesa" class="${prefix}btn">Defesa</button>
                 <button id="${prefix}btn-ataque" class="${prefix}btn">Ataque</button>
-                <button id="${prefix}btn-salvar" class="${prefix}btn">💾 Salvar Config</button>
             </div>
         </div>
     `;
@@ -98,6 +102,8 @@
             return;
         }
 
+        const containerUnidades = document.getElementById(`${prefix}unidades-container`);
+
         todasUnidades.forEach(unit => {
             const linha = Array.from(document.querySelectorAll('table.vis tbody tr'))
                 .find(tr => tr.querySelector(`a.unit_link[data-unit="${unit.codigo}"]`));
@@ -138,7 +144,7 @@
             container.appendChild(input);
             container.appendChild(ignore);
             container.appendChild(btn);
-            painel.querySelector(`#${prefix}conteudo`).appendChild(container);
+            containerUnidades.appendChild(container);
         });
 
         // --- Carrega configuração salva ---
