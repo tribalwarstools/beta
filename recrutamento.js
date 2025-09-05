@@ -36,8 +36,8 @@
             <div id="${prefix}percent-container">
                 <label for="${prefix}percent">%</label>
                 <input id="${prefix}percent" type="number" min="0" max="100" value="1" class="${prefix}input">
-                <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular %</button>
-                <button id="${prefix}btn-salvar" class="${prefix}btn"> Salvar</button>
+                <button id="${prefix}btn-calcular" class="${prefix}btn">Calcular</button>
+                <button id="${prefix}btn-salvar" class="${prefix}btn">Salvar</button>
             </div>
             <!-- Inputs das unidades serão inseridos aqui -->
             <div id="${prefix}unidades-container"></div>
