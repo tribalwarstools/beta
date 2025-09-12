@@ -48,13 +48,25 @@
             <div id="${prefix}unidades-container"></div>
             <div id="${prefix}bottomBtns">
                 <button id="${prefix}btn-recrutar" class="${prefix}btn">Recrutar</button>
+                <div style="margin-top:6px; display:flex; gap:4px; justify-content:center;">
+                    <button id="${prefix}btn-anterior" class="${prefix}btn">⟵ Anterior</button>
+                    <button id="${prefix}btn-proxima" class="${prefix}btn">Próxima ⟶</button>
+                </div>
             </div>
         </div>
     `;
     document.body.appendChild(painel);
 
     const toggle = painel.querySelector(`#${prefix}toggle`);
-    toggle.addEventListener('click', () => painel.classList.toggle('ativo'));
+    toggle.addEventListener('click', () => {
+        painel.classList.toggle('ativo');
+        localStorage.setItem(prefix + 'painelAberto', painel.classList.contains('ativo') ? '1' : '0');
+    });
+
+    // restaurar estado do painel
+    if (localStorage.getItem(prefix + 'painelAberto') === '1') {
+        painel.classList.add('ativo');
+    }
 
     const percentInput = document.getElementById(`${prefix}percent`);
 
@@ -187,6 +199,16 @@
         });
 
         document.getElementById(`${prefix}btn-salvar`).addEventListener('click', salvarConfiguracao);
+
+        // Navegação entre aldeias (simula clique nos controles do jogo)
+        document.getElementById(`${prefix}btn-anterior`).addEventListener('click', () => {
+            const el = document.querySelector('span.arrowLeft');
+            if (el) el.click();
+        });
+        document.getElementById(`${prefix}btn-proxima`).addEventListener('click', () => {
+            const el = document.querySelector('span.arrowRight');
+            if (el) el.click();
+        });
     }
 
     iniciarPainel();
