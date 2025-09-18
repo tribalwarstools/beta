@@ -1,7 +1,7 @@
 (async function () {
-    const STORAGE_KEY = "tw_activity_players";
     const PAGE_SIZE = 50;
     let currentPage = 0;
+    let cache = {}; // cache somente em memória
 
     const [villRaw, playerRaw] = await Promise.all([
         fetch('/map/village.txt').then(r => r.text()),
@@ -13,8 +13,7 @@
     playerRaw.trim().split('\n').forEach(line => {
         const [id, name] = line.split(',');
         if (name.trim()) {
-            const decodedName = decodeURIComponent(name.replace(/\+/g, " "));
-            players[parseInt(id)] = decodedName;
+            players[parseInt(id)] = decodeURIComponent(name.replace(/\+/g, " "));
         }
     });
 
@@ -29,42 +28,60 @@
         playerPoints[v.playerId] += v.points;
     }
 
-    let cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-
+    // === Criação da lista de jogadores com status ===
+    let hoje = Date.now();
     let jogadores = Object.keys(players).map(pid => {
         const id = parseInt(pid);
         const nome = players[id];
         const pontosAtuais = playerPoints[id] || 0;
-        const hoje = Date.now();
 
-        let status = "";
-        if (cache[id]) {
-            const diff = pontosAtuais - cache[id].points;
-            const dias = Math.floor((hoje - cache[id].lastUpdate) / (1000 * 60 * 60 * 24));
+        let status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
 
-            if (diff > 0) status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Ativo (+${diff})`;
-            else if (dias <= 7) status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Inativo ${dias}d`;
-            else status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Inativo ${dias}d`;
-        } else {
-            // Novo jogador: azul
-            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
-        }
-
-        // Atualiza cache após definir status
-        cache[id] = { points: pontosAtuais, lastUpdate: hoje };
+        cache[id] = { points: pontosAtuais, lastUpdate: hoje }; // sempre inicializa
 
         return { id, nome, pontos: pontosAtuais, status };
     });
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+    // === Funções Export / Import ===
+    function exportCache() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cache, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", dataStr);
+        dlAnchor.setAttribute("download", "tw_players_cache.json");
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
+    }
 
-    // === Criação do painel flutuante ===
+    function importCache() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = evt => {
+                try {
+                    cache = JSON.parse(evt.target.result);
+                    renderPage();
+                    alert("Cache importado com sucesso!");
+                } catch(err) {
+                    alert("Erro ao importar o arquivo: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
+    // === Criação do painel ===
     let painel = document.createElement("div");
     painel.id = "atividade_jogadores_painel";
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "700px";
+    painel.style.width = "750px";
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -91,11 +108,17 @@
             </select>
             <button id="btnFiltrar" style="padding:2px 6px;">Filtrar</button>
         </div>
+        <div style="margin-top:5px; display:flex; gap:5px;">
+            <button id="btnExportar" style="padding:2px 6px;">Exportar Cache</button>
+            <button id="btnImportar" style="padding:2px 6px;">Importar Cache</button>
+        </div>
         <div id="resultado" style="margin-top: 10px;"></div>
     `;
     document.body.appendChild(painel);
 
     document.getElementById("fecharPainel").addEventListener("click", () => painel.remove());
+    document.getElementById("btnExportar").addEventListener("click", exportCache);
+    document.getElementById("btnImportar").addEventListener("click", importCache);
 
     function renderPage(filtros = {}) {
         const { nome = "", status = "" } = filtros;
