@@ -86,53 +86,40 @@
                     // Mesclar dados importados
                     importedData.forEach(j => {
                         const pontosAtuais = playerPoints[j.id] || j.pontos;
-                        const oldEntry = cacheMap[j.id];
+                        const pontosAntigos = j.pontos || 0;
+                        const variacao = pontosAtuais - pontosAntigos;
 
-                        if (oldEntry) {
-                            // Jogador existente: mantém histórico de lastUpdate
-                            const variacao = pontosAtuais - oldEntry.pontos;
-                            let status, tempoEstavel, lastUpdate;
+                        let status, tempoEstavel, lastUpdate;
 
-                            if (variacao > 0) {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
-                                lastUpdate = agora;
-                                tempoEstavel = "0d";
-                            } else if (variacao < 0) {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
-                                lastUpdate = agora;
-                                tempoEstavel = "0d";
-                            } else {
-                                lastUpdate = j.lastUpdate || oldEntry.lastUpdate || agora;
-                                const diff = agora - lastUpdate;
-                                const dias = Math.floor(diff / (1000*60*60*24));
-                                if (diff > ONE_WEEK) {
-                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
-                                } else {
-                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
-                                }
-                                tempoEstavel = dias + "d";
-                            }
-
-                            cache[j.id] = { points: pontosAtuais, lastUpdate };
-                            cacheMap[j.id] = {
-                                ...oldEntry,
-                                pontos: pontosAtuais,
-                                status,
-                                variacao,
-                                tempoEstavel
-                            };
+                        if (variacao > 0) {
+                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
+                            lastUpdate = agora;
+                            tempoEstavel = "0d";
+                        } else if (variacao < 0) {
+                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
+                            lastUpdate = agora;
+                            tempoEstavel = "0d";
                         } else {
-                            // Jogador novo: adiciona como "Novo"
-                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
-                            cacheMap[j.id] = {
-                                id: j.id,
-                                nome: j.nome,
-                                pontos: pontosAtuais,
-                                status: `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`,
-                                variacao: 0,
-                                tempoEstavel: "-",
-                            };
+                            lastUpdate = j.lastUpdate || agora;
+                            const diff = agora - lastUpdate;
+                            const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+                            if (diff > ONE_WEEK) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
+                            } else {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                            }
+                            tempoEstavel = dias + "d";
                         }
+
+                        cache[j.id] = { points: pontosAtuais, lastUpdate };
+                        cacheMap[j.id] = {
+                            id: j.id,
+                            nome: j.nome,
+                            pontos: pontosAtuais,
+                            status,
+                            variacao,
+                            tempoEstavel
+                        };
                     });
 
                     jogadores = Object.values(cacheMap);
