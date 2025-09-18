@@ -36,9 +36,10 @@
         const pontosAtuais = playerPoints[id] || 0;
 
         let status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
+        let variacao = 0;
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
 
-        return { id, nome, pontos: pontosAtuais, status };
+        return { id, nome, pontos: pontosAtuais, status, variacao };
     });
 
     // === Funções Export / Import ===
@@ -65,30 +66,31 @@
                 try {
                     const importedCache = JSON.parse(evt.target.result);
 
-                    // Atualiza cache e status de evolução
+                    // Atualiza cache, status e variação
                     jogadores = Object.keys(players).map(pid => {
                         const id = parseInt(pid);
                         const nome = players[id];
                         const pontosAtuais = playerPoints[id] || 0;
 
-                        let status;
+                        let status, variacao;
                         if (importedCache[id]) {
                             const oldPoints = importedCache[id].points;
-                            if (pontosAtuais > oldPoints) {
+                            variacao = pontosAtuais - oldPoints;
+                            if (variacao > 0) {
                                 status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
-                            } else if (pontosAtuais < oldPoints) {
+                            } else if (variacao < 0) {
                                 status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
                             } else {
                                 status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
                             }
                             cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
                         } else {
-                            // Novo jogador
                             status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
+                            variacao = 0;
                             cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
                         }
 
-                        return { id, nome, pontos: pontosAtuais, status };
+                        return { id, nome, pontos: pontosAtuais, status, variacao };
                     });
 
                     currentPage = 0;
@@ -109,7 +111,7 @@
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "750px";
+    painel.style.width = "800px"; // mais espaço para coluna extra
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -165,7 +167,7 @@
             <p>Mostrando jogadores ${start + 1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
             <table class="vis" width="100%">
                 <thead>
-                    <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th></tr>
+                    <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th><th>Variação</th></tr>
                 </thead>
                 <tbody>
                     ${slice.map((j, i) => `
@@ -174,6 +176,7 @@
                             <td><a href="/game.php?screen=info_player&id=${j.id}" target="_blank">${j.nome}</a></td>
                             <td>${j.pontos.toLocaleString()}</td>
                             <td>${j.status}</td>
+                            <td>${j.variacao > 0 ? '+' + j.variacao.toLocaleString() : j.variacao.toLocaleString()}</td>
                         </tr>
                     `).join('')}
                 </tbody>
