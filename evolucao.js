@@ -14,7 +14,7 @@ const [villRaw, playerRaw, allyRaw] = await Promise.all([
 // === Tribos (usar TAG correta) ===
 const tribes = {};
 allyRaw.trim().split('\n').forEach(line => {
-    const [id, name, tag] = line.split(','); // agora pega a 3ª coluna (TAG)
+    const [id, name, tag] = line.split(',');
     if (tag) tribes[+id] = decodeURIComponent(tag.replace(/\+/g, " "));
 });
 
@@ -25,7 +25,7 @@ playerRaw.trim().split('\n').forEach(line => {
     if (name.trim()) {
         players[+id] = {
             nome: decodeURIComponent(name.replace(/\+/g, " ")),
-            tribo: tribes[+tribeId] || "" // TAG já corrigida
+            tribo: tribes[+tribeId] || ""
         };
     }
 });
@@ -102,7 +102,7 @@ function importCache() {
                     map[j.id] = {
                         id: j.id,
                         nome: j.nome,
-                        tribo: j.tribo || "", // TAG
+                        tribo: j.tribo || "",
                         pontos: pontosAtuais,
                         status,
                         variacao,
@@ -166,6 +166,7 @@ function formatarData(ts) {
     return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 
+// === Render ===
 function renderPage(filtros = {}) {
     const { nome = "", status = "", tribo = "" } = filtros;
     let filtrados = jogadores.filter(j =>
@@ -174,10 +175,31 @@ function renderPage(filtros = {}) {
         (status === "" || j.status.includes(status))
     );
 
+    // === Estatísticas ===
+    const stats = { blue:0, yellow:0, green:0, red:0, grey:0 };
+    filtrados.forEach(j => {
+        if(j.status.includes('blue')) stats.blue++;
+        else if(j.status.includes('yellow')) stats.yellow++;
+        else if(j.status.includes('green')) stats.green++;
+        else if(j.status.includes('red')) stats.red++;
+        else if(j.status.includes('grey')) stats.grey++;
+    });
+
+    const statsHtml = `
+        <div style="display:flex; gap:15px; margin-bottom:5px;">
+            <div><img src="/graphic/dots/blue.png"> Novo: ${stats.blue}</div>
+            <div><img src="/graphic/dots/yellow.png"> Estável: ${stats.yellow}</div>
+            <div><img src="/graphic/dots/green.png"> Cresceu: ${stats.green}</div>
+            <div><img src="/graphic/dots/red.png"> Perdeu: ${stats.red}</div>
+            <div><img src="/graphic/dots/grey.png"> Inativo: ${stats.grey}</div>
+        </div>
+    `;
+
     const start = currentPage * PAGE_SIZE, end = start + PAGE_SIZE;
     const slice = filtrados.slice(start, end);
 
     let tabela = `
+        ${statsHtml}
         <p>Mostrando ${start+1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
         <table class="vis">
             <thead><tr>
@@ -223,6 +245,4 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
 });
 
 renderPage();
-
-
 })();
