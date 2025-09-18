@@ -29,7 +29,7 @@
         playerPoints[v.playerId] += v.points;
     }
 
-    // === Criação da lista de jogadores com status inicial ===
+    // === Criação da lista inicial de jogadores ===
     let hoje = Date.now();
     let jogadores = Object.keys(players).map(pid => {
         const id = parseInt(pid);
@@ -41,10 +41,10 @@
         let tempoEstavel = "-";
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
 
-        return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel };
+        return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel, lastUpdate: hoje };
     });
 
-    // === Funções Export / Import Incremental ===
+    // === Exportar dados ===
     function exportCache() {
         const exportData = jogadores.map(j => ({
             id: j.id,
@@ -53,7 +53,7 @@
             status: j.status,
             variacao: j.variacao,
             tempoEstavel: j.tempoEstavel,
-            lastUpdate: cache[j.id]?.lastUpdate || Date.now()
+            lastUpdate: j.lastUpdate || Date.now()
         }));
 
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
@@ -65,6 +65,7 @@
         dlAnchor.remove();
     }
 
+    // === Importar dados ===
     function importCache() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -79,11 +80,9 @@
                     const importedData = JSON.parse(evt.target.result);
                     const agora = Date.now();
 
-                    // Criar um mapa rápido do cache atual
                     const cacheMap = {};
                     jogadores.forEach(j => cacheMap[j.id] = j);
 
-                    // Mesclar dados importados
                     importedData.forEach(j => {
                         const pontosAtuais = playerPoints[j.id] || j.pontos;
                         const pontosAntigos = j.pontos || 0;
@@ -118,7 +117,8 @@
                             pontos: pontosAtuais,
                             status,
                             variacao,
-                            tempoEstavel
+                            tempoEstavel,
+                            lastUpdate
                         };
                     });
 
@@ -141,7 +141,7 @@
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "950px";
+    painel.style.width = "1050px";
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -199,7 +199,15 @@
             <p>Mostrando jogadores ${start + 1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
             <table class="vis" width="100%">
                 <thead>
-                    <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th><th>Variação</th><th>Tempo</th></tr>
+                    <tr>
+                        <th>#</th>
+                        <th>Jogador</th>
+                        <th>Pontos</th>
+                        <th>Status</th>
+                        <th>Variação</th>
+                        <th>Tempo</th>
+                        <th>Última Atualização</th>
+                    </tr>
                 </thead>
                 <tbody>
                     ${slice.map((j, i) => `
@@ -210,6 +218,7 @@
                             <td>${j.status}</td>
                             <td>${j.variacao > 0 ? '+' + j.variacao.toLocaleString() : j.variacao.toLocaleString()}</td>
                             <td>${j.tempoEstavel}</td>
+                            <td>${new Date(j.lastUpdate).toLocaleString()}</td>
                         </tr>
                     `).join('')}
                 </tbody>
