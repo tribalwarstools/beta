@@ -123,7 +123,7 @@
     }
 
     const html = `
-        <div style="font-family: Verdana; font-size: 12px; width: 1050px; height: 600px; overflow-y:auto;">
+        <div style="font-family: Verdana; font-size: 12px; width: 900px; height: 600px; overflow-y:auto;">
             <style>
                 #resultado table {
                     table-layout: fixed;
@@ -136,12 +136,12 @@
                     word-break: break-word;
                     white-space: normal;
                 }
-                #resultado th:nth-child(1), #resultado td:nth-child(1) { width: 30px; } /* Status */
-                #resultado th:nth-child(2), #resultado td:nth-child(2) { width: 250px; } /* Nome */
-                #resultado th:nth-child(3), #resultado td:nth-child(3) { width: 90px; } /* Pontos */
-                #resultado th:nth-child(4), #resultado td:nth-child(4) { width: 90px; } /* Variação */
-                #resultado th:nth-child(5), #resultado td:nth-child(5) { width: 70px; } /* Tempo */
-                #resultado th:nth-child(6), #resultado td:nth-child(6) { width: 200px; } /* Última Atualização */
+                #resultado th:nth-child(1), #resultado td:nth-child(1) { width: 30px; }   /* Status */
+                #resultado th:nth-child(2), #resultado td:nth-child(2) { width: 125px; } /* Jogador reduzido */
+                #resultado th:nth-child(3), #resultado td:nth-child(3) { width: 90px; }   /* Pontos */
+                #resultado th:nth-child(4), #resultado td:nth-child(4) { width: 90px; }   /* Variação */
+                #resultado th:nth-child(5), #resultado td:nth-child(5) { width: 70px; }   /* Tempo */
+                #resultado th:nth-child(6), #resultado td:nth-child(6) { width: 110px; }  /* Última Atualização */
             </style>
 
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -179,10 +179,19 @@
         dialog.style.padding = '15px';
         dialog.style.border = '2px solid #ccc';
         dialog.style.zIndex = '10000';
-        dialog.style.width = '1050px';
+        dialog.style.width = '850px';
         dialog.style.height = '600px';
         dialog.style.overflowY = 'auto';
         document.body.appendChild(dialog);
+    }
+
+    function formatarData(ts) {
+        const d = new Date(ts);
+        const dia = String(d.getDate()).padStart(2, '0');
+        const mes = String(d.getMonth() + 1).padStart(2, '0');
+        const hora = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${dia}/${mes} ${hora}:${min}`;
     }
 
     function renderPage(filtros = {}) {
@@ -218,7 +227,7 @@
                             <td>${j.pontos.toLocaleString()}</td>
                             <td>${j.variacao > 0 ? '+' + j.variacao.toLocaleString() : j.variacao.toLocaleString()}</td>
                             <td>${j.tempoEstavel}</td>
-                            <td>${new Date(j.lastUpdate).toLocaleString()}</td>
+                            <td>${formatarData(j.lastUpdate)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
