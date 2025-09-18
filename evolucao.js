@@ -20,10 +20,7 @@
 
     const villages = villRaw.trim().split('\n').map(line => {
         const [id, name, x, y, player, points] = line.split(',');
-        return {
-            playerId: parseInt(player),
-            points: parseInt(points)
-        };
+        return { playerId: parseInt(player), points: parseInt(points) };
     });
 
     const playerPoints = {};
@@ -45,19 +42,14 @@
             const diff = pontosAtuais - cache[id].points;
             const dias = Math.floor((hoje - cache[id].lastUpdate) / (1000 * 60 * 60 * 24));
 
-            if (diff > 0) {
-                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Ativo (+${diff})`;
-            } else if (dias <= 7) {
-                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Inativo ${dias}d`;
-            } else {
-                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Inativo ${dias}d`;
-            }
+            if (diff > 0) status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Ativo (+${diff})`;
+            else if (dias <= 7) status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Inativo ${dias}d`;
+            else status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Inativo ${dias}d`;
         } else {
             status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Novo`;
         }
 
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
-
         return { id, nome, pontos: pontosAtuais, status };
     });
 
@@ -69,7 +61,7 @@
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "600px"; // largura ajustável
+    painel.style.width = "700px"; // mais espaço para filtros
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -86,21 +78,36 @@
             <h3>📊 Atividade dos Jogadores</h3>
             <button id="fecharPainel" style="cursor:pointer;">✖</button>
         </div>
+        <div style="margin-top:5px; display:flex; gap:5px; align-items:center;">
+            <input type="text" id="filtroNome" placeholder="Filtrar por nome" style="flex:1; padding:2px;">
+            <select id="filtroStatus" style="padding:2px;">
+                <option value="">Todos os status</option>
+                <option value="Ativo">Ativo</option>
+                <option value="Inativo">Inativo</option>
+                <option value="Novo">Novo</option>
+            </select>
+            <button id="btnFiltrar" style="padding:2px 6px;">Filtrar</button>
+        </div>
         <div id="resultado" style="margin-top: 10px;"></div>
     `;
     document.body.appendChild(painel);
 
-    document.getElementById("fecharPainel").addEventListener("click", () => {
-        painel.remove();
-    });
+    document.getElementById("fecharPainel").addEventListener("click", () => painel.remove());
 
-    function renderPage() {
+    function renderPage(filtros = {}) {
+        const { nome = "", status = "" } = filtros;
+
+        let filtrados = jogadores.filter(j => 
+            j.nome.toLowerCase().includes(nome.toLowerCase()) &&
+            (status === "" || j.status.includes(status))
+        );
+
         const start = currentPage * PAGE_SIZE;
         const end = start + PAGE_SIZE;
-        const slice = jogadores.slice(start, end);
+        const slice = filtrados.slice(start, end);
 
         let tabela = `
-            <p>Mostrando jogadores ${start + 1} a ${Math.min(end, jogadores.length)} de ${jogadores.length}</p>
+            <p>Mostrando jogadores ${start + 1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
             <table class="vis" width="100%">
                 <thead>
                     <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th></tr>
@@ -109,7 +116,7 @@
                     ${slice.map((j, i) => `
                         <tr>
                             <td>${start + i + 1}</td>
-                            <td>${j.nome}</td>
+                            <td><a href="/game.php?screen=info_player&id=${j.id}" target="_blank">${j.nome}</a></td>
                             <td>${j.pontos.toLocaleString()}</td>
                             <td>${j.status}</td>
                         </tr>
@@ -118,26 +125,27 @@
             </table>
             <div style="margin-top:8px; text-align:center;">
                 <button id="btnPrev" class="btn" ${currentPage === 0 ? "disabled" : ""}>⬅ Voltar</button>
-                <button id="btnNext" class="btn" ${end >= jogadores.length ? "disabled" : ""}>Próximo ➡</button>
+                <button id="btnNext" class="btn" ${end >= filtrados.length ? "disabled" : ""}>Próximo ➡</button>
             </div>
         `;
 
         document.getElementById("resultado").innerHTML = tabela;
 
-        document.getElementById("btnPrev").addEventListener("click", () => {
-            if (currentPage > 0) {
-                currentPage--;
-                renderPage();
-            }
+        document.getElementById("btnPrev")?.addEventListener("click", () => {
+            if (currentPage > 0) { currentPage--; renderPage(filtros); }
         });
-
-        document.getElementById("btnNext").addEventListener("click", () => {
-            if (end < jogadores.length) {
-                currentPage++;
-                renderPage();
-            }
+        document.getElementById("btnNext")?.addEventListener("click", () => {
+            if (end < filtrados.length) { currentPage++; renderPage(filtros); }
         });
     }
+
+    document.getElementById("btnFiltrar").addEventListener("click", () => {
+        currentPage = 0;
+        renderPage({
+            nome: document.getElementById("filtroNome").value,
+            status: document.getElementById("filtroStatus").value
+        });
+    });
 
     renderPage();
 })();
