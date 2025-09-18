@@ -29,7 +29,7 @@
         playerPoints[v.playerId] += v.points;
     }
 
-    // === Criação da lista de jogadores com status ===
+    // === Criação da lista de jogadores com status inicial ===
     let hoje = Date.now();
     let jogadores = Object.keys(players).map(pid => {
         const id = parseInt(pid);
@@ -46,10 +46,21 @@
 
     // === Funções Export / Import ===
     function exportCache() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cache, null, 2));
+        // Exporta todos os dados visíveis
+        const exportData = jogadores.map(j => ({
+            id: j.id,
+            nome: j.nome,
+            pontos: j.pontos,
+            status: j.status,
+            variacao: j.variacao,
+            tempoEstavel: j.tempoEstavel,
+            lastUpdate: cache[j.id]?.lastUpdate || Date.now()
+        }));
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
         const dlAnchor = document.createElement('a');
         dlAnchor.setAttribute("href", dataStr);
-        dlAnchor.setAttribute("download", "tw_players_cache.json");
+        dlAnchor.setAttribute("download", "tw_players_cache_full.json");
         document.body.appendChild(dlAnchor);
         dlAnchor.click();
         dlAnchor.remove();
@@ -66,52 +77,43 @@
             const reader = new FileReader();
             reader.onload = evt => {
                 try {
-                    const importedCache = JSON.parse(evt.target.result);
+                    const importedData = JSON.parse(evt.target.result);
+                    const agora = Date.now();
 
-                    // Atualiza cache, status, variação e tempo estável
-                    jogadores = Object.keys(players).map(pid => {
-                        const id = parseInt(pid);
-                        const nome = players[id];
-                        const pontosAtuais = playerPoints[id] || 0;
+                    // Recalcula status, variação e tempo de inatividade
+                    jogadores = importedData.map(j => {
+                        const pontosAtuais = playerPoints[j.id] || j.pontos;
+                        const oldPoints = j.pontos;
+                        let variacao = pontosAtuais - oldPoints;
 
-                        let status, variacao, tempoEstavel;
-                        if (importedCache[id]) {
-                            const oldPoints = importedCache[id].points;
-                            const lastUpdate = importedCache[id].lastUpdate || Date.now();
-                            variacao = pontosAtuais - oldPoints;
-
-                            if (variacao > 0) {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
-                                cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
-                                tempoEstavel = "0d";
-                            } else if (variacao < 0) {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
-                                cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
-                                tempoEstavel = "0d";
-                            } else {
-                                const diff = Date.now() - lastUpdate;
-                                const dias = Math.floor(diff / (1000*60*60*24));
-                                if (diff > ONE_WEEK) {
-                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
-                                } else {
-                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
-                                }
-                                cache[id] = { points: pontosAtuais, lastUpdate: lastUpdate };
-                                tempoEstavel = dias + "d";
-                            }
+                        let status, tempoEstavel;
+                        if (variacao > 0) {
+                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
+                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
+                            tempoEstavel = "0d";
+                        } else if (variacao < 0) {
+                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
+                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
+                            tempoEstavel = "0d";
                         } else {
-                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
-                            variacao = 0;
-                            tempoEstavel = "-";
-                            cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+                            const lastUpdate = j.lastUpdate || agora;
+                            const diff = agora - lastUpdate;
+                            const dias = Math.floor(diff / (1000*60*60*24));
+                            if (diff > ONE_WEEK) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
+                            } else {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                            }
+                            cache[j.id] = { points: pontosAtuais, lastUpdate };
+                            tempoEstavel = dias + "d";
                         }
 
-                        return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel };
+                        return { ...j, pontos: pontosAtuais, status, variacao, tempoEstavel };
                     });
 
                     currentPage = 0;
                     renderPage();
-                    alert("Cache importado e status atualizado com evolução!");
+                    alert("Cache importado e status recalculado corretamente!");
                 } catch(err) {
                     alert("Erro ao importar o arquivo: " + err.message);
                 }
@@ -168,6 +170,7 @@
     document.getElementById("btnExportar").addEventListener("click", exportCache);
     document.getElementById("btnImportar").addEventListener("click", importCache);
 
+    // === Renderização da tabela com paginação ===
     function renderPage(filtros = {}) {
         const { nome = "", status = "" } = filtros;
 
