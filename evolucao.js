@@ -1,5 +1,6 @@
 (async function () {
     const PAGE_SIZE = 50;
+    const ONE_WEEK = 7 * 24 * 60 * 60 * 1000; // 7 dias em ms
     let currentPage = 0;
     let cache = {}; // cache somente em memória
 
@@ -37,9 +38,10 @@
 
         let status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
         let variacao = 0;
+        let tempoEstavel = "-";
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
 
-        return { id, nome, pontos: pontosAtuais, status, variacao };
+        return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel };
     });
 
     // === Funções Export / Import ===
@@ -66,31 +68,45 @@
                 try {
                     const importedCache = JSON.parse(evt.target.result);
 
-                    // Atualiza cache, status e variação
+                    // Atualiza cache, status, variação e tempo estável
                     jogadores = Object.keys(players).map(pid => {
                         const id = parseInt(pid);
                         const nome = players[id];
                         const pontosAtuais = playerPoints[id] || 0;
 
-                        let status, variacao;
+                        let status, variacao, tempoEstavel;
                         if (importedCache[id]) {
                             const oldPoints = importedCache[id].points;
+                            const lastUpdate = importedCache[id].lastUpdate || Date.now();
                             variacao = pontosAtuais - oldPoints;
+
                             if (variacao > 0) {
                                 status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
+                                cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+                                tempoEstavel = "0d";
                             } else if (variacao < 0) {
                                 status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
+                                cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+                                tempoEstavel = "0d";
                             } else {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                                const diff = Date.now() - lastUpdate;
+                                const dias = Math.floor(diff / (1000*60*60*24));
+                                if (diff > ONE_WEEK) {
+                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/gray.webp"> Inativo`;
+                                } else {
+                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                                }
+                                cache[id] = { points: pontosAtuais, lastUpdate: lastUpdate };
+                                tempoEstavel = dias + "d";
                             }
-                            cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
                         } else {
                             status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
                             variacao = 0;
+                            tempoEstavel = "-";
                             cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
                         }
 
-                        return { id, nome, pontos: pontosAtuais, status, variacao };
+                        return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel };
                     });
 
                     currentPage = 0;
@@ -111,7 +127,7 @@
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "800px"; // mais espaço para coluna extra
+    painel.style.width = "950px";
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -136,6 +152,7 @@
                 <option value="Perdeu">Perdeu</option>
                 <option value="Estável">Estável</option>
                 <option value="Novo">Novo</option>
+                <option value="Inativo">Inativo</option>
             </select>
             <button id="btnFiltrar" style="padding:2px 6px;">Filtrar</button>
         </div>
@@ -167,7 +184,7 @@
             <p>Mostrando jogadores ${start + 1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
             <table class="vis" width="100%">
                 <thead>
-                    <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th><th>Variação</th></tr>
+                    <tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Status</th><th>Variação</th><th>Tempo</th></tr>
                 </thead>
                 <tbody>
                     ${slice.map((j, i) => `
@@ -177,6 +194,7 @@
                             <td>${j.pontos.toLocaleString()}</td>
                             <td>${j.status}</td>
                             <td>${j.variacao > 0 ? '+' + j.variacao.toLocaleString() : j.variacao.toLocaleString()}</td>
+                            <td>${j.tempoEstavel}</td>
                         </tr>
                     `).join('')}
                 </tbody>
