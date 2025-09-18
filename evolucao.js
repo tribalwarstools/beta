@@ -144,11 +144,11 @@ const html = `
             <input type="text" id="filtroTribo" placeholder="Tribo (TAG)" style="width:70px; padding:2px;">
             <select id="filtroStatus" style="padding:2px;">
                 <option value="">Status</option>
-                <option value="green">⬆</option>
-                <option value="red">⬇</option>
-                <option value="yellow">⏸</option>
-                <option value="blue">🆕</option>
-                <option value="grey">⚫</option>
+                <option value="green">Cresceu</option>
+                <option value="red">Perdeu</option>
+                <option value="yellow">Estável</option>
+                <option value="blue">Novo</option>
+                <option value="grey">Inativo</option>
             </select>
             <button id="btnExportar">💾</button>
             <button id="btnImportar">📂</button>
