@@ -44,9 +44,8 @@
         return { id, nome, pontos: pontosAtuais, status, variacao, tempoEstavel };
     });
 
-    // === Funções Export / Import ===
+    // === Funções Export / Import Incremental ===
     function exportCache() {
-        // Exporta todos os dados visíveis
         const exportData = jogadores.map(j => ({
             id: j.id,
             nome: j.nome,
@@ -80,40 +79,66 @@
                     const importedData = JSON.parse(evt.target.result);
                     const agora = Date.now();
 
-                    // Recalcula status, variação e tempo de inatividade
-                    jogadores = importedData.map(j => {
+                    // Criar um mapa rápido do cache atual
+                    const cacheMap = {};
+                    jogadores.forEach(j => cacheMap[j.id] = j);
+
+                    // Mesclar dados importados
+                    importedData.forEach(j => {
                         const pontosAtuais = playerPoints[j.id] || j.pontos;
-                        const oldPoints = j.pontos;
-                        let variacao = pontosAtuais - oldPoints;
+                        const oldEntry = cacheMap[j.id];
 
-                        let status, tempoEstavel;
-                        if (variacao > 0) {
-                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
-                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
-                            tempoEstavel = "0d";
-                        } else if (variacao < 0) {
-                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
-                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
-                            tempoEstavel = "0d";
-                        } else {
-                            const lastUpdate = j.lastUpdate || agora;
-                            const diff = agora - lastUpdate;
-                            const dias = Math.floor(diff / (1000*60*60*24));
-                            if (diff > ONE_WEEK) {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
+                        if (oldEntry) {
+                            // Jogador existente: mantém histórico de lastUpdate
+                            const variacao = pontosAtuais - oldEntry.pontos;
+                            let status, tempoEstavel, lastUpdate;
+
+                            if (variacao > 0) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
+                                lastUpdate = agora;
+                                tempoEstavel = "0d";
+                            } else if (variacao < 0) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
+                                lastUpdate = agora;
+                                tempoEstavel = "0d";
                             } else {
-                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                                lastUpdate = j.lastUpdate || oldEntry.lastUpdate || agora;
+                                const diff = agora - lastUpdate;
+                                const dias = Math.floor(diff / (1000*60*60*24));
+                                if (diff > ONE_WEEK) {
+                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
+                                } else {
+                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                                }
+                                tempoEstavel = dias + "d";
                             }
-                            cache[j.id] = { points: pontosAtuais, lastUpdate };
-                            tempoEstavel = dias + "d";
-                        }
 
-                        return { ...j, pontos: pontosAtuais, status, variacao, tempoEstavel };
+                            cache[j.id] = { points: pontosAtuais, lastUpdate };
+                            cacheMap[j.id] = {
+                                ...oldEntry,
+                                pontos: pontosAtuais,
+                                status,
+                                variacao,
+                                tempoEstavel
+                            };
+                        } else {
+                            // Jogador novo: adiciona como "Novo"
+                            cache[j.id] = { points: pontosAtuais, lastUpdate: agora };
+                            cacheMap[j.id] = {
+                                id: j.id,
+                                nome: j.nome,
+                                pontos: pontosAtuais,
+                                status: `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`,
+                                variacao: 0,
+                                tempoEstavel: "-",
+                            };
+                        }
                     });
 
+                    jogadores = Object.values(cacheMap);
                     currentPage = 0;
                     renderPage();
-                    alert("Cache importado e status recalculado corretamente!");
+                    alert("Cache importado e mesclado com sucesso!");
                 } catch(err) {
                     alert("Erro ao importar o arquivo: " + err.message);
                 }
