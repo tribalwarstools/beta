@@ -123,7 +123,7 @@
     `;
     
     // AUMENTAR A LARGURA DO DIALOG SHOW
-    Dialog.show("atividade_jogadores", html, { width: 600 });
+    Dialog.show("atividade_jogadores", html, { width: 900 });
     
     renderPage();
 })();
