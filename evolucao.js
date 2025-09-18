@@ -138,8 +138,8 @@
                 }
                 #resultado th:nth-child(1), #resultado td:nth-child(1) { width: 30px; }   /* Status */
                 #resultado th:nth-child(2), #resultado td:nth-child(2) { width: 125px; } /* Jogador reduzido */
-                #resultado th:nth-child(3), #resultado td:nth-child(3) { width: 90px; }   /* Pontos */
-                #resultado th:nth-child(4), #resultado td:nth-child(4) { width: 90px; }   /* Variação */
+                #resultado th:nth-child(3), #resultado td:nth-child(3) { width: 50px; }   /* Pontos */
+                #resultado th:nth-child(4), #resultado td:nth-child(4) { width: 50px; }   /* Variação */
                 #resultado th:nth-child(5), #resultado td:nth-child(5) { width: 70px; }   /* Tempo */
                 #resultado th:nth-child(6), #resultado td:nth-child(6) { width: 110px; }  /* Última Atualização */
             </style>
