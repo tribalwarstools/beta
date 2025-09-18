@@ -36,8 +36,7 @@
         const pontosAtuais = playerPoints[id] || 0;
 
         let status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
-
-        cache[id] = { points: pontosAtuais, lastUpdate: hoje }; // sempre inicializa
+        cache[id] = { points: pontosAtuais, lastUpdate: hoje };
 
         return { id, nome, pontos: pontosAtuais, status };
     });
@@ -60,12 +59,41 @@
         input.onchange = e => {
             const file = e.target.files[0];
             if (!file) return;
+
             const reader = new FileReader();
             reader.onload = evt => {
                 try {
-                    cache = JSON.parse(evt.target.result);
+                    const importedCache = JSON.parse(evt.target.result);
+
+                    // Atualiza cache e status de evolução
+                    jogadores = Object.keys(players).map(pid => {
+                        const id = parseInt(pid);
+                        const nome = players[id];
+                        const pontosAtuais = playerPoints[id] || 0;
+
+                        let status;
+                        if (importedCache[id]) {
+                            const oldPoints = importedCache[id].points;
+                            if (pontosAtuais > oldPoints) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/green.webp"> Cresceu`;
+                            } else if (pontosAtuais < oldPoints) {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Perdeu`;
+                            } else {
+                                status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
+                            }
+                            cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+                        } else {
+                            // Novo jogador
+                            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
+                            cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+                        }
+
+                        return { id, nome, pontos: pontosAtuais, status };
+                    });
+
+                    currentPage = 0;
                     renderPage();
-                    alert("Cache importado com sucesso!");
+                    alert("Cache importado e status atualizado com evolução!");
                 } catch(err) {
                     alert("Erro ao importar o arquivo: " + err.message);
                 }
@@ -102,8 +130,9 @@
             <input type="text" id="filtroNome" placeholder="Filtrar por nome" style="flex:1; padding:2px;">
             <select id="filtroStatus" style="padding:2px;">
                 <option value="">Todos os status</option>
-                <option value="Ativo">Ativo</option>
-                <option value="Inativo">Inativo</option>
+                <option value="Cresceu">Cresceu</option>
+                <option value="Perdeu">Perdeu</option>
+                <option value="Estável">Estável</option>
                 <option value="Novo">Novo</option>
             </select>
             <button id="btnFiltrar" style="padding:2px 6px;">Filtrar</button>
