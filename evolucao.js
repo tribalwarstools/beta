@@ -140,7 +140,7 @@ const html = `
 
         <h3>📊 Atividade dos Jogadores</h3>
         <div style="display:flex; gap:5px; margin-bottom:5px;">
-            <input type="text" id="filtroNome" placeholder="Nome" style="flex:1; padding:2px;">
+            <input type="text" id="filtroNome" placeholder="Nome" style="width:100px; padding:2px;">
             <input type="text" id="filtroTribo" placeholder="Tribo (TAG)" style="width:70px; padding:2px;">
             <select id="filtroStatus" style="padding:2px;">
                 <option value="">Status</option>
