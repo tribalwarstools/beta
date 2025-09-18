@@ -26,17 +26,14 @@
         };
     });
 
-    // === Agrupa pontos por jogador ===
     const playerPoints = {};
     for (let v of villages) {
         if (!playerPoints[v.playerId]) playerPoints[v.playerId] = 0;
         playerPoints[v.playerId] += v.points;
     }
 
-    // === Carrega cache anterior ===
     let cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
 
-    // === Monta lista final de jogadores ===
     let jogadores = Object.keys(players).map(pid => {
         const id = parseInt(pid);
         const nome = players[id];
@@ -59,16 +56,44 @@
             status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Novo`;
         }
 
-        // Atualiza cache
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
 
         return { id, nome, pontos: pontosAtuais, status };
     });
 
-    // Salva cache atualizado
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
 
-    // === Renderização ===
+    // === Criação do painel flutuante ===
+    let painel = document.createElement("div");
+    painel.id = "atividade_jogadores_painel";
+    painel.style.position = "fixed";
+    painel.style.top = "50px";
+    painel.style.right = "20px";
+    painel.style.width = "600px"; // largura ajustável
+    painel.style.maxHeight = "80vh";
+    painel.style.overflowY = "auto";
+    painel.style.backgroundColor = "#f4f4f4";
+    painel.style.border = "2px solid #888";
+    painel.style.borderRadius = "8px";
+    painel.style.padding = "10px";
+    painel.style.zIndex = 9999;
+    painel.style.boxShadow = "0 0 10px rgba(0,0,0,0.5)";
+    painel.style.fontFamily = "Verdana, sans-serif";
+    painel.style.fontSize = "12px";
+
+    painel.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>📊 Atividade dos Jogadores</h3>
+            <button id="fecharPainel" style="cursor:pointer;">✖</button>
+        </div>
+        <div id="resultado" style="margin-top: 10px;"></div>
+    `;
+    document.body.appendChild(painel);
+
+    document.getElementById("fecharPainel").addEventListener("click", () => {
+        painel.remove();
+    });
+
     function renderPage() {
         const start = currentPage * PAGE_SIZE;
         const end = start + PAGE_SIZE;
@@ -114,16 +139,5 @@
         });
     }
 
-    // === Interface ===
-    const html = `
-        <div style="font-family: Verdana; font-size: 12px;">
-            <h3>📊 Atividade dos Jogadores</h3>
-            <div id="resultado" style="margin-top: 10px;"></div>
-        </div>
-    `;
-    
-    // AUMENTAR A LARGURA DO DIALOG SHOW
-    Dialog.show("atividade_jogadores", html, { width: 900 });
-    
     renderPage();
 })();
