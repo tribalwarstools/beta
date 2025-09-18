@@ -37,7 +37,7 @@
         const pontosAtuais = playerPoints[id] || 0;
         const hoje = Date.now();
 
-        let status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Inativo`;
+        let status = "";
         if (cache[id]) {
             const diff = pontosAtuais - cache[id].points;
             const dias = Math.floor((hoje - cache[id].lastUpdate) / (1000 * 60 * 60 * 24));
@@ -46,10 +46,13 @@
             else if (dias <= 7) status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Inativo ${dias}d`;
             else status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/red.webp"> Inativo ${dias}d`;
         } else {
-            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Novo`;
+            // Novo jogador: azul
+            status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/blue.webp"> Novo`;
         }
 
+        // Atualiza cache após definir status
         cache[id] = { points: pontosAtuais, lastUpdate: hoje };
+
         return { id, nome, pontos: pontosAtuais, status };
     });
 
@@ -61,7 +64,7 @@
     painel.style.position = "fixed";
     painel.style.top = "50px";
     painel.style.right = "20px";
-    painel.style.width = "700px"; // mais espaço para filtros
+    painel.style.width = "700px";
     painel.style.maxHeight = "80vh";
     painel.style.overflowY = "auto";
     painel.style.backgroundColor = "#f4f4f4";
@@ -97,7 +100,7 @@
     function renderPage(filtros = {}) {
         const { nome = "", status = "" } = filtros;
 
-        let filtrados = jogadores.filter(j => 
+        let filtrados = jogadores.filter(j =>
             j.nome.toLowerCase().includes(nome.toLowerCase()) &&
             (status === "" || j.status.includes(status))
         );
