@@ -92,7 +92,7 @@
                                 const diff = Date.now() - lastUpdate;
                                 const dias = Math.floor(diff / (1000*60*60*24));
                                 if (diff > ONE_WEEK) {
-                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/gray.webp"> Inativo`;
+                                    status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/grey.webp"> Inativo`;
                                 } else {
                                     status = `<img src="https://dsbr.innogamescdn.com/asset/afa3a1fb/graphic/dots/yellow.webp"> Estável`;
                                 }
