@@ -174,7 +174,7 @@ function importCache() {
                 origemCache = "Importado";
                 dataCache = formatarData(agora);
                 renderPage();
-                salvarLocal(); // também salva no localStorage
+                salvarLocal();
             } catch (err) {
                 alert("Erro ao importar: " + err.message);
             }
@@ -213,6 +213,7 @@ const html = `
             </select>
             <button id="btnExportar">💾</button>
             <button id="btnImportar">📂</button>
+            <button id="btnResetar">🗑 Resetar</button>
         </div>
         <div id="infoCache" style="margin-bottom:5px; font-size:11px; color:#555;">
             Último snapshot: ${origemCache} (${dataCache})
@@ -239,7 +240,6 @@ function renderPage(filtros = {}) {
         (status === "" || j.status.includes(status))
     );
 
-    // === Estatísticas ===
     const stats = { blue:0, yellow:0, green:0, red:0, grey:0 };
     filtrados.forEach(j => {
         if(j.status.includes('blue')) stats.blue++;
@@ -293,12 +293,31 @@ function renderPage(filtros = {}) {
 
     document.getElementById("btnPrev")?.addEventListener("click",()=>{if(currentPage>0){currentPage--;renderPage(filtros);}});
     document.getElementById("btnNext")?.addEventListener("click",()=>{if(end<filtrados.length){currentPage++;renderPage(filtros);}});
-    salvarLocal(); // salva sempre que renderiza
+    salvarLocal();
 }
 
-// === Eventos ===
+// === Eventos de filtros ===
 document.getElementById("btnExportar").addEventListener("click", exportCache);
 document.getElementById("btnImportar").addEventListener("click", importCache);
+document.getElementById("btnResetar").addEventListener("click", () => {
+    if(confirm("Deseja realmente resetar todo o histórico?")) {
+        localStorage.removeItem("tw_players_cache");
+        origemCache = "LocalStorage";
+        dataCache = "-";
+        jogadores = Object.keys(players).map(pid => {
+            const id = +pid;
+            const nome = players[id].nome;
+            const tribo = players[id].tribo || "";
+            const pontosAtuais = playerPoints[id] || 0;
+            let status = `<img src="/graphic/dots/blue.png">`;
+            cache[id] = { points: pontosAtuais, lastUpdate: Date.now() };
+            return { id, nome, tribo, pontos: pontosAtuais, status, variacao: 0, tempoEstavel: "-", lastUpdate: Date.now() };
+        });
+        currentPage = 0;
+        renderPage();
+        alert("Histórico resetado!");
+    }
+});
 
 ["filtroNome","filtroTribo","filtroStatus"].forEach(id=>{
     document.getElementById(id).addEventListener("input",()=>{
