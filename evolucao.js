@@ -3,6 +3,8 @@ const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
 let currentPage = 0;
 let cache = {};
+let origemCache = "LocalStorage"; // LocalStorage ou Importado
+let dataCache = "-";
 
 // === Baixar arquivos ===
 const [villRaw, playerRaw, allyRaw] = await Promise.all([
@@ -95,6 +97,8 @@ let jogadores = Object.keys(players).map(pid => {
         });
 
         jogadores = Object.values(map);
+        origemCache = "LocalStorage";
+        dataCache = formatarData(hoje);
     } catch (e) {
         console.warn("Erro ao carregar do localStorage:", e);
     }
@@ -167,6 +171,8 @@ function importCache() {
 
                 jogadores = Object.values(map);
                 currentPage = 0;
+                origemCache = "Importado";
+                dataCache = formatarData(agora);
                 renderPage();
                 salvarLocal(); // também salva no localStorage
             } catch (err) {
@@ -207,6 +213,9 @@ const html = `
             </select>
             <button id="btnExportar">💾</button>
             <button id="btnImportar">📂</button>
+        </div>
+        <div id="infoCache" style="margin-bottom:5px; font-size:11px; color:#555;">
+            Último snapshot: ${origemCache} (${dataCache})
         </div>
         <div id="resultado"></div>
     </div>
@@ -249,6 +258,8 @@ function renderPage(filtros = {}) {
             <div><img src="/graphic/dots/grey.png"> ${stats.grey}</div>
         </div>
     `;
+
+    document.getElementById("infoCache").innerHTML = `Último snapshot: ${origemCache} (${dataCache})`;
 
     const start = currentPage * PAGE_SIZE, end = start + PAGE_SIZE;
     const slice = filtrados.slice(start, end);
