@@ -55,6 +55,60 @@ let jogadores = Object.keys(players).map(pid => {
     return { id, nome, tribo, pontos: pontosAtuais, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
 });
 
+// === Importar de localStorage ===
+(function carregarLocal() {
+    try {
+        const salvo = JSON.parse(localStorage.getItem("tw_players_cache") || "null");
+        if (!salvo) return;
+        const agora = Date.now();
+        const map = {};
+        jogadores.forEach(j => map[j.id] = j);
+
+        salvo.forEach(j => {
+            const pontosAtuais = playerPoints[j.id] || j.pontos;
+            const variacao = pontosAtuais - (j.pontos || 0);
+
+            let status, tempoEstavel, lastUpdate;
+            if (variacao > 0) {
+                status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d";
+            } else if (variacao < 0) {
+                status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d";
+            } else {
+                lastUpdate = j.lastUpdate || agora;
+                const diff = agora - lastUpdate;
+                const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+                status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
+                tempoEstavel = dias + "d";
+            }
+
+            cache[j.id] = { points: pontosAtuais, lastUpdate };
+            map[j.id] = {
+                id: j.id,
+                nome: j.nome,
+                tribo: j.tribo || "",
+                pontos: pontosAtuais,
+                status,
+                variacao,
+                tempoEstavel,
+                lastUpdate
+            };
+        });
+
+        jogadores = Object.values(map);
+    } catch (e) {
+        console.warn("Erro ao carregar do localStorage:", e);
+    }
+})();
+
+// === Salvar automaticamente no localStorage ===
+function salvarLocal() {
+    try {
+        localStorage.setItem("tw_players_cache", JSON.stringify(jogadores));
+    } catch (e) {
+        console.warn("Erro ao salvar no localStorage:", e);
+    }
+}
+
 // === Exportar ===
 function exportCache() {
     const dataStr = "data:text/json;charset=utf-8," +
@@ -114,6 +168,7 @@ function importCache() {
                 jogadores = Object.values(map);
                 currentPage = 0;
                 renderPage();
+                salvarLocal(); // também salva no localStorage
             } catch (err) {
                 alert("Erro ao importar: " + err.message);
             }
@@ -187,11 +242,11 @@ function renderPage(filtros = {}) {
 
     const statsHtml = `
         <div style="display:flex; gap:15px; margin-bottom:5px;">
-            <div><img src="/graphic/dots/blue.png"> Novo: ${stats.blue}</div>
-            <div><img src="/graphic/dots/yellow.png"> Estável: ${stats.yellow}</div>
-            <div><img src="/graphic/dots/green.png"> Cresceu: ${stats.green}</div>
-            <div><img src="/graphic/dots/red.png"> Perdeu: ${stats.red}</div>
-            <div><img src="/graphic/dots/grey.png"> Inativo: ${stats.grey}</div>
+            <div><img src="/graphic/dots/blue.png"> ${stats.blue}</div>
+            <div><img src="/graphic/dots/yellow.png"> ${stats.yellow}</div>
+            <div><img src="/graphic/dots/green.png"> ${stats.green}</div>
+            <div><img src="/graphic/dots/red.png"> ${stats.red}</div>
+            <div><img src="/graphic/dots/grey.png"> ${stats.grey}</div>
         </div>
     `;
 
@@ -227,6 +282,7 @@ function renderPage(filtros = {}) {
 
     document.getElementById("btnPrev")?.addEventListener("click",()=>{if(currentPage>0){currentPage--;renderPage(filtros);}});
     document.getElementById("btnNext")?.addEventListener("click",()=>{if(end<filtrados.length){currentPage++;renderPage(filtros);}});
+    salvarLocal(); // salva sempre que renderiza
 }
 
 // === Eventos ===
