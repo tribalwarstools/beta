@@ -54,7 +54,11 @@ let jogadores = Object.keys(players).map(pid => {
     const tribo = players[id].tribo || "";
     const pontosAtuais = playerPoints[id] || 0;
     const aldeias = playerVillages[id] || 0;
-    let status = `<img src="/graphic/dots/blue.png">`;
+
+    let status;
+    if (aldeias === 0) status = `<img src="/graphic/dots/grey.png">`;
+    else status = `<img src="/graphic/dots/blue.png">`;
+
     cache[id] = { points: pontosAtuais, lastUpdate: hoje };
     return { id, nome, tribo, pontos: pontosAtuais, aldeias, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
 });
@@ -217,9 +221,15 @@ function importCache() {
 
                 imported.forEach(j => {
                     const pontosAtuais = playerPoints[j.id] || j.pontos;
+                    const aldeiasAtuais = playerVillages[j.id] || 0;
                     const variacao = pontosAtuais - (j.pontos || 0);
+
                     let status, tempoEstavel, lastUpdate;
-                    if (variacao > 0) {
+                    if (aldeiasAtuais === 0) {
+                        status = `<img src="/graphic/dots/grey.png">`;
+                        tempoEstavel = "-";
+                        lastUpdate = agora;
+                    } else if (variacao > 0) {
                         status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d";
                     } else if (variacao < 0) {
                         status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d";
@@ -230,13 +240,14 @@ function importCache() {
                         status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
                         tempoEstavel = dias + "d";
                     }
+
                     cache[j.id] = { points: pontosAtuais, lastUpdate };
                     map[j.id] = {
                         id: j.id,
                         nome: j.nome,
                         tribo: j.tribo || "",
                         pontos: pontosAtuais,
-                        aldeias: playerVillages[j.id] || 0,
+                        aldeias: aldeiasAtuais,
                         status,
                         variacao,
                         tempoEstavel,
