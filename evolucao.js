@@ -36,11 +36,14 @@ const villages = villRaw.trim().split('\n').map(line => {
     return { playerId: +player, points: +points };
 });
 
-// === Pontos atuais por jogador ===
+// === Pontos e aldeias por jogador ===
 const playerPoints = {};
+const playerVillages = {};
 for (let v of villages) {
     if (!playerPoints[v.playerId]) playerPoints[v.playerId] = 0;
+    if (!playerVillages[v.playerId]) playerVillages[v.playerId] = 0;
     playerPoints[v.playerId] += v.points;
+    playerVillages[v.playerId]++;
 }
 
 // === Estrutura inicial ===
@@ -50,82 +53,15 @@ let jogadores = Object.keys(players).map(pid => {
     const nome = players[id].nome;
     const tribo = players[id].tribo || "";
     const pontosAtuais = playerPoints[id] || 0;
+    const aldeias = playerVillages[id] || 0;
     let status = `<img src="/graphic/dots/blue.png">`;
     cache[id] = { points: pontosAtuais, lastUpdate: hoje };
-    return { id, nome, tribo, pontos: pontosAtuais, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
+    return { id, nome, tribo, pontos: pontosAtuais, aldeias, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
 });
-
-// === Exportar ===
-function exportCache() {
-    const dataStr = "data:text/json;charset=utf-8," +
-        encodeURIComponent(JSON.stringify(jogadores, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.href = dataStr;
-    dlAnchor.download = "tw_players_cache.json";
-    dlAnchor.click();
-}
-
-// === Importar ===
-function importCache() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = evt => {
-            try {
-                const imported = JSON.parse(evt.target.result);
-                const agora = Date.now();
-                const map = {};
-                jogadores.forEach(j => map[j.id] = j);
-
-                imported.forEach(j => {
-                    const pontosAtuais = playerPoints[j.id] || j.pontos;
-                    const variacao = pontosAtuais - (j.pontos || 0);
-
-                    let status, tempoEstavel, lastUpdate;
-                    if (variacao > 0) {
-                        status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d";
-                    } else if (variacao < 0) {
-                        status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d";
-                    } else {
-                        lastUpdate = j.lastUpdate || agora;
-                        const diff = agora - lastUpdate;
-                        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
-                        status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
-                        tempoEstavel = dias + "d";
-                    }
-
-                    cache[j.id] = { points: pontosAtuais, lastUpdate };
-                    map[j.id] = {
-                        id: j.id,
-                        nome: j.nome,
-                        tribo: j.tribo || "",
-                        pontos: pontosAtuais,
-                        status,
-                        variacao,
-                        tempoEstavel,
-                        lastUpdate
-                    };
-                });
-
-                jogadores = Object.values(map);
-                currentPage = 0;
-                renderPage();
-            } catch (err) {
-                alert("Erro ao importar: " + err.message);
-            }
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-}
 
 // === Layout ===
 const html = `
-    <div style="font-family: Verdana; font-size:12px; width:800px; height:600px; overflow-y:auto;">
+    <div style="font-family: Verdana; font-size:12px; width:850px; height:600px; overflow-y:auto;">
         <style>
             #resultado table { table-layout: fixed; width: 100%; border-collapse: collapse; }
             #resultado th, #resultado td { text-align:left; padding:2px; word-break:break-word; }
@@ -136,6 +72,7 @@ const html = `
             #resultado th:nth-child(5), #resultado td:nth-child(5) { width:60px; }
             #resultado th:nth-child(6), #resultado td:nth-child(6) { width:70px; }
             #resultado th:nth-child(7), #resultado td:nth-child(7) { width:60px; }
+            #resultado th:nth-child(8), #resultado td:nth-child(8) { width:60px; }
         </style>
 
         <h3>📊 Atividade dos Jogadores</h3>
@@ -175,7 +112,6 @@ function renderPage(filtros = {}) {
         (status === "" || j.status.includes(status))
     );
 
-    // === Estatísticas ===
     const stats = { blue:0, yellow:0, green:0, red:0, grey:0 };
     filtrados.forEach(j => {
         if(j.status.includes('blue')) stats.blue++;
@@ -203,7 +139,7 @@ function renderPage(filtros = {}) {
         <p>Mostrando ${start+1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
         <table class="vis">
             <thead><tr>
-                <th></th><th>Jogador</th><th>Pontos</th><th>Var</th><th>Tempo</th><th>Atualizado</th><th>Tribo</th>
+                <th></th><th>Jogador</th><th>Pontos</th><th>Aldeias</th><th>Var</th><th>Tempo</th><th>Atualizado</th><th>Tribo</th>
             </tr></thead>
             <tbody>
                 ${slice.map(j => `
@@ -211,6 +147,7 @@ function renderPage(filtros = {}) {
                         <td>${j.status}</td>
                         <td><a href="/game.php?screen=info_player&id=${j.id}" target="_blank">${j.nome}</a></td>
                         <td>${j.pontos.toLocaleString()}</td>
+                        <td>${j.aldeias}</td>
                         <td>${j.variacao>0?`+${j.variacao.toLocaleString()}`:j.variacao.toLocaleString()}</td>
                         <td>${j.tempoEstavel}</td>
                         <td>${formatarData(j.lastUpdate)}</td>
@@ -229,7 +166,6 @@ function renderPage(filtros = {}) {
     document.getElementById("btnNext")?.addEventListener("click",()=>{if(end<filtrados.length){currentPage++;renderPage(filtros);}});
 }
 
-// === Eventos ===
 document.getElementById("btnExportar").addEventListener("click", exportCache);
 document.getElementById("btnImportar").addEventListener("click", importCache);
 
@@ -245,4 +181,69 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
 });
 
 renderPage();
+
+// Exportar e Importar (inalterados do seu código original)
+function exportCache() {
+    const dataStr = "data:text/json;charset=utf-8," +
+        encodeURIComponent(JSON.stringify(jogadores, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.href = dataStr;
+    dlAnchor.download = "tw_players_cache.json";
+    dlAnchor.click();
+}
+function importCache() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = evt => {
+            try {
+                const imported = JSON.parse(evt.target.result);
+                const agora = Date.now();
+                const map = {};
+                jogadores.forEach(j => map[j.id] = j);
+
+                imported.forEach(j => {
+                    const pontosAtuais = playerPoints[j.id] || j.pontos;
+                    const variacao = pontosAtuais - (j.pontos || 0);
+                    let status, tempoEstavel, lastUpdate;
+                    if (variacao > 0) {
+                        status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d";
+                    } else if (variacao < 0) {
+                        status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d";
+                    } else {
+                        lastUpdate = j.lastUpdate || agora;
+                        const diff = agora - lastUpdate;
+                        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+                        status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
+                        tempoEstavel = dias + "d";
+                    }
+                    cache[j.id] = { points: pontosAtuais, lastUpdate };
+                    map[j.id] = {
+                        id: j.id,
+                        nome: j.nome,
+                        tribo: j.tribo || "",
+                        pontos: pontosAtuais,
+                        aldeias: playerVillages[j.id] || 0,
+                        status,
+                        variacao,
+                        tempoEstavel,
+                        lastUpdate
+                    };
+                });
+
+                jogadores = Object.values(map);
+                currentPage = 0;
+                renderPage();
+            } catch (err) {
+                alert("Erro ao importar: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
 })();
