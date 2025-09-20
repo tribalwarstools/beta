@@ -1,7 +1,7 @@
 (async function () {
 const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-let currentPage = 0;
+let currentPage = 1; // agora começa em 1
 let cache = {};
 
 // === Baixar arquivos ===
@@ -131,7 +131,11 @@ function renderPage(filtros = {}) {
         </div>
     `;
 
-    const start = currentPage * PAGE_SIZE, end = start + PAGE_SIZE;
+    const totalPaginas = Math.ceil(filtrados.length / PAGE_SIZE);
+    if (currentPage > totalPaginas) currentPage = totalPaginas || 1;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
     const slice = filtrados.slice(start, end);
 
     let tabela = `
@@ -155,15 +159,20 @@ function renderPage(filtros = {}) {
                     </tr>`).join('')}
             </tbody>
         </table>
-        <div style="text-align:center; margin-top:5px;">
-            <button id="btnPrev" ${currentPage===0?"disabled":""}>⬅</button>
-            <button id="btnNext" ${end>=filtrados.length?"disabled":""}>➡</button>
+        <div class="paginacao" style="margin-top:8px; text-align:center;">
+            <button class="btn" id="btnPrev" ${currentPage <= 1 ? "disabled" : ""}>Anterior</button>
+            <span style="margin:0 8px;">Página ${currentPage} / ${totalPaginas||1}</span>
+            <button class="btn" id="btnNext" ${currentPage >= totalPaginas ? "disabled" : ""}>Próxima</button>
         </div>
     `;
     document.getElementById("resultado").innerHTML = tabela;
 
-    document.getElementById("btnPrev")?.addEventListener("click",()=>{if(currentPage>0){currentPage--;renderPage(filtros);}});
-    document.getElementById("btnNext")?.addEventListener("click",()=>{if(end<filtrados.length){currentPage++;renderPage(filtros);}});
+    document.getElementById("btnPrev")?.addEventListener("click",()=>{
+        if(currentPage>1){currentPage--;renderPage(filtros);}
+    });
+    document.getElementById("btnNext")?.addEventListener("click",()=>{
+        if(currentPage<totalPaginas){currentPage++;renderPage(filtros);}
+    });
 }
 
 document.getElementById("btnExportar").addEventListener("click", exportCache);
@@ -171,7 +180,7 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
 
 ["filtroNome","filtroTribo","filtroStatus"].forEach(id=>{
     document.getElementById(id).addEventListener("input",()=>{
-        currentPage=0;
+        currentPage=1;
         renderPage({
             nome:document.getElementById("filtroNome").value,
             tribo:document.getElementById("filtroTribo").value,
@@ -182,7 +191,7 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
 
 renderPage();
 
-// Exportar e Importar (inalterados do seu código original)
+// === Exportar / Importar ===
 function exportCache() {
     const dataStr = "data:text/json;charset=utf-8," +
         encodeURIComponent(JSON.stringify(jogadores, null, 2));
@@ -236,7 +245,7 @@ function importCache() {
                 });
 
                 jogadores = Object.values(map);
-                currentPage = 0;
+                currentPage = 1;
                 renderPage();
             } catch (err) {
                 alert("Erro ao importar: " + err.message);
