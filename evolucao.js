@@ -1,7 +1,7 @@
 (async function () {
 const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-let currentPage = 1; // agora começa em 1
+let currentPage = 1;
 let cache = {};
 
 // === Baixar arquivos ===
@@ -65,8 +65,15 @@ let jogadores = Object.keys(players).map(pid => {
 
 // === Layout ===
 const html = `
-    <div style="font-family: Verdana; font-size:12px; width:850px; height:600px; overflow-y:auto;">
+    <div style="font-family: Verdana; font-size:12px; width:850px; height:600px;
+                display:flex; flex-direction:column;">
+
         <style>
+            #painelAtividade { display:flex; flex-direction:column; height:100%; }
+            #painelHeader { flex:0 0 auto; border-bottom:1px solid #999; padding:5px; background:#f4f4f4; }
+            #painelBody   { flex:1 1 auto; overflow-y:auto; padding:5px; }
+            #painelFooter { flex:0 0 auto; border-top:1px solid #999; padding:5px; background:#f4f4f4; text-align:center; }
+
             #resultado table { table-layout: fixed; width: 100%; border-collapse: collapse; }
             #resultado th, #resultado td { text-align:left; padding:2px; word-break:break-word; }
             #resultado th:nth-child(1), #resultado td:nth-child(1) { width:25px; }
@@ -79,22 +86,39 @@ const html = `
             #resultado th:nth-child(8), #resultado td:nth-child(8) { width:60px; }
         </style>
 
-        <h3>📊 Atividade dos Jogadores</h3>
-        <div style="display:flex; gap:5px; margin-bottom:5px;">
-            <input type="text" id="filtroNome" placeholder="Nome" style="width:100px; padding:2px;">
-            <input type="text" id="filtroTribo" placeholder="Tribo (TAG)" style="width:70px; padding:2px;">
-            <select id="filtroStatus" style="padding:2px;">
-                <option value="">Status</option>
-                <option value="green">Cresceu</option>
-                <option value="red">Perdeu</option>
-                <option value="yellow">Estável</option>
-                <option value="blue">Novo</option>
-                <option value="grey">Inativo</option>
-            </select>
-            <button id="btnExportar">💾</button>
-            <button id="btnImportar">📂</button>
+        <div id="painelAtividade">
+
+            <!-- Cabeçalho fixo -->
+            <div id="painelHeader">
+                <h3 style="margin-top:0;">📊 Atividade dos Jogadores</h3>
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <input type="text" id="filtroNome" placeholder="Nome" style="width:100px; padding:2px;">
+                    <input type="text" id="filtroTribo" placeholder="Tribo (TAG)" style="width:70px; padding:2px;">
+                    <select id="filtroStatus" style="padding:2px;">
+                        <option value="">Status</option>
+                        <option value="green">Cresceu</option>
+                        <option value="red">Perdeu</option>
+                        <option value="yellow">Estável</option>
+                        <option value="blue">Novo</option>
+                        <option value="grey">Inativo</option>
+                    </select>
+                    <button id="btnExportar">💾</button>
+                    <button id="btnImportar">📂</button>
+                </div>
+                <div id="statsLegenda"></div>
+            </div>
+
+            <!-- Conteúdo rolável -->
+            <div id="painelBody">
+                <div id="resultado"></div>
+            </div>
+
+            <!-- Rodapé fixo -->
+            <div id="painelFooter">
+                <div id="paginacao"></div>
+            </div>
+
         </div>
-        <div id="resultado"></div>
     </div>
 `;
 
@@ -126,7 +150,7 @@ function renderPage(filtros = {}) {
     });
 
     const statsHtml = `
-        <div style="display:flex; gap:15px; margin-bottom:5px;">
+        <div style="display:flex; gap:15px;">
             <div><img src="/graphic/dots/blue.png"> Novo: ${stats.blue}</div>
             <div><img src="/graphic/dots/yellow.png"> Estável: ${stats.yellow}</div>
             <div><img src="/graphic/dots/green.png"> Cresceu: ${stats.green}</div>
@@ -134,6 +158,7 @@ function renderPage(filtros = {}) {
             <div><img src="/graphic/dots/grey.png"> Inativo: ${stats.grey}</div>
         </div>
     `;
+    document.getElementById("statsLegenda").innerHTML = statsHtml;
 
     const totalPaginas = Math.ceil(filtrados.length / PAGE_SIZE);
     if (currentPage > totalPaginas) currentPage = totalPaginas || 1;
@@ -143,7 +168,6 @@ function renderPage(filtros = {}) {
     const slice = filtrados.slice(start, end);
 
     let tabela = `
-        ${statsHtml}
         <p>Mostrando ${start+1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
         <table class="vis">
             <thead><tr>
@@ -163,13 +187,15 @@ function renderPage(filtros = {}) {
                     </tr>`).join('')}
             </tbody>
         </table>
-        <div class="paginacao" style="margin-top:8px; text-align:center;">
-            <button class="btn" id="btnPrev" ${currentPage <= 1 ? "disabled" : ""}>Anterior</button>
-            <span style="margin:0 8px;">Página ${currentPage} / ${totalPaginas||1}</span>
-            <button class="btn" id="btnNext" ${currentPage >= totalPaginas ? "disabled" : ""}>Próxima</button>
-        </div>
     `;
     document.getElementById("resultado").innerHTML = tabela;
+
+    const paginacaoHtml = `
+        <button class="btn" id="btnPrev" ${currentPage <= 1 ? "disabled" : ""}>Anterior</button>
+        <span style="margin:0 8px;">Página ${currentPage} / ${totalPaginas||1}</span>
+        <button class="btn" id="btnNext" ${currentPage >= totalPaginas ? "disabled" : ""}>Próxima</button>
+    `;
+    document.getElementById("paginacao").innerHTML = paginacaoHtml;
 
     document.getElementById("btnPrev")?.addEventListener("click",()=>{
         if(currentPage>1){currentPage--;renderPage(filtros);}
