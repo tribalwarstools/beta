@@ -3,6 +3,8 @@ const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
 let currentPage = 1;
 let cache = {};
+let sortKey = null;   // coluna atual
+let sortDir = 1;      // 1 = asc, -1 = desc
 
 // === Baixar arquivos ===
 const [villRaw, playerRaw, allyRaw] = await Promise.all([
@@ -67,28 +69,18 @@ let jogadores = Object.keys(players).map(pid => {
 const html = `
     <div style="font-family: Verdana; font-size:12px; width:850px; height:600px;
                 display:flex; flex-direction:column;">
-
         <style>
             #painelAtividade { display:flex; flex-direction:column; height:100%; }
             #painelHeader { flex:0 0 auto; border-bottom:1px solid #999; padding:5px; background:#f4f4f4; }
             #painelBody   { flex:1 1 auto; overflow-y:auto; padding:5px; }
             #painelFooter { flex:0 0 auto; border-top:1px solid #999; padding:5px; background:#f4f4f4; text-align:center; }
-
             #resultado table { table-layout: fixed; width: 100%; border-collapse: collapse; }
-            #resultado th, #resultado td { text-align:left; padding:2px; word-break:break-word; }
-            #resultado th:nth-child(1), #resultado td:nth-child(1) { width:25px; }
-            #resultado th:nth-child(2), #resultado td:nth-child(2) { width:120px; }
-            #resultado th:nth-child(3), #resultado td:nth-child(3) { width:60px; }
-            #resultado th:nth-child(4), #resultado td:nth-child(4) { width:60px; }
-            #resultado th:nth-child(5), #resultado td:nth-child(5) { width:60px; }
-            #resultado th:nth-child(6), #resultado td:nth-child(6) { width:70px; }
-            #resultado th:nth-child(7), #resultado td:nth-child(7) { width:60px; }
-            #resultado th:nth-child(8), #resultado td:nth-child(8) { width:60px; }
+            #resultado th, #resultado td { text-align:left; padding:2px; word-break:break-word; cursor:pointer; }
+            #resultado th.sorted-asc::after { content:" ▲"; }
+            #resultado th.sorted-desc::after { content:" ▼"; }
+            #resultado th:nth-child(1), #resultado td:nth-child(1) { width:25px; cursor:default; }
         </style>
-
         <div id="painelAtividade">
-
-            <!-- Cabeçalho fixo -->
             <div id="painelHeader">
                 <h3 style="margin-top:0;">📊 Atividade dos Jogadores</h3>
                 <div style="display:flex; gap:5px; margin-bottom:5px;">
@@ -107,21 +99,11 @@ const html = `
                 </div>
                 <div id="statsLegenda"></div>
             </div>
-
-            <!-- Conteúdo rolável -->
-            <div id="painelBody">
-                <div id="resultado"></div>
-            </div>
-
-            <!-- Rodapé fixo -->
-            <div id="painelFooter">
-                <div id="paginacao"></div>
-            </div>
-
+            <div id="painelBody"><div id="resultado"></div></div>
+            <div id="painelFooter"><div id="paginacao"></div></div>
         </div>
     </div>
 `;
-
 if (typeof Dialog !== 'undefined') Dialog.show("atividade_jogadores", html);
 else document.body.insertAdjacentHTML("beforeend", html);
 
@@ -140,6 +122,18 @@ function renderPage(filtros = {}) {
         (status === "" || j.status.includes(status))
     );
 
+    // aplica ordenação
+    if (sortKey) {
+        filtrados.sort((a,b)=>{
+            let va=a[sortKey], vb=b[sortKey];
+            if(typeof va==="string") va=va.toLowerCase();
+            if(typeof vb==="string") vb=vb.toLowerCase();
+            if(va<vb) return -1*sortDir;
+            if(va>vb) return 1*sortDir;
+            return 0;
+        });
+    }
+
     const stats = { blue:0, yellow:0, green:0, red:0, grey:0 };
     filtrados.forEach(j => {
         if(j.status.includes('blue')) stats.blue++;
@@ -148,8 +142,7 @@ function renderPage(filtros = {}) {
         else if(j.status.includes('red')) stats.red++;
         else if(j.status.includes('grey')) stats.grey++;
     });
-
-    const statsHtml = `
+    document.getElementById("statsLegenda").innerHTML = `
         <div style="display:flex; gap:15px;">
             <div><img src="/graphic/dots/blue.png"> Novo: ${stats.blue}</div>
             <div><img src="/graphic/dots/yellow.png"> Estável: ${stats.yellow}</div>
@@ -158,7 +151,6 @@ function renderPage(filtros = {}) {
             <div><img src="/graphic/dots/grey.png"> Inativo: ${stats.grey}</div>
         </div>
     `;
-    document.getElementById("statsLegenda").innerHTML = statsHtml;
 
     const totalPaginas = Math.ceil(filtrados.length / PAGE_SIZE);
     if (currentPage > totalPaginas) currentPage = totalPaginas || 1;
@@ -171,7 +163,14 @@ function renderPage(filtros = {}) {
         <p>Mostrando ${start+1} a ${Math.min(end, filtrados.length)} de ${filtrados.length}</p>
         <table class="vis">
             <thead><tr>
-                <th></th><th>Jogador</th><th>Pontos</th><th>Aldeias</th><th>Var</th><th>Tempo</th><th>Atualizado</th><th>Tribo</th>
+                <th></th>
+                <th data-key="nome">Jogador</th>
+                <th data-key="pontos">Pontos</th>
+                <th data-key="aldeias">Aldeias</th>
+                <th data-key="variacao">Var</th>
+                <th data-key="tempoEstavel">Tempo</th>
+                <th data-key="lastUpdate">Atualizado</th>
+                <th data-key="tribo">Tribo</th>
             </tr></thead>
             <tbody>
                 ${slice.map(j => `
@@ -190,24 +189,33 @@ function renderPage(filtros = {}) {
     `;
     document.getElementById("resultado").innerHTML = tabela;
 
+    // destacar coluna ordenada
+    document.querySelectorAll("#resultado th").forEach(th=>{
+        th.classList.remove("sorted-asc","sorted-desc");
+        if(th.dataset.key===sortKey){
+            th.classList.add(sortDir===1?"sorted-asc":"sorted-desc");
+        }
+        if(th.dataset.key){
+            th.addEventListener("click",()=>{
+                if(sortKey===th.dataset.key) sortDir*=-1;
+                else {sortKey=th.dataset.key; sortDir=1;}
+                renderPage(filtros);
+            });
+        }
+    });
+
     const paginacaoHtml = `
         <button class="btn" id="btnPrev" ${currentPage <= 1 ? "disabled" : ""}>Anterior</button>
         <span style="margin:0 8px;">Página ${currentPage} / ${totalPaginas||1}</span>
         <button class="btn" id="btnNext" ${currentPage >= totalPaginas ? "disabled" : ""}>Próxima</button>
     `;
     document.getElementById("paginacao").innerHTML = paginacaoHtml;
-
-    document.getElementById("btnPrev")?.addEventListener("click",()=>{
-        if(currentPage>1){currentPage--;renderPage(filtros);}
-    });
-    document.getElementById("btnNext")?.addEventListener("click",()=>{
-        if(currentPage<totalPaginas){currentPage++;renderPage(filtros);}
-    });
+    document.getElementById("btnPrev")?.addEventListener("click",()=>{ if(currentPage>1){currentPage--;renderPage(filtros);} });
+    document.getElementById("btnNext")?.addEventListener("click",()=>{ if(currentPage<totalPaginas){currentPage++;renderPage(filtros);} });
 }
 
 document.getElementById("btnExportar").addEventListener("click", exportCache);
 document.getElementById("btnImportar").addEventListener("click", importCache);
-
 ["filtroNome","filtroTribo","filtroStatus"].forEach(id=>{
     document.getElementById(id).addEventListener("input",()=>{
         currentPage=1;
@@ -218,7 +226,6 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
         });
     });
 });
-
 renderPage();
 
 // === Exportar / Importar ===
@@ -232,61 +239,30 @@ function exportCache() {
 }
 function importCache() {
     const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
+    input.type = 'file'; input.accept = '.json';
     input.onchange = e => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const file = e.target.files[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = evt => {
             try {
                 const imported = JSON.parse(evt.target.result);
-                const agora = Date.now();
-                const map = {};
-                jogadores.forEach(j => map[j.id] = j);
-
+                const agora = Date.now(); const map = {}; jogadores.forEach(j => map[j.id] = j);
                 imported.forEach(j => {
                     const pontosAtuais = playerPoints[j.id] || j.pontos;
                     const aldeiasAtuais = playerVillages[j.id] || 0;
                     const variacao = pontosAtuais - (j.pontos || 0);
-
                     let status, tempoEstavel, lastUpdate;
-                    if (aldeiasAtuais === 0) {
-                        status = `<img src="/graphic/dots/grey.png">`;
-                        tempoEstavel = "-";
-                        lastUpdate = agora;
-                    } else if (variacao > 0) {
-                        status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d";
-                    } else if (variacao < 0) {
-                        status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d";
-                    } else {
-                        lastUpdate = j.lastUpdate || agora;
-                        const diff = agora - lastUpdate;
-                        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
-                        status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
-                        tempoEstavel = dias + "d";
-                    }
-
+                    if (aldeiasAtuais === 0) { status = `<img src="/graphic/dots/grey.png">`; tempoEstavel = "-"; lastUpdate = agora; }
+                    else if (variacao > 0) { status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d"; }
+                    else if (variacao < 0) { status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d"; }
+                    else { lastUpdate = j.lastUpdate || agora;
+                        const diff = agora - lastUpdate; const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+                        status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`; tempoEstavel = dias + "d"; }
                     cache[j.id] = { points: pontosAtuais, lastUpdate };
-                    map[j.id] = {
-                        id: j.id,
-                        nome: j.nome,
-                        tribo: j.tribo || "",
-                        pontos: pontosAtuais,
-                        aldeias: aldeiasAtuais,
-                        status,
-                        variacao,
-                        tempoEstavel,
-                        lastUpdate
-                    };
+                    map[j.id] = { id: j.id, nome: j.nome, tribo: j.tribo || "", pontos: pontosAtuais, aldeias: aldeiasAtuais, status, variacao, tempoEstavel, lastUpdate };
                 });
-
-                jogadores = Object.values(map);
-                currentPage = 1;
-                renderPage();
-            } catch (err) {
-                alert("Erro ao importar: " + err.message);
-            }
+                jogadores = Object.values(map); currentPage = 1; renderPage();
+            } catch (err) { alert("Erro ao importar: " + err.message); }
         };
         reader.readAsText(file);
     };
