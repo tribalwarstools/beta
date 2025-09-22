@@ -3,8 +3,8 @@ const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
 let currentPage = 1;
 let cache = {};
-let sortKey = null;   // coluna atual
-let sortDir = 1;      // 1 = asc, -1 = desc
+let sortKey = null;
+let sortDir = 1;
 
 // === Baixar arquivos ===
 const [villRaw, playerRaw, allyRaw] = await Promise.all([
@@ -13,7 +13,7 @@ const [villRaw, playerRaw, allyRaw] = await Promise.all([
     fetch('/map/ally.txt').then(r => r.text())
 ]);
 
-// === Tribos (usar TAG correta) ===
+// === Tribos ===
 const tribes = {};
 allyRaw.trim().split('\n').forEach(line => {
     const [id, name, tag] = line.split(',');
@@ -38,7 +38,7 @@ const villages = villRaw.trim().split('\n').map(line => {
     return { playerId: +player, points: +points };
 });
 
-// === Pontos e aldeias por jogador ===
+// === Pontos por jogador ===
 const playerPoints = {};
 const playerVillages = {};
 for (let v of villages) {
@@ -64,6 +64,9 @@ let jogadores = Object.keys(players).map(pid => {
     cache[id] = { points: pontosAtuais, lastUpdate: hoje };
     return { id, nome, tribo, pontos: pontosAtuais, aldeias, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
 });
+
+// 🔹 Salva cópia virgem para reset
+const jogadoresIniciais = JSON.parse(JSON.stringify(jogadores));
 
 // === Layout ===
 const html = `
@@ -96,6 +99,7 @@ const html = `
                     </select>
                     <button id="btnExportar">💾</button>
                     <button id="btnImportar">📂</button>
+                    <button id="btnResetar">♻️</button>
                 </div>
                 <div id="statsLegenda"></div>
             </div>
@@ -214,8 +218,10 @@ function renderPage(filtros = {}) {
     document.getElementById("btnNext")?.addEventListener("click",()=>{ if(currentPage<totalPaginas){currentPage++;renderPage(filtros);} });
 }
 
+// === Botões ===
 document.getElementById("btnExportar").addEventListener("click", exportCache);
 document.getElementById("btnImportar").addEventListener("click", importCache);
+document.getElementById("btnResetar").addEventListener("click", resetar);
 ["filtroNome","filtroTribo","filtroStatus"].forEach(id=>{
     document.getElementById(id).addEventListener("input",()=>{
         currentPage=1;
@@ -228,7 +234,7 @@ document.getElementById("btnImportar").addEventListener("click", importCache);
 });
 renderPage();
 
-// === Exportar / Importar ===
+// === Funções ===
 function exportCache() {
     const dataStr = "data:text/json;charset=utf-8," +
         encodeURIComponent(JSON.stringify(jogadores, null, 2));
@@ -267,5 +273,10 @@ function importCache() {
         reader.readAsText(file);
     };
     input.click();
+}
+function resetar() {
+    jogadores = JSON.parse(JSON.stringify(jogadoresIniciais));
+    currentPage = 1;
+    renderPage();
 }
 })();
