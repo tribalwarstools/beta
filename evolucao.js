@@ -236,13 +236,23 @@ renderPage();
 
 // === Funções ===
 function exportCache() {
+    const agora = new Date();
+    const yyyy = agora.getFullYear();
+    const mm = String(agora.getMonth() + 1).padStart(2, "0");
+    const dd = String(agora.getDate()).padStart(2, "0");
+    const hh = String(agora.getHours()).padStart(2, "0");
+    const mi = String(agora.getMinutes()).padStart(2, "0");
+
+    const nomeArquivo = `${yyyy}-${mm}-${dd}_${hh}${mi}.json`;
+
     const dataStr = "data:text/json;charset=utf-8," +
         encodeURIComponent(JSON.stringify(jogadores, null, 2));
     const dlAnchor = document.createElement('a');
     dlAnchor.href = dataStr;
-    dlAnchor.download = "tw_players_cache.json";
+    dlAnchor.download = nomeArquivo;
     dlAnchor.click();
 }
+
 function importCache() {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json';
