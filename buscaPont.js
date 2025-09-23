@@ -48,6 +48,8 @@
             return;
         }
 
+        const coords = aldeias.map(a => a.coord).join('\n');
+
         let tabela = `
             <table class="vis">
                 <thead>
@@ -60,6 +62,17 @@
                 </tbody>
             </table>
         `;
-        resultado.innerHTML = `<p><b>${aldeias.length}</b> aldeias encontradas:</p>` + tabela;
+
+        resultado.innerHTML = `
+            <p><b>${aldeias.length}</b> aldeias encontradas para <b>${nome}</b>:</p>
+            <button id="copiarCoords" class="btn">Copiar todas coords</button>
+            ${tabela}
+        `;
+
+        document.getElementById("copiarCoords").addEventListener("click", () => {
+            navigator.clipboard.writeText(coords).then(() => {
+                UI.SuccessMessage("Coordenadas copiadas!");
+            });
+        });
     });
 })();
