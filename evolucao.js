@@ -97,7 +97,15 @@ jogadores.forEach(j => {
 });
 localStorage.setItem("atividadeJogadores", JSON.stringify(snapshotNovo));
 
+// === Salvar horário da execução ===
+localStorage.setItem("atividadeUltimaExecucao", hoje);
+let ultimaExecucao = localStorage.getItem("atividadeUltimaExecucao");
+
 // === Layout ===
+const ultimaExecucaoTexto = ultimaExecucao
+    ? "⏱️ Última execução: " + formatarData(+ultimaExecucao)
+    : "⏱️ Primeira execução, sem histórico ainda.";
+
 const html = `
     <div style="font-family: Verdana; font-size:12px; width:850px; height:600px;
                 display:flex; flex-direction:column;">
@@ -115,7 +123,8 @@ const html = `
         <div id="painelAtividade">
             <div id="painelHeader">
                 <h3 style="margin-top:0;">📊 Atividade dos Jogadores</h3>
-                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                <div>${ultimaExecucaoTexto}</div>
+                <div style="display:flex; gap:5px; margin-top:5px; margin-bottom:5px;">
                     <input type="text" id="filtroNome" placeholder="Nome" style="width:100px; padding:2px;">
                     <input type="text" id="filtroTribo" placeholder="Tribo (TAG)" style="width:70px; padding:2px;">
                     <select id="filtroStatus" style="padding:2px;">
