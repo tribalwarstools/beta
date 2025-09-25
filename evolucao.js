@@ -49,6 +49,7 @@ for (let v of villages) {
 
 // === Carregar snapshot antigo ===
 let snapshotAntigo = JSON.parse(localStorage.getItem("atividadeJogadores") || "{}");
+let ultimaExecucaoAntiga = localStorage.getItem("atividadeUltimaExecucao") || null;
 let hoje = Date.now();
 let jogadores = [];
 
@@ -97,18 +98,17 @@ jogadores.forEach(j => {
 });
 localStorage.setItem("atividadeJogadores", JSON.stringify(snapshotNovo));
 
-// === Salvar horário da execução ===
+// === Salvar horário da execução atual ===
 localStorage.setItem("atividadeUltimaExecucao", hoje);
-let ultimaExecucao = localStorage.getItem("atividadeUltimaExecucao");
 
 // === Layout ===
-const ultimaExecucaoTexto = ultimaExecucao
-    ? "⏱️ Última execução: " + formatarData(+ultimaExecucao)
-    : "⏱️ Primeira execução, sem histórico ainda.";
+const ultimaExecucaoTexto = `
+⏱️ Última execução: ${ultimaExecucaoAntiga ? formatarData(+ultimaExecucaoAntiga) : "primeira execução"}<br>
+⏱️ Execução atual: ${formatarData(hoje)}
+`;
 
 const html = `
-    <div style="font-family: Verdana; font-size:12px; width:850px; height:600px;
-                display:flex; flex-direction:column;">
+    <div style="font-family: Verdana; font-size:12px; width:850px; height:600px; display:flex; flex-direction:column;">
         <style>
             #painelAtividade { display:flex; flex-direction:column; height:100%; }
             #painelHeader { flex:0 0 auto; border-bottom:1px solid #999; padding:5px; background:#f4f4f4; }
@@ -161,7 +161,6 @@ function renderPage(filtros = {}) {
         (status === "" || j.status.includes(status))
     );
 
-    // aplica ordenação
     if (sortKey) {
         filtrados.sort((a,b)=>{
             let va=a[sortKey], vb=b[sortKey];
@@ -228,7 +227,6 @@ function renderPage(filtros = {}) {
     `;
     document.getElementById("resultado").innerHTML = tabela;
 
-    // destacar coluna ordenada
     document.querySelectorAll("#resultado th").forEach(th=>{
         th.classList.remove("sorted-asc","sorted-desc");
         if(th.dataset.key===sortKey){
@@ -266,3 +264,4 @@ function renderPage(filtros = {}) {
 });
 renderPage();
 })();
+
