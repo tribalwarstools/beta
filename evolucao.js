@@ -2,7 +2,6 @@
 const PAGE_SIZE = 50;
 const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
 let currentPage = 1;
-let cache = {};
 let sortKey = null;
 let sortDir = 1;
 
@@ -48,25 +47,55 @@ for (let v of villages) {
     playerVillages[v.playerId]++;
 }
 
-// === Estrutura inicial ===
+// === Carregar snapshot antigo ===
+let snapshotAntigo = JSON.parse(localStorage.getItem("atividadeJogadores") || "{}");
 let hoje = Date.now();
-let jogadores = Object.keys(players).map(pid => {
+let jogadores = [];
+
+Object.keys(players).forEach(pid => {
     const id = +pid;
     const nome = players[id].nome;
     const tribo = players[id].tribo || "";
     const pontosAtuais = playerPoints[id] || 0;
     const aldeias = playerVillages[id] || 0;
 
-    let status;
-    if (aldeias === 0) status = `<img src="/graphic/dots/grey.png">`;
-    else status = `<img src="/graphic/dots/blue.png">`;
+    let variacao = 0, status, tempoEstavel = "-", lastUpdate = hoje;
 
-    cache[id] = { points: pontosAtuais, lastUpdate: hoje };
-    return { id, nome, tribo, pontos: pontosAtuais, aldeias, status, variacao: 0, tempoEstavel: "-", lastUpdate: hoje };
+    if (snapshotAntigo[id]) {
+        let antes = snapshotAntigo[id];
+        variacao = pontosAtuais - antes.pontos;
+        lastUpdate = antes.lastUpdate || hoje;
+
+        if (aldeias === 0) {
+            status = `<img src="/graphic/dots/grey.png">`;
+        } else if (variacao > 0) {
+            status = `<img src="/graphic/dots/green.png">`;
+            lastUpdate = hoje;
+            tempoEstavel = "0d";
+        } else if (variacao < 0) {
+            status = `<img src="/graphic/dots/red.png">`;
+            lastUpdate = hoje;
+            tempoEstavel = "0d";
+        } else {
+            const diff = hoje - lastUpdate;
+            const dias = Math.floor(diff / (1000*60*60*24));
+            status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`;
+            tempoEstavel = dias + "d";
+        }
+    } else {
+        // primeira vez que vê esse jogador
+        status = aldeias === 0 ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/blue.png">`;
+    }
+
+    jogadores.push({ id, nome, tribo, pontos: pontosAtuais, aldeias, status, variacao, tempoEstavel, lastUpdate });
 });
 
-// 🔹 Salva cópia virgem para reset
-const jogadoresIniciais = JSON.parse(JSON.stringify(jogadores));
+// === Salvar novo snapshot ===
+let snapshotNovo = {};
+jogadores.forEach(j => {
+    snapshotNovo[j.id] = { pontos: j.pontos, lastUpdate: j.lastUpdate };
+});
+localStorage.setItem("atividadeJogadores", JSON.stringify(snapshotNovo));
 
 // === Layout ===
 const html = `
@@ -97,9 +126,6 @@ const html = `
                         <option value="blue">Novo</option>
                         <option value="grey">Inativo</option>
                     </select>
-                    <button id="btnExportar">💾</button>
-                    <button id="btnImportar">📂</button>
-                    <button id="btnResetar">♻️</button>
                 </div>
                 <div id="statsLegenda"></div>
             </div>
@@ -218,10 +244,7 @@ function renderPage(filtros = {}) {
     document.getElementById("btnNext")?.addEventListener("click",()=>{ if(currentPage<totalPaginas){currentPage++;renderPage(filtros);} });
 }
 
-// === Botões ===
-document.getElementById("btnExportar").addEventListener("click", exportCache);
-document.getElementById("btnImportar").addEventListener("click", importCache);
-document.getElementById("btnResetar").addEventListener("click", resetar);
+// === Filtros ===
 ["filtroNome","filtroTribo","filtroStatus"].forEach(id=>{
     document.getElementById(id).addEventListener("input",()=>{
         currentPage=1;
@@ -233,60 +256,4 @@ document.getElementById("btnResetar").addEventListener("click", resetar);
     });
 });
 renderPage();
-
-// === Funções ===
-function exportCache() {
-    const agora = new Date();
-    const yyyy = agora.getFullYear();
-    const mm = String(agora.getMonth() + 1).padStart(2, "0");
-    const dd = String(agora.getDate()).padStart(2, "0");
-    const hh = String(agora.getHours()).padStart(2, "0");
-    const mi = String(agora.getMinutes()).padStart(2, "0");
-
-    const nomeArquivo = `${yyyy}-${mm}-${dd}_${hh}${mi}.json`;
-
-    const dataStr = "data:text/json;charset=utf-8," +
-        encodeURIComponent(JSON.stringify(jogadores, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.href = dataStr;
-    dlAnchor.download = nomeArquivo;
-    dlAnchor.click();
-}
-
-function importCache() {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = '.json';
-    input.onchange = e => {
-        const file = e.target.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = evt => {
-            try {
-                const imported = JSON.parse(evt.target.result);
-                const agora = Date.now(); const map = {}; jogadores.forEach(j => map[j.id] = j);
-                imported.forEach(j => {
-                    const pontosAtuais = playerPoints[j.id] || j.pontos;
-                    const aldeiasAtuais = playerVillages[j.id] || 0;
-                    const variacao = pontosAtuais - (j.pontos || 0);
-                    let status, tempoEstavel, lastUpdate;
-                    if (aldeiasAtuais === 0) { status = `<img src="/graphic/dots/grey.png">`; tempoEstavel = "-"; lastUpdate = agora; }
-                    else if (variacao > 0) { status = `<img src="/graphic/dots/green.png">`; lastUpdate = agora; tempoEstavel = "0d"; }
-                    else if (variacao < 0) { status = `<img src="/graphic/dots/red.png">`; lastUpdate = agora; tempoEstavel = "0d"; }
-                    else { lastUpdate = j.lastUpdate || agora;
-                        const diff = agora - lastUpdate; const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
-                        status = diff > ONE_WEEK ? `<img src="/graphic/dots/grey.png">` : `<img src="/graphic/dots/yellow.png">`; tempoEstavel = dias + "d"; }
-                    cache[j.id] = { points: pontosAtuais, lastUpdate };
-                    map[j.id] = { id: j.id, nome: j.nome, tribo: j.tribo || "", pontos: pontosAtuais, aldeias: aldeiasAtuais, status, variacao, tempoEstavel, lastUpdate };
-                });
-                jogadores = Object.values(map); currentPage = 1; renderPage();
-            } catch (err) { alert("Erro ao importar: " + err.message); }
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-}
-function resetar() {
-    jogadores = JSON.parse(JSON.stringify(jogadoresIniciais));
-    currentPage = 1;
-    renderPage();
-}
 })();
