@@ -2,7 +2,7 @@
     const STORAGE_KEY = 'tw_mass_players_list';
     const ADDED_KEY   = 'tw_mass_players_added';
     const DELAY_DEFAULT = 500;     // intervalo entre lotes
-    const BATCH_SIZE   = 10;       // quantos jogadores por lote
+    const BATCH_SIZE   = 5;        // quantos jogadores por lote
 
     if(document.getElementById('tw_mass_add_players_panel')) return;
 
@@ -53,7 +53,7 @@
 
     let stopFlag = false;
 
-    // === Inserção em lotes ===
+    // === Inserção em lotes (um por vez) ===
     function adicionarJogadores(jogadores, delay = DELAY_DEFAULT, batchSize = BATCH_SIZE) {
         stopFlag = false;
         let index = 0;
@@ -73,18 +73,16 @@
             const addButton = document.getElementById('add_new_player');
 
             if(inputField && addButton) {
-                let lote = [];
-                for(let c = 0; c < batchSize && index < jogadores.length; c++, index++) {
+                let count = 0;
+                while(count < batchSize && index < jogadores.length) {
                     const nome = jogadores[index].trim();
+                    index++;
                     if(nome && !added.includes(nome)) {
-                        lote.push(nome);
+                        inputField.value = nome;
+                        addButton.click();
                         added.push(nome);
+                        count++;
                     }
-                }
-
-                if(lote.length > 0) {
-                    inputField.value = lote.join(','); // insere todos juntos
-                    addButton.click();
                 }
             }
 
