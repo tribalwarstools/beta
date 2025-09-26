@@ -31,6 +31,7 @@
         <p>Delay entre adições (ms): <input type="number" id="tw_delay" value="${DELAY_DEFAULT}" style="width:60px;"></p>
         <p>Tamanho do lote: <input type="number" id="tw_lote" value="${LOTE_DEFAULT}" style="width:60px;"></p>
         <button id="tw_start_add" class="btn">Adicionar próximo lote</button>
+        <button id="tw_reset" class="btn" style="margin-left:5px;background:#800;color:#fff;">Resetar progresso</button>
         <div id="tw_progress" style="margin-top:10px;"></div>
     `;
 
@@ -39,6 +40,7 @@
     document.getElementById('tw_close_panel').addEventListener('click', () => panel.remove());
 
     const startBtn = document.getElementById('tw_start_add');
+    const resetBtn = document.getElementById('tw_reset');
     const progressBox = document.getElementById('tw_progress');
     const delayInput = document.getElementById('tw_delay');
     const loteInput = document.getElementById('tw_lote');
@@ -94,5 +96,12 @@
         const delay = parseInt(delayInput.value) || DELAY_DEFAULT;
         const loteTam = parseInt(loteInput.value) || LOTE_DEFAULT;
         adicionarLote(jogadores, delay, loteTam);
+    });
+
+    resetBtn.addEventListener('click', () => {
+        if(confirm("Deseja realmente resetar a lista e o progresso?")) {
+            localStorage.removeItem(STORAGE_DONE);
+            progressBox.innerHTML = `<b>Progresso resetado. Comece do zero.</b>`;
+        }
     });
 })();
