@@ -1,18 +1,17 @@
 (function() {
     const STORAGE_KEY = 'tw_mass_players_list';
-    const ADDED_KEY   = 'tw_mass_players_added';
-    const DELAY_DEFAULT = 500;     // intervalo entre lotes
-    const BATCH_SIZE   = 5;        // quantos jogadores por lote
+    const DELAY_DEFAULT = 300; // delay padrão entre adições (ms)
 
+    // Checar se painel já existe
     if(document.getElementById('tw_mass_add_players_panel')) return;
 
-    // === Criar painel ===
+    // Criar painel flutuante
     const panel = document.createElement('div');
     panel.id = 'tw_mass_add_players_panel';
     panel.style.position = 'fixed';
     panel.style.bottom = '20px';
     panel.style.left = '20px';
-    panel.style.width = '370px';
+    panel.style.width = '350px';
     panel.style.background = '#2b2b2b';
     panel.style.color = '#ccc';
     panel.style.border = '2px solid #444';
@@ -29,87 +28,68 @@
             <button id="tw_close_panel" style="background:#800;color:#fff;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;">X</button>
         </div>
         <hr style="border-color:#444">
-        <p>
-            Delay (ms): <input type="number" id="tw_delay" value="${DELAY_DEFAULT}" style="width:60px;"> 
-            Lote: <input type="number" id="tw_batch" value="${BATCH_SIZE}" style="width:40px;">
-        </p>
-        <div style="margin-top:5px;">
-            <button id="tw_start_add" class="btn">Adicionar</button>
-            <button id="tw_stop_add" class="btn" style="margin-left:5px;">Parar</button>
-            <button id="tw_reset_hist" class="btn" style="margin-left:5px;background:#555;">Resetar histórico</button>
-        </div>
+        <p>Delay entre adições (ms): <input type="number" id="tw_delay" value="${DELAY_DEFAULT}" style="width:60px;"></p>
+        <button id="tw_start_add" class="btn">Adicionar todos</button>
+        <button id="tw_stop_add" class="btn" style="margin-left:5px;">Parar</button>
         <div id="tw_progress" style="margin-top:10px;"></div>
     `;
+
     document.body.appendChild(panel);
 
-    // === Elementos ===
+    // Fechar painel
     document.getElementById('tw_close_panel').addEventListener('click', () => panel.remove());
+
+    // Elementos
     const startBtn = document.getElementById('tw_start_add');
     const stopBtn = document.getElementById('tw_stop_add');
-    const resetBtn = document.getElementById('tw_reset_hist');
     const progressBox = document.getElementById('tw_progress');
     const delayInput = document.getElementById('tw_delay');
-    const batchInput = document.getElementById('tw_batch');
 
     let stopFlag = false;
 
-    // === Inserção em lotes (um por vez) ===
-    function adicionarJogadores(jogadores, delay = DELAY_DEFAULT, batchSize = BATCH_SIZE) {
+    // Função para adicionar jogadores
+    function adicionarJogadores(jogadores, delay = DELAY_DEFAULT) {
+        let i = 0;
         stopFlag = false;
-        let index = 0;
 
-        let added = JSON.parse(localStorage.getItem(ADDED_KEY) || "[]");
-
-        function processarLote() {
-            if(stopFlag || index >= jogadores.length) {
-                localStorage.setItem(ADDED_KEY, JSON.stringify(added));
+        function adicionarProximo() {
+            if(stopFlag || i >= jogadores.length) {
                 progressBox.innerHTML = stopFlag 
-                    ? `<b>Execução interrompida! ${index} processados.</b>`
-                    : `<b>Concluído! ${index} processados.</b>`;
+                    ? `<b>Execução interrompida! ${i} jogadores adicionados.</b>`
+                    : `<b>Concluído! ${i} jogadores adicionados.</b>`;
                 return;
             }
 
-            const inputField = document.getElementById('new_player');
-            const addButton = document.getElementById('add_new_player');
-
-            if(inputField && addButton) {
-                let count = 0;
-                while(count < batchSize && index < jogadores.length) {
-                    const nome = jogadores[index].trim();
-                    index++;
-                    if(nome && !added.includes(nome)) {
-                        inputField.value = nome;
-                        addButton.click();
-                        added.push(nome);
-                        count++;
-                    }
+            const nome = jogadores[i].trim();
+            if(nome) {
+                const inputField = document.getElementById('new_player');
+                const addButton = document.getElementById('add_new_player');
+                if(inputField && addButton) {
+                    inputField.value = nome;
+                    addButton.click();
                 }
             }
 
-            progressBox.innerHTML = `Processados ${index} de ${jogadores.length}... (histórico: ${added.length})`;
-            setTimeout(processarLote, delay);
+            i++;
+            progressBox.innerHTML = `Adicionando jogador ${i} de ${jogadores.length}...`;
+            setTimeout(adicionarProximo, delay);
         }
 
-        processarLote();
+        adicionarProximo();
     }
 
-    // === Botões ===
+    // Botão iniciar
     startBtn.addEventListener('click', () => {
         const stored = localStorage.getItem(STORAGE_KEY);
         if(!stored) return alert('Nenhuma lista salva! Faça upload do TXT primeiro.');
 
         const jogadores = JSON.parse(stored);
         const delay = parseInt(delayInput.value) || DELAY_DEFAULT;
-        const batchSize = parseInt(batchInput.value) || BATCH_SIZE;
-        adicionarJogadores(jogadores, delay, batchSize);
+        adicionarJogadores(jogadores, delay);
     });
 
-    stopBtn.addEventListener('click', () => stopFlag = true);
-
-    resetBtn.addEventListener('click', () => {
-        if(confirm("Deseja realmente resetar o histórico de jogadores adicionados?")) {
-            localStorage.removeItem(ADDED_KEY);
-            progressBox.innerHTML = "<b>Histórico resetado!</b>";
-        }
+    // Botão parar
+    stopBtn.addEventListener('click', () => {
+        stopFlag = true;
     });
 })();
