@@ -43,30 +43,27 @@
     const delayInput = document.getElementById('tw_delay');
     const loteInput = document.getElementById('tw_lote');
 
-    let stopFlag = false;
-
     function adicionarLote(jogadores, delay = DELAY_DEFAULT, loteTam = LOTE_DEFAULT) {
         let adicionados = JSON.parse(localStorage.getItem(STORAGE_DONE) || "[]");
         let setAdicionados = new Set(adicionados);
 
-        // lista de jogadores ainda não adicionados
-        let lista = jogadores.filter(j => !setAdicionados.has(j.trim()));
+        const lista = jogadores.filter(j => !setAdicionados.has(j.trim()));
         if(lista.length === 0) {
             progressBox.innerHTML = `<b>Nenhum jogador novo para adicionar.</b>`;
             return;
         }
 
-        // pega apenas o próximo lote
-        let lote = lista.slice(0, loteTam);
+        const lote = lista.slice(0, loteTam);
+        const total = jogadores.length;
 
         let i = 0;
 
         function adicionarProximo() {
             if(i >= lote.length) {
-                // ao terminar o lote, salva no localStorage
                 lote.forEach(nome => setAdicionados.add(nome));
                 localStorage.setItem(STORAGE_DONE, JSON.stringify([...setAdicionados]));
-                progressBox.innerHTML = `<b>Lote concluído! ${lote.length} jogadores adicionados.</b>`;
+                progressBox.innerHTML = `<b>Lote concluído! ${lote.length} jogadores adicionados.</b><br>
+                                         Progresso total: ${setAdicionados.size} de ${total}`;
                 return;
             }
 
@@ -81,7 +78,8 @@
             }
 
             i++;
-            progressBox.innerHTML = `Adicionando jogador ${i} de ${lote.length}...`;
+            progressBox.innerHTML = `Adicionando jogador ${i} de ${lote.length} deste lote...<br>
+                                     Progresso total: ${setAdicionados.size + i} de ${total}`;
             setTimeout(adicionarProximo, delay);
         }
 
