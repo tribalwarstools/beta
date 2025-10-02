@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  Cria notas automáticas de relatórios, detectando tipo de aldeia
-// @author       Giovani Guedes
+// @author       GiovaniG
 // @match        *://*.tribalwars.com.br/game.php*screen=report*
 // @grant        none
 // ==/UserScript==
