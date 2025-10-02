@@ -1,13 +1,3 @@
-// ==UserScript==
-// @name         Notas Automáticas de Relatórios TW (Simplificado)
-// @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Cria automaticamente notas com base no relatório, sem verificação de ataque/defesa
-// @author       GiovaniG
-// @match        *://*.tribalwars.com.br/game.php*screen=report*
-// @grant        none
-// ==/UserScript==
-
 (function() {
     'use strict';
 
