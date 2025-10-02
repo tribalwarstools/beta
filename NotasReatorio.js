@@ -106,7 +106,10 @@ var CriarNotasRelatorio = {
             : this.dados.aldeia.ofensiva.tipo;
 
         nota += " | [color=#" + (tipoAldeia == _t("ofensiva") || tipoAldeia == _t("provavelmenteOfensiva") ? "ff0000" : "0eae0e") + "][b]" + tipoAldeia + "[/b][/color] | ";
-        nota += "[b][size=6]xD[/size][/b]\n\n[b]" + titulo + "[/b]";
+        var agora = new Date();
+var dataHora = agora.toLocaleString();
+nota += "[b][size=6]" + dataHora + "[/size][/b]\n\n[b]" + titulo + "[/b]";
+
         nota += textoRelatorio;
 
         return nota;
