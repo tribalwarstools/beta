@@ -11,7 +11,7 @@
 (function() {
     'use strict';
 
-    var LS_prefix = "xd";
+    var LS_prefix = "";
 
     // Traduções
     var translations = {
