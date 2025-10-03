@@ -90,17 +90,27 @@
         return true;
     }
 
+    // === NOVA FUNÇÃO DE NOTA ===
     function gerarTextoNota() {
-        const titulo = $("#content_value > table > tbody > tr > td:nth-child(2) > table > tbody > tr > td > table:nth-child(2) > tbody > tr:nth-child(2)")
-            .text()
-            .replace(/\s+/g, " ")
-            .replace(/.{5}$/g, "");
+        // --- Título do relatório (nome da aldeia alvo) ---
+        const titulo = $("#content_value table:eq(1) tr:eq(1)").text().trim();
 
         const textoRelatorio = $("#report_export_code").text();
-        const agora = new Date();
 
+        // --- Data da batalha (busca célula certa) ---
+        const dataBatalha = $("td:contains('Data da batalha')").next().text().trim() || "Data não encontrada";
+
+        // --- Resultado principal da batalha ---
+        let resultado = $("#attack_results h3").text().trim();
+        if (!resultado) {
+            // fallback: procura dentro do bloco inteiro
+            resultado = $("#attack_results").text().match(/Explorado|Vitória total|Perdas|Derrotado.*|Explorado/g)?.[0] || "Resultado desconhecido";
+        }
+
+        // Montagem da nota
         let nota = "";
-        nota += "[b][size=6]" + agora.toLocaleString() + "[/size][/b]\n\n";
+        nota += "[b][size=6]" + resultado + "[/size][/b]\n\n";
+        nota += "[i]Data da batalha " + dataBatalha + "[/i]\n\n";
         nota += "[b]" + titulo + "[/b]\n\n";
         nota += textoRelatorio;
 
