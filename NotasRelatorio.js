@@ -80,7 +80,7 @@
 
     atualizarBotao();
 
-    // --- Funções originais de notas ---
+    // --- Verifica se está em página de relatório ---
     function verificarPagina() {
         const urlValida = window.location.href.match(/(screen\=report){1}|(view\=){1}\w+/g);
         if (!urlValida || urlValida.length != 2) {
@@ -90,31 +90,10 @@
         return true;
     }
 
-    // === NOVA FUNÇÃO DE NOTA ===
+    // === FUNÇÃO DE NOTA SIMPLIFICADA (APENAS DATA) ===
     function gerarTextoNota() {
-        // --- Título do relatório (nome da aldeia alvo) ---
-        const titulo = $("#content_value table:eq(1) tr:eq(1)").text().trim();
-
-        const textoRelatorio = $("#report_export_code").text();
-
-        // --- Data da batalha (busca célula certa) ---
         const dataBatalha = $("td:contains('Data da batalha')").next().text().trim() || "Data não encontrada";
-
-        // --- Resultado principal da batalha ---
-        let resultado = $("#attack_results h3").text().trim();
-        if (!resultado) {
-            // fallback: procura dentro do bloco inteiro
-            resultado = $("#attack_results").text().match(/Explorado|Vitória total|Perdas|Derrotado.*|Explorado/g)?.[0] || "Resultado desconhecido";
-        }
-
-        // Montagem da nota
-        let nota = "";
-        nota += "[b][size=6]" + resultado + "[/size][/b]\n\n";
-        nota += "[i]Data da batalha " + dataBatalha + "[/i]\n\n";
-        nota += "[b]" + titulo + "[/b]\n\n";
-        nota += textoRelatorio;
-
-        return nota;
+        return "[i]Data da batalha: " + dataBatalha + "[/i]";
     }
 
     function escreverNota() {
