@@ -12,7 +12,8 @@
         scripts: [
             { file: 'tw-scheduler-backend.js', check: 'TWS_Backend' },
             { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
-            { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' }
+            { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' },
+            { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal' }
         ],
         timeout: 15000,
         retries: 2
@@ -85,7 +86,6 @@
         });
     }
 
-    // ✅ CORRIGIDO: Agora realmente tenta todos os mirrors
     async function loadScriptWithValidation(scriptInfo) {
         let lastError;
         
@@ -103,15 +103,12 @@
             } catch (error) {
                 lastError = error;
                 console.warn(`❌ Falha em ${baseUrl}:`, error.message);
-                // Continue para próximo mirror
             }
         }
         
-        // Se chegou aqui, todos os mirrors falharam
         throw lastError || new Error(`Todos os mirrors falharam para ${scriptInfo.file}`);
     }
 
-    // ✅ NOVO: Retry logic
     async function loadScriptWithRetry(scriptInfo) {
         for (let attempt = 1; attempt <= CONFIG.retries; attempt++) {
             try {
@@ -126,7 +123,6 @@
         }
     }
 
-    // ✅ Sistema de notificações com ID único
     let currentNotification = null;
 
     function showNotification(msg, type = 'info') {
@@ -136,7 +132,6 @@
             info: '#2196F3'
         };
         
-        // Remover notificação anterior se existir
         if (currentNotification && currentNotification.parentNode) {
             currentNotification.style.opacity = '0';
             setTimeout(() => {
@@ -169,7 +164,6 @@
         div.title = 'Clique para fechar';
         document.body.appendChild(div);
         
-        // Fade in
         setTimeout(() => div.style.opacity = '1', 10);
         
         currentNotification = div;
@@ -186,9 +180,8 @@
                     }
                 }, 300);
             }
-        }, type === 'success' ? 3000 : 4000); // Sucesso desaparece mais rápido
+        }, type === 'success' ? 3000 : 4000);
 
-        // Permitir fechar manualmente
         div.onclick = () => {
             clearTimeout(timeoutId);
             div.style.opacity = '0';
@@ -231,7 +224,6 @@
             console.error('❌ Erro no carregamento:', error);
             showNotification(`❌ Falha: ${error.message}`, 'error');
             
-            // Log detalhado para debugging
             console.error('[Carregador] Debug info:', {
                 userAgent: navigator.userAgent,
                 jQueryAvailable: !!(window.$ && $.getScript),
@@ -245,7 +237,6 @@
         }
     }
 
-    // ✅ CORRIGIDO: Timeout global aplicado
     async function carregarComTimeout() {
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error(`Timeout: carregamento excedeu ${CONFIG.timeout}ms`)), 
@@ -263,18 +254,14 @@
     // ═══════════════════════════════════════════════════════
 
     function iniciar() {
-        // Pequeno delay para estabilidade
         setTimeout(carregarComTimeout, 200);
     }
 
-    // ✅ MELHORADO: Inicialização otimizada
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', iniciar);
     } else if (document.readyState === 'interactive') {
-        // DOM pronto mas recursos ainda carregando
         window.addEventListener('load', iniciar);
     } else {
-        // Tudo pronto
         iniciar();
     }
 
