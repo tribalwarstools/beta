@@ -10,6 +10,9 @@
   let _villageMap = {};
   let _myVillages = [];
   let _schedulerInterval = null;
+  
+  // ✅ PROTEÇÃO: Rastrear agendamentos em execução
+  const _executing = new Set();
 
   // === Auto-confirm na página de confirmação ===
   try {
@@ -100,7 +103,6 @@
 
       const troops = {};
       TROOP_LIST.forEach(u => {
-        // Prioriza o elemento que mostra tropas disponíveis
         const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
                            doc.querySelector(`#units_home_${u}`) ||
                            doc.querySelector(`[id*="${u}"][class*="unit"]`);
@@ -137,17 +139,14 @@
 
   // === Verifica se o ataque foi confirmado ===
   function isAttackConfirmed(htmlText) {
-    // PADRÃO 1: Verifica se há comando na lista (aparece após envio bem-sucedido)
     if (/screen=info_command.*type=own/i.test(htmlText)) {
       return true;
     }
 
-    // PADRÃO 2: Verifica se há linha de comando na tabela
     if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
       return true;
     }
 
-    // PADRÃO 3: Textos tradicionais de sucesso (backup)
     const successPatterns = [
       /attack sent/i,
       /attack in queue/i,
@@ -282,7 +281,6 @@
       );
 
       if (confirmForm) {
-        // Construir payload de confirmação
         const confirmPayload = {};
         Array.from(confirmForm.querySelectorAll('input, select, textarea')).forEach(inp => {
           const name = inp.getAttribute('name');
@@ -325,7 +323,6 @@
         
         const finalText = await confirmRes.text();
         
-        // Log para debug (remover em produção)
         console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
         
         if (isAttackConfirmed(finalText)) {
@@ -334,12 +331,10 @@
         } else {
           setStatus(`⚠️ Confirmação concluída, verifique manualmente se o ataque foi enfileirado`);
           console.warn('[TWS_Backend] Resposta de confirmação não indicou sucesso claro');
-          // Log da resposta para análise (primeiros 500 caracteres)
           console.log('[TWS_Backend] Início da resposta:', finalText.substring(0, 500));
           return false;
         }
       } else {
-        // Sem form de confirmação - verifica se já foi enviado
         if (isAttackConfirmed(postText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
@@ -369,6 +364,17 @@
       for (const a of list) {
         if (a.done) continue;
         
+        // ✅ PROTEÇÃO: Criar ID único se não existir
+        if (!a._id) {
+          a._id = `${a.origem}_${a.alvo}_${a.datetime}`;
+        }
+        
+        // ✅ PROTEÇÃO: Verificar se já está executando
+        if (_executing.has(a._id)) {
+          console.log(`[TWScheduler] ⏳ Agendamento ${a._id} já em execução, aguardando...`);
+          continue;
+        }
+        
         const t = parseDateTimeToMs(a.datetime);
         if (!t || isNaN(t)) continue;
         
@@ -376,7 +382,11 @@
         
         // Janela de 10 segundos para executar
         if (diff <= 0 && diff > -10000) {
+          // ✅ PROTEÇÃO: Marcar como "executando" ANTES de chamar executeAttack
+          _executing.add(a._id);
           msgs.push(`🔥 Executando: ${a.origem} → ${a.alvo}`);
+          
+          console.log(`[TWScheduler] 🚀 Iniciando execução de ${a._id}`);
           
           try {
             const success = await executeAttack(a);
@@ -384,12 +394,18 @@
             a.success = success;
             a.executedAt = new Date().toISOString();
             hasChanges = true;
+            
+            console.log(`[TWScheduler] ✅ Execução concluída: ${a._id}`);
           } catch (err) {
             a.error = err.message;
             a.done = true;
             a.success = false;
             hasChanges = true;
             console.error('[TWScheduler] Erro ao executar:', err);
+          } finally {
+            // ✅ PROTEÇÃO: Remover da lista de execução
+            _executing.delete(a._id);
+            console.log(`[TWScheduler] 🏁 Finalizando execução de ${a._id}`);
           }
         } else if (diff > 0) {
           const seconds = Math.ceil(diff / 1000);
@@ -441,7 +457,8 @@
         origemId,
         alvo: destino,
         datetime: dataHora,
-        done: false
+        done: false,
+        _id: `${origem}_${destino}_${dataHora}` // ✅ Adicionar ID único
       };
       
       TROOP_LIST.forEach(u => {
@@ -473,10 +490,10 @@
     STORAGE_KEY,
     PANEL_STATE_KEY,
     
-    // Getters dinâmicos para debug
     _internal: {
       get villageMap() { return _villageMap; },
-      get myVillages() { return _myVillages; }
+      get myVillages() { return _myVillages; },
+      get executing() { return _executing; } // ✅ Para debug
     }
   };
 
