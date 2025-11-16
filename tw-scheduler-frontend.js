@@ -20,6 +20,7 @@
   } = window.TWS_Backend;
 
   let panelOpen = false;
+  let updateInterval = null; // ✅ Controlar o interval
 
   // === Renderiza tabela de agendamentos ===
   function renderTable() {
@@ -389,7 +390,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
-          <button onclick="TWS_Panel.loadVillages()" style="padding: 6px 12px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer;">🏰 Carregar Aldeias</button>
           <button onclick="TWS_Panel.testSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Testar Envio</button>
           <button onclick="TWS_Panel.clearCompleted()" style="padding: 6px 12px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding: 6px 12px; background: #FF6F00; color: white; border: none; border-radius: 4px; cursor: pointer;">⏳ Limpar Pendentes</button>
@@ -431,10 +431,16 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     startScheduler();
     renderTable();
 
+    // ✅ CORREÇÃO: Limpar interval anterior antes de criar novo
+    if (updateInterval) {
+      clearInterval(updateInterval);
+    }
+    
     // Atualizar tabela a cada segundo
-    setInterval(renderTable, 1000);
+    updateInterval = setInterval(renderTable, 1000);
 
-    // Escutar evento de atualização do modal
+    // ✅ CORREÇÃO: Remover listeners antigos antes de adicionar novo
+    window.removeEventListener('tws-schedule-updated', renderTable);
     window.addEventListener('tws-schedule-updated', renderTable);
   }
 
@@ -444,7 +450,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     renderTable,
     addManual,
     importBBCode,
-    loadVillages,
     testSend,
     clearCompleted,
     clearPending,
