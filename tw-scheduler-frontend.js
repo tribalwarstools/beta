@@ -173,28 +173,20 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   // === MODAL: Adiciona agendamento manual (chama o módulo externo) ===
   function addManual() {
     if (!window.TWS_Modal) {
-      const loadNow = confirm(
-        '❌ ERRO: Módulo do Modal não está carregado!\n\n' +
-        '📋 O arquivo "tw-scheduler-modal.js" não foi encontrado.\n\n' +
-        '💡 Ordem de carregamento:\n' +
-        '   1️⃣ tw-scheduler-backend.js (✅ carregado)\n' +
-        '   2️⃣ tw-scheduler-frontend.js (✅ carregado - você está aqui)\n' +
-        '   3️⃣ tw-scheduler-modal.js (❌ FALTANDO)\n\n' +
-        '⚠️ Deseja tentar carregar o modal agora?\n' +
-        '(Pressione OK para tentar carregar automaticamente)'
+      alert(
+        '❌ ERRO: Módulo do Modal não está disponível!\n\n' +
+        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
+        '   <script src="tw-scheduler-backend.js"></script>\n' +
+        '   <script src="tw-scheduler-frontend.js"></script>\n' +
+        '   <script src="tw-scheduler-modal.js"></script>\n\n' +
+        '⚠️ Verifique:\n' +
+        '   • O arquivo "tw-scheduler-modal.js" existe?\n' +
+        '   • Está no mesmo diretório dos outros arquivos?\n' +
+        '   • Abra o Console (F12) e veja se há erros de carregamento\n\n' +
+        '💡 Dica: Verifique se o console mostra a mensagem:\n' +
+        '   "[TW Scheduler Modal] Módulo carregado com sucesso!"'
       );
-      
-      if (loadNow) {
-        const script = document.createElement('script');
-        script.src = 'tw-scheduler-modal.js';
-        script.onload = () => {
-          alert('✅ Modal carregado! Clique em "Adicionar" novamente.');
-        };
-        script.onerror = () => {
-          alert('❌ Falha ao carregar o modal.\n\nVerifique se o arquivo "tw-scheduler-modal.js" está no mesmo diretório.');
-        };
-        document.head.appendChild(script);
-      }
+      console.error('[TW Scheduler] window.TWS_Modal não encontrado. Verifique se tw-scheduler-modal.js foi carregado.');
       return;
     }
     window.TWS_Modal.show();
@@ -467,4 +459,13 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   // === Inicializar ===
   createUI();
   console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
+  
+  // Verificar se o modal está carregado
+  setTimeout(() => {
+    if (!window.TWS_Modal) {
+      console.warn('[TW Scheduler] ⚠️ Modal não detectado. Carregue tw-scheduler-modal.js para usar o botão Adicionar.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal detectado e pronto!');
+    }
+  }, 100);
 })();
