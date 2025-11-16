@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
 
   // === Configs / Constantes ===
@@ -133,6 +133,37 @@
       }
     });
     return errors;
+  }
+
+  // === Verifica se o ataque foi confirmado ===
+  function isAttackConfirmed(htmlText) {
+    // PADRÃO 1: Verifica se há comando na lista (aparece após envio bem-sucedido)
+    if (/screen=info_command.*type=own/i.test(htmlText)) {
+      return true;
+    }
+
+    // PADRÃO 2: Verifica se há linha de comando na tabela
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      return true;
+    }
+
+    // PADRÃO 3: Textos tradicionais de sucesso (backup)
+    const successPatterns = [
+      /attack sent/i,
+      /attack in queue/i,
+      /enviado/i,
+      /ataque enviado/i,
+      /enfileirad/i,
+      /A batalha começou/i,
+      /march started/i,
+      /comando enviado/i,
+      /tropas enviadas/i,
+      /foi enfileirado/i,
+      /command sent/i,
+      /comando foi criado/i
+    ];
+
+    return successPatterns.some(p => p.test(htmlText));
   }
 
   // === Execute attack ===
@@ -293,33 +324,28 @@
         if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
         
         const finalText = await confirmRes.text();
-        const successPatterns = [
-          /attack sent/i, /attack in queue/i, /enviado/i, 
-          /ataque enviado/i, /enfileirad/i, /A batalha começou/i, 
-          /march started/i
-        ];
         
-        if (successPatterns.some(p => p.test(finalText))) {
+        // Log para debug (remover em produção)
+        console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
+        
+        if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
-          console.warn('[TWScheduler] Resposta de confirmação não indicou sucesso claro');
+          setStatus(`⚠️ Confirmação concluída, verifique manualmente se o ataque foi enfileirado`);
+          console.warn('[TWS_Backend] Resposta de confirmação não indicou sucesso claro');
+          // Log da resposta para análise (primeiros 500 caracteres)
+          console.log('[TWS_Backend] Início da resposta:', finalText.substring(0, 500));
           return false;
         }
       } else {
-        // Sem form de confirmação
-        const successPatterns = [
-          /attack sent/i, /attack in queue/i, /enviado/i,
-          /ataque enviado/i, /enfileirad/i, /A batalha começou/i,
-          /march started/i
-        ];
-        
-        if (successPatterns.some(p => p.test(postText))) {
+        // Sem form de confirmação - verifica se já foi enviado
+        if (isAttackConfirmed(postText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
           setStatus('⚠️ Resposta não indicou confirmação; verifique manualmente');
+          console.log('[TWS_Backend] Início da resposta:', postText.substring(0, 500));
           return false;
         }
       }
@@ -360,7 +386,7 @@
             hasChanges = true;
           } catch (err) {
             a.error = err.message;
-            a.done = true; // Marca como concluído mesmo com erro
+            a.done = true;
             a.success = false;
             hasChanges = true;
             console.error('[TWScheduler] Erro ao executar:', err);
