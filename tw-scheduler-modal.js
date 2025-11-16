@@ -27,15 +27,50 @@
   // === Carrega aldeias no select ===
   async function loadVillageSelect() {
     const select = document.getElementById('tws-origem');
-    if (!select) return;
-
-    const { myVillages } = _internal;
-    
-    if (myVillages.length === 0) {
-      select.innerHTML = '<option value="">⚠️ Carregue as aldeias primeiro</option>';
+    if (!select) {
+      console.error('[Modal] ❌ Select #tws-origem não encontrado!');
       return;
     }
 
+    const { myVillages } = _internal;
+    
+    console.log('[Modal] 📊 Status atual:', {
+      aldeias_carregadas: myVillages.length,
+      lista: myVillages
+    });
+    
+    // ✅ CORREÇÃO: Se não há aldeias carregadas, carregar agora
+    if (myVillages.length === 0) {
+      console.log('[Modal] 🏰 Aldeias não carregadas, carregando automaticamente...');
+      select.innerHTML = '<option value="">⏳ Carregando aldeias...</option>';
+      
+      try {
+        await loadVillageTxt();
+        const { myVillages: updated } = _internal;
+        
+        console.log('[Modal] 📊 Após carregar:', {
+          aldeias_encontradas: updated.length,
+          lista: updated
+        });
+        
+        if (updated.length === 0) {
+          select.innerHTML = '<option value="">❌ Nenhuma aldeia encontrada</option>';
+          console.error('[Modal] ❌ Nenhuma aldeia foi encontrada após loadVillageTxt()');
+          return;
+        }
+        
+        console.log(`[Modal] ✅ ${updated.length} aldeias carregadas automaticamente`);
+        select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
+          updated.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
+      } catch (error) {
+        console.error('[Modal] ❌ Erro ao carregar aldeias:', error);
+        select.innerHTML = '<option value="">❌ Erro ao carregar aldeias</option>';
+      }
+      return;
+    }
+
+    // Aldeias já carregadas
+    console.log(`[Modal] ✅ Usando ${myVillages.length} aldeias já carregadas`);
     select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
       myVillages.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
   }
