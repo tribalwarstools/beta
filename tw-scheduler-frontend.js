@@ -173,7 +173,14 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   // === MODAL: Adiciona agendamento manual (chama o módulo externo) ===
   function addManual() {
     if (!window.TWS_Modal) {
-      alert('❌ Módulo de modal não carregado!\n\nCarregue o arquivo tw-scheduler-modal.js antes.');
+      alert('❌ ERRO: Módulo do Modal não carregado!\n\n' +
+            '📋 Para usar o botão "Adicionar", você precisa:\n\n' +
+            '1️⃣ Carregar o arquivo do modal ANTES deste frontend\n' +
+            '2️⃣ Ordem correta dos scripts:\n' +
+            '   • tw-scheduler-backend.js (backend)\n' +
+            '   • tw-scheduler-modal.js (modal) ⚠️ FALTANDO\n' +
+            '   • tw-scheduler-frontend.js (frontend)\n\n' +
+            '💡 Carregue o modal e recarregue a página.');
       return;
     }
     window.TWS_Modal.show();
