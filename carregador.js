@@ -13,24 +13,48 @@
             { file: 'agendador_backend.js', check: 'TWS_Backend' },
             { file: 'agendador_frontend.js', check: 'TWS_Panel' }
         ],
-        timeout: 15000 // 15 segundos total
+        timeout: 15000,
+        retries: 2
     };
 
     // ═══════════════════════════════════════════════════════
     // UTILITIES
     // ═══════════════════════════════════════════════════════
 
+    const loadedScripts = new Set();
+
     function loadScript(url) {
+        if (loadedScripts.has(url)) {
+            console.log(`[Cache] Script já carregado: ${url}`);
+            return Promise.resolve();
+        }
+
         return new Promise((resolve, reject) => {
             // Tentar jQuery se disponível
             if (window.$ && typeof $.getScript === 'function') {
-                $.getScript(url).done(resolve).fail(reject);
+                $.getScript(url)
+                    .done(() => {
+                        loadedScripts.add(url);
+                        resolve();
+                    })
+                    .fail(reject);
             } else {
                 // Fallback nativo
                 const script = document.createElement('script');
                 script.src = url;
-                script.onload = resolve;
-                script.onerror = () => reject(new Error(`Falha ao carregar: ${url}`));
+                script.onload = () => {
+                    loadedScripts.add(url);
+                    script.onload = null;
+                    script.onerror = null;
+                    resolve();
+                };
+                script.onerror = () => {
+                    // Limpar script falhado
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
+                    reject(new Error(`Falha ao carregar: ${url}`));
+                };
                 document.head.appendChild(script);
             }
         });
@@ -60,7 +84,8 @@
         });
     }
 
-    function loadScriptWithValidation(scriptInfo) {
+    // ✅ CORRIGIDO: Agora realmente tenta todos os mirrors
+    async function loadScriptWithValidation(scriptInfo) {
         let lastError;
         
         for (const baseUrl of CONFIG.baseUrls) {
@@ -68,20 +93,36 @@
                 const url = baseUrl + scriptInfo.file;
                 console.log(`[Carregador] Tentando: ${url}`);
                 
-                return loadScript(url)
-                    .then(() => waitForGlobal(scriptInfo.check, 8000))
-                    .then(() => {
-                        console.log(`✅ ${scriptInfo.file} carregado e validado`);
-                        return true;
-                    });
+                await loadScript(url);
+                await waitForGlobal(scriptInfo.check, 8000);
+                
+                console.log(`✅ ${scriptInfo.file} carregado e validado de ${baseUrl}`);
+                return true;
+                
             } catch (error) {
                 lastError = error;
                 console.warn(`❌ Falha em ${baseUrl}:`, error.message);
-                continue;
+                // Continue para próximo mirror
             }
         }
         
+        // Se chegou aqui, todos os mirrors falharam
         throw lastError || new Error(`Todos os mirrors falharam para ${scriptInfo.file}`);
+    }
+
+    // ✅ NOVO: Retry logic
+    async function loadScriptWithRetry(scriptInfo) {
+        for (let attempt = 1; attempt <= CONFIG.retries; attempt++) {
+            try {
+                return await loadScriptWithValidation(scriptInfo);
+            } catch (error) {
+                if (attempt === CONFIG.retries) throw error;
+                
+                const delay = 1000 * attempt;
+                console.warn(`Tentativa ${attempt} falhou, retry em ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
     }
 
     function showNotification(msg, type = 'info') {
@@ -106,19 +147,36 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             max-width: 300px;
             word-wrap: break-word;
+            cursor: pointer;
+            transition: opacity 0.3s;
         `;
         div.textContent = msg;
+        div.title = 'Clique para fechar';
         document.body.appendChild(div);
         
-        setTimeout(() => {
-            if (div.parentNode) {
-                div.parentNode.removeChild(div);
-            }
+        const timeoutId = setTimeout(() => {
+            div.style.opacity = '0';
+            setTimeout(() => {
+                if (div.parentNode) {
+                    div.parentNode.removeChild(div);
+                }
+            }, 300);
         }, 4000);
+
+        // Permitir fechar manualmente
+        div.onclick = () => {
+            clearTimeout(timeoutId);
+            div.style.opacity = '0';
+            setTimeout(() => {
+                if (div.parentNode) {
+                    div.parentNode.removeChild(div);
+                }
+            }, 300);
+        };
     }
 
     // ═══════════════════════════════════════════════════════
-    // LOADING STRATEGIES
+    // LOADING STRATEGY
     // ═══════════════════════════════════════════════════════
 
     async function carregarSequencial() {
@@ -128,14 +186,19 @@
         const startTime = Date.now();
         
         try {
-            for (const script of CONFIG.scripts) {
-                console.log(`[Carregador] Carregando: ${script.file}`);
-                await loadScriptWithValidation(script);
+            for (let i = 0; i < CONFIG.scripts.length; i++) {
+                const script = CONFIG.scripts[i];
+                const progress = Math.round(((i + 1) / CONFIG.scripts.length) * 100);
+                
+                console.log(`[Carregador] [${i + 1}/${CONFIG.scripts.length}] Carregando: ${script.file}`);
+                showNotification(`Carregando... ${progress}% (${script.file})`, 'info');
+                
+                await loadScriptWithRetry(script);
             }
             
             const loadTime = Date.now() - startTime;
             console.log(`🎉 TW Scheduler carregado em ${loadTime}ms!`);
-            showNotification(`✅ TW Scheduler carregado! (${loadTime}ms)`, 'success');
+            showNotification(`✅ TW Scheduler carregado! (${(loadTime/1000).toFixed(1)}s)`, 'success');
             
         } catch (error) {
             console.error('❌ Erro no carregamento:', error);
@@ -149,45 +212,44 @@
                     script: s.file,
                     global: s.check,
                     loaded: !!window[s.check]
-                }))
+                })),
+                error: error.stack
             });
         }
     }
 
-    async function carregarParalelo() {
-        console.log('[Carregador] ⚡ Iniciando carregamento paralelo');
-        showNotification('⚡ Carregando TW Scheduler (paralelo)...', 'info');
+    // ✅ CORRIGIDO: Timeout global aplicado
+    async function carregarComTimeout() {
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: carregamento excedeu ${CONFIG.timeout}ms`)), 
+            CONFIG.timeout)
+        );
         
-        const startTime = Date.now();
-        
-        try {
-            const promises = CONFIG.scripts.map(script => 
-                loadScriptWithValidation(script)
-            );
-            
-            await Promise.all(promises);
-            
-            const loadTime = Date.now() - startTime;
-            console.log(`🎉 TW Scheduler carregado em ${loadTime}ms (paralelo)!`);
-            showNotification(`✅ TW Scheduler carregado! (${loadTime}ms)`, 'success');
-            
-        } catch (error) {
-            console.error('❌ Erro no carregamento paralelo:', error);
-            showNotification(`❌ Falha: ${error.message}`, 'error');
-        }
+        return Promise.race([
+            carregarSequencial(),
+            timeoutPromise
+        ]);
     }
 
     // ═══════════════════════════════════════════════════════
     // INICIALIZAÇÃO
     // ═══════════════════════════════════════════════════════
 
-    // Esperar DOM estar pronto
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(carregarSequencial, 1000); // Dar tempo para a página carregar
-        });
-    } else {
-        setTimeout(carregarSequencial, 1000);
+    function iniciar() {
+        // Pequeno delay para estabilidade
+        setTimeout(carregarComTimeout, 200);
     }
 
+    // ✅ MELHORADO: Inicialização otimizada
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', iniciar);
+    } else if (document.readyState === 'interactive') {
+        // DOM pronto mas recursos ainda carregando
+        window.addEventListener('load', iniciar);
+    } else {
+        // Tudo pronto
+        iniciar();
+    }
+
+    console.log('[Carregador] Inicializado e aguardando DOM...');
 })();
