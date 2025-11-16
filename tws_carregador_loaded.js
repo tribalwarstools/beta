@@ -11,7 +11,8 @@
         ],
         scripts: [
             { file: 'tw-scheduler-backend.js', check: 'TWS_Backend' },
-            { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' }
+            { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
+            { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' }
         ],
         timeout: 15000,
         retries: 2
