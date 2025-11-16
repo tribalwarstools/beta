@@ -208,7 +208,6 @@
 
     async function carregarSequencial() {
         console.log('[Carregador] 🔄 Iniciando carregamento sequencial');
-        showNotification('🔄 Carregando TW Scheduler...', 'info');
         
         const startTime = Date.now();
         
@@ -218,14 +217,14 @@
                 const progress = Math.round(((i + 1) / CONFIG.scripts.length) * 100);
                 
                 console.log(`[Carregador] [${i + 1}/${CONFIG.scripts.length}] Carregando: ${script.file}`);
-                showNotification(`Carregando... ${progress}% (${script.file})`, 'info');
+                showNotification(`🔄 Carregando... ${progress}%`, 'info');
                 
                 await loadScriptWithRetry(script);
             }
             
             const loadTime = Date.now() - startTime;
             console.log(`🎉 TW Scheduler carregado em ${loadTime}ms!`);
-            showNotification(`✅ TW Scheduler carregado! (${(loadTime/1000).toFixed(1)}s)`, 'success');
+            showNotification(`✅ Carregado com sucesso!`, 'success');
             
         } catch (error) {
             console.error('❌ Erro no carregamento:', error);
