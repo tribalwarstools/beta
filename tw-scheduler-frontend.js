@@ -195,20 +195,20 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 
   // === Importar BBCode ===
   function importBBCode() {
-    const bb = prompt('Cole o BBCode aqui:');
-    if (!bb) return;
-
-    const agendamentos = importarDeBBCode(bb);
-    if (agendamentos.length === 0) {
-      alert('Nenhum agendamento encontrado no BBCode.');
+    if (!window.TWS_BBCodeModal) {
+      alert(
+        '❌ ERRO: Módulo do BBCode Modal não está disponível!\n\n' +
+        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
+        '   <script src="tw-scheduler-backend.js"></script>\n' +
+        '   <script src="tw-scheduler-frontend.js"></script>\n' +
+        '   <script src="tw-scheduler-modal.js"></script>\n' +
+        '   <script src="tw-scheduler-bbcode-modal.js"></script> ⚠️ FALTANDO\n\n' +
+        '💡 Carregue o modal de BBCode e recarregue a página.'
+      );
+      console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado. Verifique se tw-scheduler-bbcode-modal.js foi carregado.');
       return;
     }
-
-    const list = getList();
-    list.push(...agendamentos);
-    setList(list);
-    renderTable();
-    alert(`✅ ${agendamentos.length} agendamento(s) importado(s)!`);
+    window.TWS_BBCodeModal.show();
   }
 
   // === Carregar aldeias ===
@@ -465,12 +465,18 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   createUI();
   console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
   
-  // Verificar se o modal está carregado
+  // Verificar se os modais estão carregados
   setTimeout(() => {
     if (!window.TWS_Modal) {
-      console.warn('[TW Scheduler] ⚠️ Modal não detectado. Carregue tw-scheduler-modal.js para usar o botão Adicionar.');
+      console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado. Carregue tw-scheduler-modal.js para usar o botão Adicionar.');
     } else {
-      console.log('[TW Scheduler] ✅ Modal detectado e pronto!');
+      console.log('[TW Scheduler] ✅ Modal de Adicionar detectado e pronto!');
+    }
+    
+    if (!window.TWS_BBCodeModal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado. Carregue tw-scheduler-bbcode-modal.js para usar o botão BBCode.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal de BBCode detectado e pronto!');
     }
   }, 100);
 })();
