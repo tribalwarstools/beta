@@ -1,4 +1,4 @@
-(async function () {
+(function () {
   'use strict';
 
   if (!window.TWS_Backend) {
@@ -23,549 +23,532 @@
     _internal
   } = window.TWS_Backend;
 
-  // Carrega aldeias
-  const { myVillages } = await loadVillageTxt();
+  let panelOpen = false;
 
-  // === Criação do painel ===
-  const panel = document.createElement('div');
-  panel.id = 'tws-panel';
-  panel.className = 'tws-container';
-  panel.innerHTML = `
-    <style>
-      .tws-container {
-        position: fixed;
-        right: 0;
-        bottom: 10px;
-        width: 520px;
-        z-index: 99999;
-        font-family: Verdana, sans-serif !important;
-        background: #2b1b0f !important;
-        color: #f5deb3 !important;
-        border: 2px solid #654321 !important;
-        border-right: none !important;
-        border-radius: 8px 0 0 8px !important;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.7) !important;
-        padding: 12px !important;
-        transition: transform 0.4s ease !important;
-      }
-      .tws-toggle-tab {
-        position: absolute;
-        left: -30px;
-        top: 40%;
-        background: #5c3a1e;
-        border: 2px solid #654321;
-        border-right: none;
-        border-radius: 6px 0 0 6px;
-        padding: 8px 5px;
-        font-size: 13px;
-        color: #ffd700;
-        cursor: pointer;
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-        user-select: none;
-        box-shadow: -2px 0 6px rgba(0,0,0,0.5);
-        font-weight: bold;
-      }
-      .tws-toggle-tab:hover { background: #7b5124; }
-      .tws-hidden { transform: translateX(100%); }
-      .tws-container h3 {
-        margin: 0 0 8px;
-        text-align: center;
-        color: #ffd700;
-        text-shadow: 1px 1px 2px #000;
-        font-size: 16px;
-      }
-      .tws-container input,
-      .tws-container select,
-      .tws-container button,
-      .tws-container textarea {
-        border-radius: 5px;
-        border: 1px solid #5c3a1e;
-        background: #1e1408;
-        color: #fff;
-        padding: 6px;
-        font-size: 12px;
-        box-sizing: border-box;
-      }
-      .tws-container button {
-        cursor: pointer;
-        background: #6b4c2a;
-        color: #f8e6c2;
-        transition: 0.2s;
-        font-weight: bold;
-      }
-      .tws-container button:hover { background: #8b652e; }
-      .tws-form-row {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .tws-form-row > div {
-        flex: 1;
-      }
-      .tws-form-row label {
-        display: block;
-        font-size: 11px;
-        margin-bottom: 3px;
-        color: #ffd700;
-        font-weight: bold;
-      }
-      .tws-troops-grid {
-        display: grid;
-        grid-template-columns: repeat(6, 1fr);
-        gap: 6px;
-        margin-top: 6px;
-        padding: 8px;
-        background: rgba(0,0,0,0.3);
-        border-radius: 5px;
-      }
-      .tws-troop-cell {
-        text-align: center;
-      }
-      .tws-troop-cell img {
-        height: 20px;
-        display: block;
-        margin: 0 auto 3px;
-      }
-      .tws-troop-cell input {
-        width: 50px;
-        text-align: center;
-        padding: 3px;
-      }
-      .tws-btn-group {
-        display: flex;
-        gap: 8px;
-        margin: 10px 0;
-      }
-      .tws-btn-group button {
-        flex: 1;
-        padding: 8px;
-      }
-      .tws-schedule-wrapper {
-        max-height: 280px;
-        overflow-y: auto;
-        border: 1px solid #3d2a12;
-        border-radius: 6px;
-        margin-top: 8px;
-        background: rgba(0,0,0,0.2);
-      }
-      .tws-schedule-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 11px;
-      }
-      .tws-schedule-table th,
-      .tws-schedule-table td {
-        border: none;
-        padding: 5px;
-        text-align: center;
-      }
-      .tws-schedule-table th {
-        background: #3d2a12;
-        color: #ffd700;
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        font-weight: bold;
-      }
-      .tws-schedule-table td button {
-        background: #b33;
-        border: none;
-        color: white;
-        padding: 3px 8px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 11px;
-      }
-      .tws-schedule-table td button:hover { background: #e44; }
-      .tws-container details summary {
-        cursor: pointer;
-        color: #ffd700;
-        margin: 8px 0 4px;
-        font-weight: bold;
-        font-size: 12px;
-      }
-      .tws-status {
-        font-size: 11px;
-        margin-top: 8px;
-        padding: 6px;
-        background: rgba(0,0,0,0.4);
-        border-radius: 5px;
-        max-height: 120px;
-        overflow-y: auto;
-        color: #fff;
-      }
-      .tws-bbcode-area {
-        width: 100%;
-        height: 90px;
-        margin-top: 6px;
-        font-family: monospace;
-        font-size: 11px;
-      }
-      .tws-tooltip {
-        position: relative;
-        display: inline-block;
-      }
-      .tws-tooltip .tws-tooltip-content {
-        visibility: hidden;
-        min-width: 180px;
-        background: #2b1b0f;
-        color: #f5deb3;
-        text-align: left;
-        border: 1px solid #7b5b2a;
-        border-radius: 5px;
-        padding: 6px 10px;
-        position: absolute;
-        z-index: 999999;
-        bottom: 125%;
-        left: 50%;
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.2s;
-        box-shadow: 0 0 10px rgba(0,0,0,0.7);
-        font-size: 11px;
-        white-space: nowrap;
-      }
-      .tws-tooltip:hover .tws-tooltip-content {
-        visibility: visible;
-        opacity: 1;
-      }
-      .tws-tooltip-content img {
-        height: 16px;
-        vertical-align: middle;
-        margin-right: 4px;
-      }
-      .tws-quick-time {
-        font-size: 10px;
-        color: #2196F3;
-        cursor: pointer;
-        text-decoration: underline;
-        margin-left: 5px;
-      }
-      .tws-quick-time:hover {
-        color: #64B5F6;
-      }
-    </style>
+  // === Renderiza tabela de agendamentos ===
+  function renderTable() {
+    const tbody = document.getElementById('tws-tbody');
+    if (!tbody) return;
 
-    <div class="tws-toggle-tab" id="tws-toggle-tab">Painel</div>
-    <h3>⚔️ Agendador Multi v2.0</h3>
-
-    <div style="margin-bottom: 8px;">
-      <label style="display:block;font-size:11px;margin-bottom:3px;color:#ffd700;font-weight:bold;">📍 Aldeia de Origem:</label>
-      <select id="tws-select-origem" style="width:100%">
-        <option value="">Selecione sua aldeia...</option>
-      </select>
-    </div>
-
-    <details>
-      <summary>🪖 Selecionar Tropas</summary>
-      <div class="tws-troops-grid">
-        ${TROOP_LIST.map(u => `
-          <div class="tws-troop-cell">
-            <img src="https://dsbr.innogamescdn.com/asset/6507ea2b/graphic/unit/unit_${u}.png" title="${u}">
-            <input type="number" id="tws-${u}" min="0" value="0">
-          </div>
-        `).join('')}
-      </div>
-    </details>
-
-    <div class="tws-form-row" style="margin-top:10px;">
-      <div>
-        <label>🎯 Destino:</label>
-        <input id="tws-alvo" placeholder="XXX|YYY" style="width:100%"/>
-      </div>
-      <div>
-        <label>🕐 Data/Hora:
-          <span class="tws-quick-time" id="tws-now">Agora</span>
-          <span class="tws-quick-time" id="tws-1min">+1min</span>
-          <span class="tws-quick-time" id="tws-5min">+5min</span>
-        </label>
-        <input id="tws-datetime" placeholder="DD/MM/YYYY HH:MM:SS" style="width:100%"/>
-      </div>
-    </div>
-
-    <div class="tws-btn-group">
-      <button id="tws-add">➕ Adicionar</button>
-      <button id="tws-test">🔥 Testar</button>
-    </div>
-
-    <div class="tws-btn-group">
-      <button id="tws-clear-completed" style="background:#9C27B0;">🗑️ Limpar Concluídos</button>
-      <button id="tws-clear-pending" style="background:#FF6F00;">⏳ Limpar Pendentes</button>
-      <button id="tws-clear-all" style="background:#D32F2F;">🚫 Limpar Tudo</button>
-    </div>
-
-    <details>
-      <summary>📥 Importar BBCode</summary>
-      <textarea class="tws-bbcode-area" id="tws-bbcode-area" placeholder="Cole o código BBCode [table]...[/table]"></textarea>
-      <button id="tws-import" style="width:100%;margin-top:6px;">📤 Importar</button>
-    </details>
-
-    <div class="tws-schedule-wrapper">
-      <table class="tws-schedule-table">
-        <thead>
-          <tr>
-            <th>Origem</th>
-            <th>Destino</th>
-            <th>Data/Hora</th>
-            <th>Status</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="tws-tbody"></tbody>
-      </table>
-    </div>
-
-    <div class="tws-status" id="tws-status">✅ Pronto. Adicione agendamentos acima.</div>
-  `;
-
-  document.body.appendChild(panel);
-
-  // === Toggle panel ===
-  const toggle = panel.querySelector('#tws-toggle-tab');
-  function updatePanelState() {
-    const hidden = panel.classList.contains('tws-hidden');
-    localStorage.setItem(PANEL_STATE_KEY, hidden ? 'hidden' : 'visible');
-    toggle.textContent = hidden ? '📅 Abrir' : '✖ Fechar';
-  }
-  toggle.onclick = () => {
-    panel.classList.toggle('tws-hidden');
-    updatePanelState();
-  };
-  const savedState = localStorage.getItem(PANEL_STATE_KEY);
-  if (savedState === 'hidden') {
-    panel.classList.add('tws-hidden');
-    toggle.textContent = '📅 Abrir';
-  } else {
-    toggle.textContent = '✖ Fechar';
-  }
-
-  // === Elementos ===
-  const el = id => panel.querySelector(id.startsWith('#') ? id : '#' + id);
-  const sel = el('tws-select-origem');
-
-  // === Preencher select de aldeias ===
-  myVillages.forEach(v => {
-    const o = document.createElement('option');
-    o.value = v.id;
-    o.textContent = `${v.name} (${v.coord})`;
-    sel.appendChild(o);
-  });
-
-  // === Auto-preencher tropas ao selecionar aldeia ===
-  sel.addEventListener('change', async () => {
-    const villageId = sel.value;
-    if (!villageId) return;
-
-    try {
-      el('tws-status').innerHTML = '🔍 Carregando tropas...';
-      const troops = await getVillageTroops(villageId);
-      
-      if (troops) {
-        TROOP_LIST.forEach(u => {
-          const input = el('tws-' + u);
-          if (input) input.value = troops[u] || 0;
-        });
-        el('tws-status').innerHTML = '✅ Tropas carregadas automaticamente!';
-      } else {
-        el('tws-status').innerHTML = '⚠️ Não foi possível carregar tropas.';
-      }
-    } catch (e) {
-      console.error('[TWS] Erro ao carregar tropas:', e);
-      el('tws-status').innerHTML = '❌ Erro ao carregar tropas.';
-    }
-  });
-
-  // === Atalhos de data/hora ===
-  const formatDateTime = (date) => {
-    const pad = n => n.toString().padStart(2, '0');
-    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  };
-
-  el('tws-now').onclick = () => {
-    el('tws-datetime').value = formatDateTime(new Date());
-  };
-  el('tws-1min').onclick = () => {
-    el('tws-datetime').value = formatDateTime(new Date(Date.now() + 60000));
-  };
-  el('tws-5min').onclick = () => {
-    el('tws-datetime').value = formatDateTime(new Date(Date.now() + 300000));
-  };
-
-  // === Renderiza tabela ===
-  window.renderTable = function renderTable() {
     const list = getList();
-    const tbody = el('tws-tbody');
-    
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="opacity:0.6;"><i>Nenhum agendamento</i></td></tr>';
+    tbody.innerHTML = '';
+
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Nenhum agendamento</td></tr>';
       return;
     }
 
     const now = Date.now();
-    tbody.innerHTML = list.map((a, i) => {
-      const troops = TROOP_LIST
-        .filter(t => a[t] > 0)
-        .map(t => `<img src="https://dsbr.innogamescdn.com/asset/6507ea2b/graphic/unit/unit_${t}.png"> ${a[t]}`)
-        .join(' ') || 'Sem tropas';
 
-      let status = '⏳ Agendado';
+    list.forEach((cfg, idx) => {
+      const tr = document.createElement('tr');
+      
+      // Status visual
+      let statusIcon = '⏳';
       let statusColor = '#fff';
-
-      if (a.done) {
-        if (a.success) {
-          status = '✅ Enviado';
+      let statusText = 'Agendado';
+      
+      if (cfg.done) {
+        if (cfg.success) {
+          statusIcon = '✅';
           statusColor = '#90EE90';
+          statusText = 'Enviado';
         } else {
-          status = '❌ Erro';
+          statusIcon = '❌';
           statusColor = '#FFB6C1';
+          statusText = cfg.error || 'Erro';
         }
       } else {
-        const t = parseDateTimeToMs(a.datetime);
+        const t = parseDateTimeToMs(cfg.datetime);
         if (t && !isNaN(t)) {
           const diff = t - now;
           if (diff > 0) {
             const seconds = Math.ceil(diff / 1000);
             const minutes = Math.floor(seconds / 60);
             const secs = seconds % 60;
-            status = `🕒 ${minutes}:${secs.toString().padStart(2, '0')}`;
+            statusText = `${minutes}:${secs.toString().padStart(2, '0')}`;
+            statusIcon = '🕒';
           } else if (diff > -10000) {
-            status = '🔥 Enviando...';
+            statusIcon = '🔥';
             statusColor = '#FFD700';
+            statusText = 'Executando...';
           }
         }
       }
 
-      return `<tr style="background:${statusColor}">
-        <td class="tws-tooltip">
-          ${a.origem || a.origemId}
-          <div class="tws-tooltip-content">${troops}</div>
-        </td>
-        <td>${a.alvo}</td>
-        <td style="font-size:10px;">${a.datetime}</td>
-        <td>${status}</td>
-        <td>
-          ${a.done 
-            ? `<button data-idx="${i}" class="tws-view-btn" style="background:#2196F3;">📋</button>`
-            : `<button data-idx="${i}" class="tws-del-btn">❌</button>`
+      tr.style.backgroundColor = statusColor;
+      tr.innerHTML = `
+        <td style="text-align:center;">${statusIcon}</td>
+        <td>${cfg.origem || cfg.origemId || '?'}</td>
+        <td>${cfg.alvo || '?'}</td>
+        <td style="font-size:11px;">${cfg.datetime || '?'}</td>
+        <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u] || 0}`).join(' ')}</td>
+        <td style="text-align:center;font-size:11px;">${statusText}</td>
+        <td style="text-align:center;">
+          ${cfg.done ? 
+            `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
+            `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`
           }
         </td>
-      </tr>`;
-    }).join('');
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 
-    // Event listeners para botões
-    tbody.querySelectorAll('.tws-del-btn').forEach(btn => {
-      btn.onclick = () => {
-        if (confirm('Remover este agendamento?')) {
-          const i = +btn.dataset.idx;
-          const l = getList();
-          l.splice(i, 1);
-          setList(l);
+  // === View detalhes de um agendamento executado ===
+  function viewDetails(idx) {
+    const list = getList();
+    const cfg = list[idx];
+    if (!cfg) return;
+
+    let details = `
+═══════════════════════════════
+📋 DETALHES DO AGENDAMENTO #${idx + 1}
+═══════════════════════════════
+
+${cfg.success ? '✅ STATUS: ENVIADO COM SUCESSO' : '❌ STATUS: FALHOU'}
+
+📍 Origem: ${cfg.origem || cfg.origemId}
+🎯 Alvo: ${cfg.alvo}
+🕐 Horário Agendado: ${cfg.datetime}
+${cfg.executedAt ? `⏰ Executado em: ${new Date(cfg.executedAt).toLocaleString('pt-BR')}` : ''}
+
+🪖 TROPAS ENVIADAS:
+${TROOP_LIST.map(u => `  ${u}: ${cfg[u] || 0}`).join('\n')}
+
+${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
+═══════════════════════════════
+    `.trim();
+
+    alert(details);
+  }
+
+  // === Remove item ===
+  function removeItem(idx) {
+    if (!confirm('Remover este agendamento?')) return;
+    const list = getList();
+    list.splice(idx, 1);
+    setList(list);
+  }
+
+  // === Limpa agendamentos concluídos ===
+  function clearCompleted() {
+    const list = getList();
+    const filtered = list.filter(a => !a.done);
+    if (filtered.length === list.length) {
+      alert('Nenhum agendamento concluído para limpar.');
+      return;
+    }
+    if (confirm(`Remover ${list.length - filtered.length} agendamento(s) concluído(s)?`)) {
+      setList(filtered);
+    }
+  }
+
+  // === Limpa TODOS os agendamentos ===
+  function clearAll() {
+    const list = getList();
+    if (list.length === 0) {
+      alert('Nenhum agendamento para limpar.');
+      return;
+    }
+    if (confirm(`⚠️ ATENÇÃO!\n\nRemover TODOS os ${list.length} agendamento(s)?\n\nEsta ação não pode ser desfeita!`)) {
+      setList([]);
+      alert('✅ Todos os agendamentos foram removidos.');
+    }
+  }
+
+  // === Limpa agendamentos pendentes ===
+  function clearPending() {
+    const list = getList();
+    const filtered = list.filter(a => a.done);
+    if (filtered.length === list.length) {
+      alert('Nenhum agendamento pendente para limpar.');
+      return;
+    }
+    if (confirm(`Remover ${list.length - filtered.length} agendamento(s) pendente(s)?`)) {
+      setList(filtered);
+    }
+  }
+
+  // === MODAL: Adiciona agendamento manual ===
+  function addManual() {
+    showModal();
+  }
+
+  // === Cria e exibe o modal ===
+  function showModal() {
+    // Remove modal existente se houver
+    const existing = document.getElementById('tws-modal');
+    if (existing) existing.remove();
+
+    // Criar overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'tws-modal';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 999999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.2s ease;
+    `;
+
+    // Criar modal
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: #F4E4C1;
+      border: 3px solid #8B4513;
+      border-radius: 8px;
+      padding: 20px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      animation: slideIn 0.3s ease;
+    `;
+
+    modal.innerHTML = `
+      <style>
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-      };
-    });
+        @keyframes slideIn {
+          from { transform: translateY(-50px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .tws-form-group {
+          margin-bottom: 15px;
+        }
+        .tws-form-label {
+          display: block;
+          font-weight: bold;
+          margin-bottom: 5px;
+          color: #8B4513;
+        }
+        .tws-form-input, .tws-form-select {
+          width: 100%;
+          padding: 8px;
+          border: 2px solid #8B4513;
+          border-radius: 4px;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
+        .tws-form-input:focus, .tws-form-select:focus {
+          outline: none;
+          border-color: #654321;
+          box-shadow: 0 0 5px rgba(139, 69, 19, 0.3);
+        }
+        .tws-troops-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+          margin-top: 10px;
+        }
+        .tws-troop-input {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .tws-troop-input label {
+          font-size: 11px;
+          margin-bottom: 3px;
+          color: #654321;
+        }
+        .tws-troop-input input {
+          width: 60px;
+          padding: 5px;
+          border: 2px solid #8B4513;
+          border-radius: 4px;
+          text-align: center;
+        }
+        .tws-btn-group {
+          display: flex;
+          gap: 10px;
+          margin-top: 20px;
+        }
+        .tws-btn {
+          flex: 1;
+          padding: 10px;
+          border: none;
+          border-radius: 4px;
+          font-size: 14px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .tws-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .tws-btn-primary {
+          background: #4CAF50;
+          color: white;
+        }
+        .tws-btn-secondary {
+          background: #9E9E9E;
+          color: white;
+        }
+        .tws-validation-msg {
+          padding: 10px;
+          margin-top: 10px;
+          border-radius: 4px;
+          font-size: 13px;
+          display: none;
+        }
+        .tws-validation-error {
+          background: #FFE5E5;
+          border: 1px solid #FF0000;
+          color: #CC0000;
+        }
+        .tws-validation-success {
+          background: #E5FFE5;
+          border: 1px solid #00CC00;
+          color: #008800;
+        }
+      </style>
 
-    tbody.querySelectorAll('.tws-view-btn').forEach(btn => {
-      btn.onclick = () => {
-        const i = +btn.dataset.idx;
-        const a = getList()[i];
-        if (!a) return;
+      <h2 style="margin: 0 0 20px 0; color: #8B4513;">➕ Adicionar Agendamento</h2>
 
-        const details = `
-═══════════════════════════════
-📋 DETALHES - Agendamento #${i + 1}
-═══════════════════════════════
+      <form id="tws-add-form">
+        <!-- Origem -->
+        <div class="tws-form-group">
+          <label class="tws-form-label">📍 Aldeia de Origem:</label>
+          <select id="tws-origem" class="tws-form-select">
+            <option value="">Carregando aldeias...</option>
+          </select>
+        </div>
 
-${a.success ? '✅ STATUS: ENVIADO' : '❌ STATUS: FALHOU'}
+        <!-- Alvo -->
+        <div class="tws-form-group">
+          <label class="tws-form-label">🎯 Alvo (Coordenada XXX|YYY):</label>
+          <input type="text" id="tws-alvo" class="tws-form-input" placeholder="529|431" pattern="\\d{3}\\|\\d{3}">
+        </div>
 
-📍 Origem: ${a.origem || a.origemId}
-🎯 Alvo: ${a.alvo}
-🕐 Agendado: ${a.datetime}
-${a.executedAt ? `⏰ Executado: ${new Date(a.executedAt).toLocaleString('pt-BR')}` : ''}
+        <!-- Data/Hora -->
+        <div class="tws-form-group">
+          <label class="tws-form-label">🕐 Data e Hora (DD/MM/YYYY HH:MM:SS):</label>
+          <input type="text" id="tws-datetime" class="tws-form-input" placeholder="16/11/2024 10:30:00">
+          <small style="color: #666;">Ou use: <a href="#" id="tws-set-now" style="color: #2196F3;">Agora</a> | <a href="#" id="tws-set-1min" style="color: #2196F3;">+1min</a> | <a href="#" id="tws-set-5min" style="color: #2196F3;">+5min</a></small>
+        </div>
 
-🪖 TROPAS:
-${TROOP_LIST.map(u => `  ${u}: ${a[u] || 0}`).join('\n')}
+        <!-- Tropas -->
+        <div class="tws-form-group">
+          <label class="tws-form-label">🪖 Tropas:</label>
+          <div class="tws-troops-grid">
+            ${TROOP_LIST.map(u => `
+              <div class="tws-troop-input">
+                <label>${u}</label>
+                <input type="number" id="tws-troop-${u}" min="0" value="0">
+              </div>
+            `).join('')}
+          </div>
+        </div>
 
-${a.error ? `\n⚠️ ERRO: ${a.error}` : ''}
-═══════════════════════════════
-        `.trim();
-        alert(details);
-      };
-    });
-  };
+        <!-- Mensagem de validação -->
+        <div id="tws-validation-msg" class="tws-validation-msg"></div>
 
-  // === Adicionar agendamento ===
-  el('tws-add').onclick = async () => {
-    const selVal = sel.value;
-    const alvo = parseCoord(el('tws-alvo').value);
-    const dt = el('tws-datetime').value.trim();
+        <!-- Botões -->
+        <div class="tws-btn-group">
+          <button type="button" id="tws-btn-cancel" class="tws-btn tws-btn-secondary">❌ Cancelar</button>
+          <button type="submit" class="tws-btn tws-btn-primary">✅ Adicionar</button>
+        </div>
+      </form>
+    `;
 
-    if (!selVal) {
-      el('tws-status').innerHTML = '❌ Selecione uma aldeia de origem!';
-      return;
-    }
-    if (!alvo) {
-      el('tws-status').innerHTML = '❌ Coordenada de destino inválida!';
-      return;
-    }
-    if (isNaN(parseDateTimeToMs(dt))) {
-      el('tws-status').innerHTML = '❌ Data/hora inválida!';
-      return;
-    }
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
 
-    const origem = myVillages.find(v => v.id === selVal)?.coord || '';
-    const cfg = { origem, origemId: selVal, alvo, datetime: dt, done: false };
+    // Carregar aldeias
+    loadVillageSelect();
+
+    // Event listeners
+    document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
+    // Atalhos de data/hora
+    document.getElementById('tws-set-now').onclick = (e) => {
+      e.preventDefault();
+      const now = new Date();
+      document.getElementById('tws-datetime').value = formatDateTime(now);
+    };
+    document.getElementById('tws-set-1min').onclick = (e) => {
+      e.preventDefault();
+      const date = new Date(Date.now() + 60000);
+      document.getElementById('tws-datetime').value = formatDateTime(date);
+    };
+    document.getElementById('tws-set-5min').onclick = (e) => {
+      e.preventDefault();
+      const date = new Date(Date.now() + 300000);
+      document.getElementById('tws-datetime').value = formatDateTime(date);
+    };
+
+    // Submit form
+    document.getElementById('tws-add-form').onsubmit = async (e) => {
+      e.preventDefault();
+      await handleFormSubmit(overlay);
+    };
+  }
+
+  // === Formata data para DD/MM/YYYY HH:MM:SS ===
+  function formatDateTime(date) {
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  // === Carrega aldeias no select ===
+  async function loadVillageSelect() {
+    const select = document.getElementById('tws-origem');
+    if (!select) return;
+
+    const { myVillages } = _internal;
+    
+    if (myVillages.length === 0) {
+      select.innerHTML = '<option value="">⚠️ Carregue as aldeias primeiro</option>';
+      return;
+    }
+
+    select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
+      myVillages.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
+  }
+
+  // === Processa submit do formulário ===
+  async function handleFormSubmit(overlay) {
+    const msgEl = document.getElementById('tws-validation-msg');
+    const showMsg = (msg, type) => {
+      msgEl.textContent = msg;
+      msgEl.className = `tws-validation-msg tws-validation-${type}`;
+      msgEl.style.display = 'block';
+    };
+
+    // Pegar valores
+    const origemSelect = document.getElementById('tws-origem');
+    const origemId = origemSelect.value;
+    const origemCoord = origemSelect.options[origemSelect.selectedIndex]?.dataset?.coord;
+    const alvo = document.getElementById('tws-alvo').value.trim();
+    const datetime = document.getElementById('tws-datetime').value.trim();
+
+    // Validações
+    if (!origemId) {
+      showMsg('❌ Selecione uma aldeia de origem!', 'error');
+      return;
+    }
+
+    const alvoParsed = parseCoord(alvo);
+    if (!alvoParsed) {
+      showMsg('❌ Coordenada de alvo inválida! Use formato: XXX|YYY', 'error');
+      return;
+    }
+
+    const t = parseDateTimeToMs(datetime);
+    if (!t || isNaN(t)) {
+      showMsg('❌ Data/hora inválida! Use formato: DD/MM/YYYY HH:MM:SS', 'error');
+      return;
+    }
+
     // Coletar tropas
+    const troops = {};
     let hasTroops = false;
     TROOP_LIST.forEach(u => {
-      const val = parseInt(el('tws-' + u).value, 10) || 0;
-      cfg[u] = val;
-      if (val > 0) hasTroops = true;
+      const val = document.getElementById(`tws-troop-${u}`).value;
+      const num = parseInt(val, 10);
+      troops[u] = isNaN(num) ? 0 : num;
+      if (troops[u] > 0) hasTroops = true;
     });
 
     if (!hasTroops) {
-      el('tws-status').innerHTML = '❌ Adicione pelo menos uma tropa!';
+      showMsg('❌ Adicione pelo menos uma tropa!', 'error');
       return;
     }
 
-    // Validar tropas
-    el('tws-status').innerHTML = '🔍 Validando tropas...';
-    const available = await getVillageTroops(selVal);
+    // Validar tropas disponíveis
+    showMsg('🔍 Verificando tropas disponíveis...', 'success');
+    const available = await getVillageTroops(origemId);
+    
     if (available) {
-      const errors = validateTroops(cfg, available);
+      const errors = validateTroops(troops, available);
       if (errors.length > 0) {
-        el('tws-status').innerHTML = `❌ Tropas insuficientes: ${errors[0]}`;
+        showMsg(`❌ Tropas insuficientes:\n${errors.join('\n')}`, 'error');
         return;
       }
     }
 
+    // Criar agendamento
+    const cfg = {
+      origem: origemCoord,
+      origemId,
+      alvo: alvoParsed,
+      datetime,
+      done: false,
+      ...troops
+    };
+
     const list = getList();
     list.push(cfg);
     setList(list);
-    el('tws-status').innerHTML = '✅ Agendamento adicionado!';
-  };
 
-  // === Testar envio ===
-  el('tws-test').onclick = async () => {
-    if (!confirm('⚠️ Isso vai ENVIAR UM ATAQUE AGORA!\n\nConfirma?')) return;
+    showMsg('✅ Agendamento adicionado com sucesso!', 'success');
+    setTimeout(() => overlay.remove(), 1500);
+  }
+
+  // === Importar BBCode ===
+  function importBBCode() {
+    const bb = prompt('Cole o BBCode aqui:');
+    if (!bb) return;
+
+    const agendamentos = importarDeBBCode(bb);
+    if (agendamentos.length === 0) {
+      alert('Nenhum agendamento encontrado no BBCode.');
+      return;
+    }
 
     const list = getList();
-    if (!list.length) {
+    list.push(...agendamentos);
+    setList(list);
+    alert(`✅ ${agendamentos.length} agendamento(s) importado(s)!`);
+  }
+
+  // === Carregar aldeias ===
+  async function loadVillages() {
+    const statusDiv = document.getElementById('tws-status');
+    if (statusDiv) statusDiv.innerHTML = '⏳ Carregando aldeias...';
+
+    await loadVillageTxt();
+    const { myVillages } = _internal;
+
+    if (statusDiv) {
+      statusDiv.innerHTML = `✅ ${myVillages.length} aldeia(s) carregada(s)`;
+    }
+    alert(`Carregadas ${myVillages.length} aldeias próprias.`);
+  }
+
+  // === Testar envio imediato ===
+  async function testSend() {
+    if (!confirm('⚠️ TESTE: Vai enviar um ataque AGORA.\n\nTem certeza?')) return;
+
+    const list = getList();
+    if (list.length === 0) {
       alert('Nenhum agendamento na lista!');
       return;
     }
 
-    const choice = prompt(`Escolha um agendamento (1-${list.length}):`);
+    const choice = prompt(`Escolha um agendamento para testar (1-${list.length}):`);
     const idx = parseInt(choice, 10) - 1;
 
     if (idx < 0 || idx >= list.length) {
-      alert('Índice inválido!');
+      alert('Índice inválido');
       return;
     }
 
     const cfg = list[idx];
-    el('tws-status').innerHTML = '🔥 Executando teste...';
+    const statusDiv = document.getElementById('tws-status');
+    if (statusDiv) statusDiv.innerHTML = '🔥 Executando teste...';
 
     try {
       const success = await executeAttack(cfg);
@@ -573,93 +556,205 @@ ${a.error ? `\n⚠️ ERRO: ${a.error}` : ''}
       cfg.success = success;
       cfg.executedAt = new Date().toISOString();
       setList(list);
-
+      
       if (success) {
-        alert('✅ Ataque enviado com sucesso!');
+        alert('✅ Teste concluído! Verifique se o ataque foi enviado.');
       } else {
-        alert('⚠️ Verifique manualmente se o ataque foi enfileirado.');
+        alert('⚠️ Teste finalizado, mas não foi possível confirmar envio. Verifique manualmente.');
       }
     } catch (err) {
       cfg.done = true;
       cfg.success = false;
       cfg.error = err.message;
       setList(list);
-      alert(`❌ Erro: ${err.message}`);
+      alert(`❌ Erro no teste:\n${err.message}`);
     }
-  };
+  }
 
-  // === Limpar concluídos ===
-  el('tws-clear-completed').onclick = () => {
+  // === Exportar lista ===
+  function exportList() {
     const list = getList();
-    const filtered = list.filter(a => !a.done);
+    if (list.length === 0) {
+      alert('Lista vazia!');
+      return;
+    }
+
+    const json = JSON.stringify(list, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tw_scheduler_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // === Importar lista ===
+  function importList() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
     
-    if (filtered.length === list.length) {
-      alert('Nenhum agendamento concluído!');
-      return;
-    }
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    if (confirm(`Remover ${list.length - filtered.length} concluído(s)?`)) {
-      setList(filtered);
-      el('tws-status').innerHTML = '✅ Concluídos removidos!';
-    }
-  };
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const imported = JSON.parse(evt.target.result);
+          if (!Array.isArray(imported)) {
+            alert('Arquivo inválido!');
+            return;
+          }
 
-  // === Limpar pendentes ===
-  el('tws-clear-pending').onclick = () => {
-    const list = getList();
-    const filtered = list.filter(a => a.done);
+          const list = getList();
+          list.push(...imported);
+          setList(list);
+          alert(`✅ ${imported.length} agendamento(s) importado(s)!`);
+        } catch (err) {
+          alert('Erro ao importar: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    };
     
-    if (filtered.length === list.length) {
-      alert('Nenhum agendamento pendente!');
-      return;
-    }
+    input.click();
+  }
 
-    if (confirm(`Remover ${list.length - filtered.length} pendente(s)?`)) {
-      setList(filtered);
-      el('tws-status').innerHTML = '✅ Pendentes removidos!';
-    }
-  };
+  // === Toggle painel ===
+  function togglePanel() {
+    const panel = document.getElementById('tws-panel');
+    if (!panel) return;
 
-  // === Limpar tudo ===
-  el('tws-clear-all').onclick = () => {
-    const list = getList();
-    if (!list.length) {
-      alert('Lista já está vazia!');
-      return;
-    }
+    panelOpen = !panelOpen;
+    panel.style.display = panelOpen ? 'block' : 'none';
+    localStorage.setItem(PANEL_STATE_KEY, panelOpen ? '1' : '0');
+  }
 
-    if (confirm(`⚠️ ATENÇÃO!\n\nRemover TODOS os ${list.length} agendamentos?`)) {
-      localStorage.removeItem(STORAGE_KEY);
-      renderTable();
-      el('tws-status').innerHTML = '✅ Todos removidos!';
-    }
-  };
+  // === Criar interface ===
+  function createUI() {
+    // Remover se já existe
+    let existing = document.getElementById('tws-panel');
+    if (existing) existing.remove();
 
-  // === Importar BBCode ===
-  el('tws-import').onclick = () => {
-    const bb = el('tws-bbcode-area').value.trim();
-    if (!bb) {
-      alert('Cole o BBCode primeiro!');
-      return;
-    }
+    existing = document.getElementById('tws-toggle-btn');
+    if (existing) existing.remove();
 
-    const ag = importarDeBBCode(bb);
-    if (!ag.length) {
-      alert('Nenhum agendamento encontrado!');
-      return;
-    }
+    // Botão toggle
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'tws-toggle-btn';
+    toggleBtn.innerHTML = '📅';
+    toggleBtn.title = 'TW Scheduler';
+    toggleBtn.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      padding: 8px 12px;
+      background: #8B4513;
+      color: white;
+      border: 2px solid #654321;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    toggleBtn.onclick = togglePanel;
+    document.body.appendChild(toggleBtn);
 
-    const list = getList();
-    list.push(...ag);
-    setList(list);
-    alert(`✅ ${ag.length} agendamento(s) importado(s)!`);
-    el('tws-bbcode-area').value = '';
+    // Painel principal
+    const panel = document.createElement('div');
+    panel.id = 'tws-panel';
+    panel.style.cssText = `
+      position: fixed;
+      top: 60px;
+      right: 10px;
+      width: 90%;
+      max-width: 1000px;
+      max-height: 80vh;
+      background: #F4E4C1;
+      border: 3px solid #8B4513;
+      border-radius: 8px;
+      padding: 15px;
+      z-index: 99998;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      font-family: Arial, sans-serif;
+      display: none;
+    `;
+
+    panel.innerHTML = `
+      <div style="margin-bottom: 15px;">
+        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ TW Scheduler Multi v2.0</h2>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+          <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
+          <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
+          <button onclick="TWS_Panel.loadVillages()" style="padding: 6px 12px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer;">🏰 Carregar Aldeias</button>
+          <button onclick="TWS_Panel.testSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Testar Envio</button>
+          <button onclick="TWS_Panel.clearCompleted()" style="padding: 6px 12px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Limpar Concluídos</button>
+          <button onclick="TWS_Panel.clearPending()" style="padding: 6px 12px; background: #FF6F00; color: white; border: none; border-radius: 4px; cursor: pointer;">⏳ Limpar Pendentes</button>
+          <button onclick="TWS_Panel.clearAll()" style="padding: 6px 12px; background: #D32F2F; color: white; border: none; border-radius: 4px; cursor: pointer;">🚫 Limpar Tudo</button>
+          <button onclick="TWS_Panel.exportList()" style="padding: 6px 12px; background: #607D8B; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 Exportar</button>
+          <button onclick="TWS_Panel.importList()" style="padding: 6px 12px; background: #795548; color: white; border: none; border-radius: 4px; cursor: pointer;">📂 Importar</button>
+        </div>
+        <div id="tws-status" style="padding: 8px; background: #E8D4A8; border: 1px solid #8B4513; border-radius: 4px; font-size: 12px; margin-bottom: 10px;">
+          Pronto. Use os botões acima.
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; background: white; font-size: 12px;">
+          <thead>
+            <tr style="background: #8B4513; color: white;">
+              <th style="padding: 8px; border: 1px solid #654321;">Status</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Origem</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Alvo</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Data/Hora</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Tropas</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Info</th>
+              <th style="padding: 8px; border: 1px solid #654321;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tws-tbody"></tbody>
+        </table>
+      </div>
+    `;
+
+    document.body.appendChild(panel);
+
+    // Restaurar estado
+    const savedState = localStorage.getItem(PANEL_STATE_KEY);
+    panelOpen = savedState === '1';
+    panel.style.display = panelOpen ? 'block' : 'none';
+
+    // Iniciar scheduler e renderizar
+    startScheduler();
+    renderTable();
+
+    // Atualizar tabela a cada segundo
+    setInterval(renderTable, 1000);
+  }
+
+  // === Expor API global ===
+  window.TWS_Panel = {
+    createUI,
+    renderTable,
+    addManual,
+    importBBCode,
+    loadVillages,
+    testSend,
+    clearCompleted,
+    clearPending,
+    clearAll,
+    removeItem,
+    viewDetails,
+    exportList,
+    importList,
+    togglePanel
   };
 
   // === Inicializar ===
-  startScheduler();
-  renderTable();
-  setInterval(renderTable, 1000);
-
-  console.log('[TWS_Frontend] Painel carregado com sucesso!');
+  createUI();
+  console.log('[TW Scheduler] Frontend carregado com sucesso!');
 })();
