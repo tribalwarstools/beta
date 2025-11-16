@@ -13,6 +13,7 @@
     setList,
     getVillageTroops,
     validateTroops,
+    loadVillageTxt,
     TROOP_LIST,
     _internal
   } = window.TWS_Backend;
@@ -48,78 +49,126 @@
       msgEl.style.display = 'block';
     };
 
-    // Pegar valores
-    const origemSelect = document.getElementById('tws-origem');
-    const origemId = origemSelect.value;
-    const origemCoord = origemSelect.options[origemSelect.selectedIndex]?.dataset?.coord;
-    const alvo = document.getElementById('tws-alvo').value.trim();
-    const datetime = document.getElementById('tws-datetime').value.trim();
-
-    // Validações
-    if (!origemId) {
-      showMsg('❌ Selecione uma aldeia de origem!', 'error');
+    // ✅ PROTEÇÃO: Prevenir múltiplos submits
+    const submitBtn = document.querySelector('#tws-add-form button[type="submit"]');
+    if (submitBtn.disabled) {
+      console.warn('[Modal] Submit já em andamento, ignorando...');
       return;
     }
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Processando...';
 
-    const alvoParsed = parseCoord(alvo);
-    if (!alvoParsed) {
-      showMsg('❌ Coordenada de alvo inválida! Use formato: XXX|YYY', 'error');
-      return;
-    }
+    try {
+      // Pegar valores
+      const origemSelect = document.getElementById('tws-origem');
+      const origemId = origemSelect.value;
+      const origemCoord = origemSelect.options[origemSelect.selectedIndex]?.dataset?.coord;
+      const alvo = document.getElementById('tws-alvo').value.trim();
+      const datetime = document.getElementById('tws-datetime').value.trim();
 
-    const t = parseDateTimeToMs(datetime);
-    if (!t || isNaN(t)) {
-      showMsg('❌ Data/hora inválida! Use formato: DD/MM/YYYY HH:MM:SS', 'error');
-      return;
-    }
-
-    // Coletar tropas
-    const troops = {};
-    let hasTroops = false;
-    TROOP_LIST.forEach(u => {
-      const val = document.getElementById(`tws-troop-${u}`).value;
-      const num = parseInt(val, 10);
-      troops[u] = isNaN(num) ? 0 : num;
-      if (troops[u] > 0) hasTroops = true;
-    });
-
-    if (!hasTroops) {
-      showMsg('❌ Adicione pelo menos uma tropa!', 'error');
-      return;
-    }
-
-    // Validar tropas disponíveis
-    showMsg('🔍 Verificando tropas disponíveis...', 'success');
-    const available = await getVillageTroops(origemId);
-    
-    if (available) {
-      const errors = validateTroops(troops, available);
-      if (errors.length > 0) {
-        showMsg(`❌ Tropas insuficientes:\n${errors.join('\n')}`, 'error');
+      // Validações
+      if (!origemId) {
+        showMsg('❌ Selecione uma aldeia de origem!', 'error');
         return;
       }
+
+      const alvoParsed = parseCoord(alvo);
+      if (!alvoParsed) {
+        showMsg('❌ Coordenada de alvo inválida! Use formato: XXX|YYY', 'error');
+        return;
+      }
+
+      const t = parseDateTimeToMs(datetime);
+      if (!t || isNaN(t)) {
+        showMsg('❌ Data/hora inválida! Use formato: DD/MM/YYYY HH:MM:SS', 'error');
+        return;
+      }
+
+      // Coletar tropas
+      const troops = {};
+      let hasTroops = false;
+      TROOP_LIST.forEach(u => {
+        const val = document.getElementById(`tws-troop-${u}`).value;
+        const num = parseInt(val, 10);
+        troops[u] = isNaN(num) ? 0 : num;
+        if (troops[u] > 0) hasTroops = true;
+      });
+
+      if (!hasTroops) {
+        showMsg('❌ Adicione pelo menos uma tropa!', 'error');
+        return;
+      }
+
+      // Validar tropas disponíveis
+      showMsg('🔍 Verificando tropas disponíveis...', 'success');
+      const available = await getVillageTroops(origemId);
+      
+      if (available) {
+        const errors = validateTroops(troops, available);
+        if (errors.length > 0) {
+          showMsg(`❌ Tropas insuficientes:\n${errors.join('\n')}`, 'error');
+          return;
+        }
+      }
+
+      // Criar agendamento
+      const cfg = {
+        origem: origemCoord,
+        origemId,
+        alvo: alvoParsed,
+        datetime,
+        done: false,
+        ...troops
+      };
+
+      const list = getList();
+      
+      // ✅ DEBUG: Verificar se já existe agendamento idêntico
+      const isDuplicate = list.some(item => 
+        item.origemId === origemId && 
+        item.alvo === alvoParsed && 
+        item.datetime === datetime &&
+        !item.done
+      );
+      
+      if (isDuplicate) {
+        console.warn('[Modal] ⚠️ Agendamento duplicado detectado! Bloqueado.');
+        showMsg('⚠️ Já existe um agendamento idêntico pendente!', 'error');
+        return;
+      }
+      
+      // ✅ PROTEÇÃO EXTRA: Adicionar UUID único para rastreamento
+      const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const cfgToAdd = {
+        ...cfg,
+        _id: uniqueId // ID único para rastreamento
+      };
+      
+      list.push(cfgToAdd);
+      setList(list);
+      
+      console.log('[Modal] ✅ Agendamento adicionado com ID:', uniqueId);
+      console.log('[Modal] 📋 Total de agendamentos na lista:', list.length);
+      console.log('[Modal] 📋 Lista completa:', list);
+
+      showMsg('✅ Agendamento adicionado com sucesso!', 'success');
+      
+      // Disparar evento customizado para atualizar a tabela
+      window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
+      
+      setTimeout(() => overlay.remove(), 1500);
+      
+    } catch (error) {
+      console.error('[Modal] Erro ao adicionar agendamento:', error);
+      showMsg(`❌ Erro: ${error.message}`, 'error');
+    } finally {
+      // ✅ Reabilitar botão
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✅ Adicionar';
+      }
     }
-
-    // Criar agendamento
-    const cfg = {
-      origem: origemCoord,
-      origemId,
-      alvo: alvoParsed,
-      datetime,
-      done: false,
-      ...troops
-    };
-
-    const list = getList();
-    list.push(cfg);
-    setList(list);
-
-    showMsg('✅ Agendamento adicionado com sucesso!', 'success');
-    
-    // Disparar evento customizado para atualizar a tabela
-    window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-    
-    setTimeout(() => overlay.remove(), 1500);
   }
 
   // === Cria e exibe o modal ===
@@ -339,6 +388,7 @@
     // Submit form
     document.getElementById('tws-add-form').onsubmit = async (e) => {
       e.preventDefault();
+      e.stopPropagation(); // ✅ PROTEÇÃO: Impedir propagação do evento
       await handleFormSubmit(overlay);
     };
   }
