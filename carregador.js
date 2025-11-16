@@ -125,12 +125,25 @@
         }
     }
 
+    // ✅ Sistema de notificações com ID único
+    let currentNotification = null;
+
     function showNotification(msg, type = 'info') {
         const colors = { 
             success: '#4CAF50', 
             error: '#F44336',
             info: '#2196F3'
         };
+        
+        // Remover notificação anterior se existir
+        if (currentNotification && currentNotification.parentNode) {
+            currentNotification.style.opacity = '0';
+            setTimeout(() => {
+                if (currentNotification.parentNode) {
+                    currentNotification.parentNode.removeChild(currentNotification);
+                }
+            }, 200);
+        }
         
         const div = document.createElement('div');
         div.style.cssText = `
@@ -149,19 +162,30 @@
             word-wrap: break-word;
             cursor: pointer;
             transition: opacity 0.3s;
+            opacity: 0;
         `;
         div.textContent = msg;
         div.title = 'Clique para fechar';
         document.body.appendChild(div);
         
+        // Fade in
+        setTimeout(() => div.style.opacity = '1', 10);
+        
+        currentNotification = div;
+        
         const timeoutId = setTimeout(() => {
-            div.style.opacity = '0';
-            setTimeout(() => {
-                if (div.parentNode) {
-                    div.parentNode.removeChild(div);
-                }
-            }, 300);
-        }, 4000);
+            if (div === currentNotification) {
+                div.style.opacity = '0';
+                setTimeout(() => {
+                    if (div.parentNode) {
+                        div.parentNode.removeChild(div);
+                    }
+                    if (div === currentNotification) {
+                        currentNotification = null;
+                    }
+                }, 300);
+            }
+        }, type === 'success' ? 3000 : 4000); // Sucesso desaparece mais rápido
 
         // Permitir fechar manualmente
         div.onclick = () => {
@@ -170,6 +194,9 @@
             setTimeout(() => {
                 if (div.parentNode) {
                     div.parentNode.removeChild(div);
+                }
+                if (div === currentNotification) {
+                    currentNotification = null;
                 }
             }, 300);
         };
