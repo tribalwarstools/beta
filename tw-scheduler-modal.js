@@ -174,7 +174,6 @@
       
       console.log('[Modal] ✅ Agendamento adicionado com ID:', uniqueId);
       console.log('[Modal] 📋 Total de agendamentos na lista:', list.length);
-      console.log('[Modal] 📋 Lista completa:', list);
 
       showMsg('✅ Agendamento adicionado com sucesso!', 'success');
       
@@ -392,7 +391,7 @@
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
-// Atalhos de data/hora
+    // ✅ CORREÇÃO: Atalhos de data/hora com incremento acumulativo
     document.getElementById('tws-set-now').onclick = (e) => {
       e.preventDefault();
       const now = new Date();
