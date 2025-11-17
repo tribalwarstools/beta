@@ -225,50 +225,20 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     alert(`Carregadas ${myVillages.length} aldeias próprias.`);
   }
 
-  // === Testar envio imediato ===
-  async function testSend() {
-    if (!confirm('⚠️ TESTE: Vai enviar um ataque AGORA.\n\nTem certeza?')) return;
-
-    const list = getList();
-    if (list.length === 0) {
-      alert('Nenhum agendamento na lista!');
-      return;
-    }
-
-    const choice = prompt(`Escolha um agendamento para testar (1-${list.length}):`);
-    const idx = parseInt(choice, 10) - 1;
-
-    if (idx < 0 || idx >= list.length) {
-      alert('Índice inválido');
-      return;
-    }
-
-    const cfg = list[idx];
-    const statusDiv = document.getElementById('tws-status');
-    if (statusDiv) statusDiv.innerHTML = '🔥 Executando teste...';
-
-    try {
-      const success = await executeAttack(cfg);
-      cfg.done = true;
-      cfg.success = success;
-      cfg.executedAt = new Date().toISOString();
-      setList(list);
-      renderTable();
-      
-      if (success) {
-        alert('✅ Teste concluído! Verifique se o ataque foi enviado.');
-      } else {
-        alert('⚠️ Teste finalizado, mas não foi possível confirmar envio. Verifique manualmente.');
-      }
-    } catch (err) {
-      cfg.done = true;
-      cfg.success = false;
-      cfg.error = err.message;
-      setList(list);
-      renderTable();
-      alert(`❌ Erro no teste:\n${err.message}`);
-    }
+// === Testar envio imediato ===
+function testSend() {
+  if (!window.TWS_TestModal) {
+    alert(
+      '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
+      '📋 Certifique-se de que você carregou:\n' +
+      '   <script src="tw-scheduler-test-modal.js"></script>\n\n' +
+      '💡 Recarregue a página após adicionar o arquivo.'
+    );
+    console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
+    return;
   }
+  window.TWS_TestModal.show();
+}
 
   // === Exportar lista ===
   function exportList() {
@@ -480,3 +450,4 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }, 100);
 })();
+
