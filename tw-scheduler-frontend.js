@@ -436,18 +436,25 @@ function testSend() {
   console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
   
   // Verificar se os modais estão carregados
-  setTimeout(() => {
-    if (!window.TWS_Modal) {
-      console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado. Carregue tw-scheduler-modal.js para usar o botão Adicionar.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de Adicionar detectado e pronto!');
-    }
-    
-    if (!window.TWS_BBCodeModal) {
-      console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado. Carregue tw-scheduler-bbcode-modal.js para usar o botão BBCode.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de BBCode detectado e pronto!');
-    }
-  }, 100);
+setTimeout(() => {
+  if (!window.TWS_Modal) {
+    console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
+  } else {
+    console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
+  }
+  
+  if (!window.TWS_BBCodeModal) {
+    console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
+  } else {
+    console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
+  }
+  
+  if (!window.TWS_TestModal) {
+    console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
+  } else {
+    console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
+  }
+}, 100);
 })();
+
 
