@@ -20,7 +20,7 @@
   } = window.TWS_Backend;
 
   let panelOpen = false;
-  let updateInterval = null; // ✅ Controlar o interval
+  let updateInterval = null;
 
   // === Renderiza tabela de agendamentos ===
   function renderTable() {
@@ -40,7 +40,6 @@
     list.forEach((cfg, idx) => {
       const tr = document.createElement('tr');
       
-      // Status visual
       let statusIcon = '⏳';
       let statusColor = '#fff';
       let statusText = 'Agendado';
@@ -92,7 +91,7 @@
     });
   }
 
-  // === View detalhes de um agendamento executado ===
+  // === View detalhes ===
   function viewDetails(idx) {
     const list = getList();
     const cfg = list[idx];
@@ -129,7 +128,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     renderTable();
   }
 
-  // === Limpa agendamentos concluídos ===
+  // === Limpa agendamentos ===
   function clearCompleted() {
     const list = getList();
     const filtered = list.filter(a => !a.done);
@@ -143,7 +142,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === Limpa TODOS os agendamentos ===
   function clearAll() {
     const list = getList();
     if (list.length === 0) {
@@ -157,7 +155,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === Limpa agendamentos pendentes ===
   function clearPending() {
     const list = getList();
     const filtered = list.filter(a => a.done);
@@ -171,44 +168,32 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === MODAL: Adiciona agendamento manual (chama o módulo externo) ===
+  // === Modais ===
   function addManual() {
     if (!window.TWS_Modal) {
-      alert(
-        '❌ ERRO: Módulo do Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
-        '   <script src="tw-scheduler-backend.js"></script>\n' +
-        '   <script src="tw-scheduler-frontend.js"></script>\n' +
-        '   <script src="tw-scheduler-modal.js"></script>\n\n' +
-        '⚠️ Verifique:\n' +
-        '   • O arquivo "tw-scheduler-modal.js" existe?\n' +
-        '   • Está no mesmo diretório dos outros arquivos?\n' +
-        '   • Abra o Console (F12) e veja se há erros de carregamento\n\n' +
-        '💡 Dica: Verifique se o console mostra a mensagem:\n' +
-        '   "[TW Scheduler Modal] Módulo carregado com sucesso!"'
-      );
-      console.error('[TW Scheduler] window.TWS_Modal não encontrado. Verifique se tw-scheduler-modal.js foi carregado.');
+      alert('❌ ERRO: Módulo do Modal não está disponível!');
+      console.error('[TW Scheduler] window.TWS_Modal não encontrado.');
       return;
     }
     window.TWS_Modal.show();
   }
 
-  // === Importar BBCode ===
   function importBBCode() {
     if (!window.TWS_BBCodeModal) {
-      alert(
-        '❌ ERRO: Módulo do BBCode Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
-        '   <script src="tw-scheduler-backend.js"></script>\n' +
-        '   <script src="tw-scheduler-frontend.js"></script>\n' +
-        '   <script src="tw-scheduler-modal.js"></script>\n' +
-        '   <script src="tw-scheduler-bbcode-modal.js"></script> ⚠️ FALTANDO\n\n' +
-        '💡 Carregue o modal de BBCode e recarregue a página.'
-      );
-      console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado. Verifique se tw-scheduler-bbcode-modal.js foi carregado.');
+      alert('❌ ERRO: Módulo do BBCode Modal não está disponível!');
+      console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado.');
       return;
     }
     window.TWS_BBCodeModal.show();
+  }
+
+  function testSend() {
+    if (!window.TWS_TestModal) {
+      alert('❌ ERRO: Módulo do Test Modal não está disponível!');
+      console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
+      return;
+    }
+    window.TWS_TestModal.show();
   }
 
   // === Carregar aldeias ===
@@ -225,22 +210,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     alert(`Carregadas ${myVillages.length} aldeias próprias.`);
   }
 
-// === Testar envio imediato ===
-function testSend() {
-  if (!window.TWS_TestModal) {
-    alert(
-      '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
-      '📋 Certifique-se de que você carregou:\n' +
-      '   <script src="tw-scheduler-test-modal.js"></script>\n\n' +
-      '💡 Recarregue a página após adicionar o arquivo.'
-    );
-    console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
-    return;
-  }
-  window.TWS_TestModal.show();
-}
-
-  // === Exportar lista ===
+  // === Exportar/Importar ===
   function exportList() {
     const list = getList();
     if (list.length === 0) {
@@ -258,7 +228,6 @@ function testSend() {
     URL.revokeObjectURL(url);
   }
 
-  // === Importar lista ===
   function importList() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -302,6 +271,49 @@ function testSend() {
     localStorage.setItem(PANEL_STATE_KEY, panelOpen ? '1' : '0');
   }
 
+  // === ✨ Posicionamento inteligente do botão ===
+  function positionButton(toggleBtn) {
+    // Tentar encontrar o ícone de missões
+    const questIcon = document.querySelector('#new_quest, .quest, [id*="quest"]');
+    
+    if (questIcon) {
+      const rect = questIcon.getBoundingClientRect();
+      
+      // Verificar se o elemento está visível
+      if (rect.width > 0 && rect.height > 0) {
+        toggleBtn.style.position = 'fixed';
+        toggleBtn.style.top = (rect.bottom + 5) + 'px';
+        toggleBtn.style.left = rect.left + 'px';
+        toggleBtn.style.right = 'auto';
+        
+        console.log('[TW Scheduler] ✅ Botão posicionado abaixo do ícone de missões');
+        return true;
+      }
+    }
+    
+    // Fallback: tentar posicionar no header
+    const header = document.querySelector('#header_info, #topContainer, .header');
+    if (header) {
+      const rect = header.getBoundingClientRect();
+      toggleBtn.style.position = 'fixed';
+      toggleBtn.style.top = (rect.bottom + 5) + 'px';
+      toggleBtn.style.right = '10px';
+      toggleBtn.style.left = 'auto';
+      
+      console.log('[TW Scheduler] ⚠️ Ícone de missões não encontrado, posicionado no header');
+      return true;
+    }
+    
+    // Fallback final: canto superior direito
+    toggleBtn.style.position = 'fixed';
+    toggleBtn.style.top = '10px';
+    toggleBtn.style.right = '10px';
+    toggleBtn.style.left = 'auto';
+    
+    console.log('[TW Scheduler] ⚠️ Usando posição padrão (canto superior direito)');
+    return false;
+  }
+
   // === Criar interface ===
   function createUI() {
     // Remover se já existe
@@ -317,9 +329,6 @@ function testSend() {
     toggleBtn.innerHTML = '📅';
     toggleBtn.title = 'TW Scheduler';
     toggleBtn.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
       z-index: 99999;
       padding: 8px 12px;
       background: #8B4513;
@@ -329,9 +338,30 @@ function testSend() {
       cursor: pointer;
       font-size: 18px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      transition: all 0.2s;
     `;
+    
     toggleBtn.onclick = togglePanel;
+    toggleBtn.onmouseenter = () => toggleBtn.style.transform = 'scale(1.1)';
+    toggleBtn.onmouseleave = () => toggleBtn.style.transform = 'scale(1)';
+    
     document.body.appendChild(toggleBtn);
+    
+    // ✨ Posicionar inteligentemente
+    const positioned = positionButton(toggleBtn);
+    
+    // ✨ Reposicionar ao redimensionar janela
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => positionButton(toggleBtn), 100);
+    });
+    
+    // ✨ Tentar reposicionar após carregamento completo (caso elementos carreguem tarde)
+    if (!positioned) {
+      setTimeout(() => positionButton(toggleBtn), 1000);
+      setTimeout(() => positionButton(toggleBtn), 3000);
+    }
 
     // Painel principal
     const panel = document.createElement('div');
@@ -356,7 +386,7 @@ function testSend() {
 
     panel.innerHTML = `
       <div style="margin-bottom: 15px;">
-        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ TW Scheduler Multi v2.1 (Modular)</h2>
+        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ TW Scheduler Multi v2.1</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
@@ -401,15 +431,12 @@ function testSend() {
     startScheduler();
     renderTable();
 
-    // ✅ CORREÇÃO: Limpar interval anterior antes de criar novo
     if (updateInterval) {
       clearInterval(updateInterval);
     }
     
-    // Atualizar tabela a cada segundo
     updateInterval = setInterval(renderTable, 1000);
 
-    // ✅ CORREÇÃO: Remover listeners antigos antes de adicionar novo
     window.removeEventListener('tws-schedule-updated', renderTable);
     window.addEventListener('tws-schedule-updated', renderTable);
   }
@@ -433,28 +460,17 @@ function testSend() {
 
   // === Inicializar ===
   createUI();
-  console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
+  console.log('[TW Scheduler Frontend] Carregado com sucesso!');
   
-  // Verificar se os modais estão carregados
-setTimeout(() => {
-  if (!window.TWS_Modal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
-  }
-  
-  if (!window.TWS_BBCodeModal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
-  }
-  
-  if (!window.TWS_TestModal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
-  }
-}, 100);
+  setTimeout(() => {
+    if (!window.TWS_Modal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
+    }
+    if (!window.TWS_BBCodeModal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
+    }
+    if (!window.TWS_TestModal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
+    }
+  }, 100);
 })();
-
-
