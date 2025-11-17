@@ -392,21 +392,47 @@
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
-    // Atalhos de data/hora
+// Atalhos de data/hora
     document.getElementById('tws-set-now').onclick = (e) => {
       e.preventDefault();
       const now = new Date();
       document.getElementById('tws-datetime').value = formatDateTime(now);
     };
+    
     document.getElementById('tws-set-1min').onclick = (e) => {
       e.preventDefault();
-      const date = new Date(Date.now() + 60000);
-      document.getElementById('tws-datetime').value = formatDateTime(date);
+      const input = document.getElementById('tws-datetime');
+      const currentValue = input.value.trim();
+      
+      let baseTime;
+      if (currentValue) {
+        // Tentar parsear o valor atual
+        const parsed = parseDateTimeToMs(currentValue);
+        baseTime = isNaN(parsed) ? Date.now() : parsed;
+      } else {
+        baseTime = Date.now();
+      }
+      
+      const newDate = new Date(baseTime + 60000);
+      input.value = formatDateTime(newDate);
     };
+    
     document.getElementById('tws-set-5min').onclick = (e) => {
       e.preventDefault();
-      const date = new Date(Date.now() + 300000);
-      document.getElementById('tws-datetime').value = formatDateTime(date);
+      const input = document.getElementById('tws-datetime');
+      const currentValue = input.value.trim();
+      
+      let baseTime;
+      if (currentValue) {
+        // Tentar parsear o valor atual
+        const parsed = parseDateTimeToMs(currentValue);
+        baseTime = isNaN(parsed) ? Date.now() : parsed;
+      } else {
+        baseTime = Date.now();
+      }
+      
+      const newDate = new Date(baseTime + 300000);
+      input.value = formatDateTime(newDate);
     };
 
     // Submit form
