@@ -29,6 +29,7 @@
           <th style="padding:8px; border:1px solid #654321;">Origem</th>
           <th style="padding:8px; border:1px solid #654321;">Destino</th>
           <th style="padding:8px; border:1px solid #654321;">Data/Hora</th>
+          <th style="padding:8px; border:1px solid #654321;">Tropas</th>
           <th style="padding:8px; border:1px solid #654321;">Status</th>
         </tr>
       </thead>
@@ -52,12 +53,20 @@
         statusColor = '#FFF9C4';
       }
 
+      // Mostrar tropas de forma resumida
+      const tropas = cfg.units || {};
+      const tropasResumidas = Object.entries(tropas)
+        .filter(([_, qtd]) => qtd > 0)
+        .map(([unidade, qtd]) => `${unidade}:${qtd}`)
+        .join(' ') || 'Nenhuma';
+
       html += `
         <tr style="background: ${statusColor};">
           <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
           <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '?'}</td>
           <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '?'}</td>
           <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '?'}</td>
+          <td style="padding:6px; border:1px solid #ddd; font-size:10px;">${tropasResumidas}</td>
           <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
         </tr>
       `;
@@ -126,20 +135,84 @@
     return coord;
   }
 
+  // === Função para extrair tropas do URL ===
+  function extrairTropasDoURL(url) {
+    if (!url) return {};
+    
+    const unidades = {
+      'att_spear': 'spear',
+      'att_sword': 'sword', 
+      'att_axe': 'axe',
+      'att_archer': 'archer',
+      'att_spy': 'spy',
+      'att_light': 'light',
+      'att_marcher': 'marcher',
+      'att_heavy': 'heavy',
+      'att_ram': 'ram',
+      'att_catapult': 'catapult',
+      'att_knight': 'knight',
+      'att_snob': 'snob'
+    };
+    
+    const tropas = {};
+    
+    try {
+      const urlObj = new URL(url);
+      const params = urlObj.searchParams;
+      
+      Object.entries(unidades).forEach(([param, unidade]) => {
+        const valor = params.get(param);
+        if (valor && !isNaN(valor) && parseInt(valor) > 0) {
+          tropas[unidade] = parseInt(valor);
+        }
+      });
+    } catch (e) {
+      console.warn('[BBCode Modal] Erro ao extrair tropas do URL:', e);
+    }
+    
+    return tropas;
+  }
+
   // === Função para processar BBCode em formato de tabela ===
   function importarDeBBCodeTabela(bbcode) {
     const agendamentos = [];
     
     // Padrão para formato de tabela: [*][unit]...[/unit] [|] ORIGEM [|] DESTINO [|] DATA_LANCAMENTO [|] DATA_CHEGADA [|] [url=...]
-    const padraoTabela = /\[\*\](?:\[unit\][^[]*\[\/unit\])?\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*\[url=([^\]]+)\]/gi;
+    const padraoTabela = /\[\*\](?:\[unit\]([^[]*)\[\/unit\])?\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*\[url=([^\]]+)\]/gi;
     
     let match;
     while ((match = padraoTabela.exec(bbcode)) !== null) {
-      const origem = normalizarCoordenadas(match[1].trim());
-      const alvo = normalizarCoordenadas(match[2].trim());
-      const dataLancamento = match[3].trim();
-      const dataChegada = match[4].trim();
-      const url = match[5].trim();
+      const tipoUnidade = match[1] ? match[1].trim() : '';
+      const origem = normalizarCoordenadas(match[2].trim());
+      const alvo = normalizarCoordenadas(match[3].trim());
+      const dataLancamento = match[4].trim();
+      const dataChegada = match[5].trim();
+      const url = match[6].trim();
+      
+      // Extrair tropas do URL
+      const tropas = extrairTropasDoURL(url);
+      
+      // Se não encontrou tropas no URL, tentar inferir do tipo de unidade
+      if (Object.keys(tropas).length === 0 && tipoUnidade) {
+        const unidadeMap = {
+          'spear': 'spear',
+          'sword': 'sword',
+          'axe': 'axe',
+          'archer': 'archer',
+          'spy': 'spy',
+          'light': 'light',
+          'marcher': 'marcher',
+          'heavy': 'heavy',
+          'ram': 'ram',
+          'catapult': 'catapult',
+          'knight': 'knight',
+          'snob': 'snob'
+        };
+        
+        if (unidadeMap[tipoUnidade]) {
+          tropas[unidadeMap[tipoUnidade]] = 1; // Valor padrão
+        }
+      }
       
       // Usar a data de lançamento como horário do agendamento
       agendamentos.push({
@@ -147,7 +220,8 @@
         alvo: alvo,
         datetime: dataLancamento,
         origemId: origem,
-        url: url
+        url: url,
+        units: tropas
       });
     }
     
@@ -327,6 +401,15 @@
           background: #4CAF50;
           color: white;
         }
+        .tropas-warning {
+          background: #FFF3CD;
+          border: 1px solid #FFC107;
+          border-radius: 4px;
+          padding: 8px;
+          margin: 10px 0;
+          font-size: 12px;
+          color: #856404;
+        }
       </style>
 
       <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
@@ -344,14 +427,17 @@
           [*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]
         </code>
         
-        <br><strong>✅ Coordenadas aceitas:</strong> XXX|XXX e XXX|XX (converte automaticamente)<br>
-        <em>O sistema detecta automaticamente o formato do BBCode!</em>
+        <br><strong>✅ Recursos extraídos automaticamente:</strong><br>
+        • Coordenadas (XXX|XXX e XXX|XX)<br>
+        • Data e hora do agendamento<br>
+        • Tropas dos parâmetros URL (att_spear, att_axe, etc.)<br>
+        • Tipo de unidade da tag [unit]
       </div>
 
       <textarea 
         id="bbcode-input" 
         class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplo formato TABELA:&#10;[*][unit]spear[/unit] [|] 314|79 [|] 313|82 [|] 18/11/2025 05:00:00 [|] 18/11/2025 05:56:55 [|] [url=...]&#10;&#10;Exemplo formato LISTA:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]"
+        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplo formato TABELA:&#10;[*][unit]spear[/unit] [|] 314|79 [|] 313|82 [|] 18/11/2025 05:00:00 [|] 18/11/2025 05:56:55 [|] [url=https://...game.php?...att_spear=25&att_axe=25&att_spy=1...]&#10;&#10;Exemplo formato LISTA:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]"
       ></textarea>
 
       <div class="bbcode-btn-group">
@@ -366,6 +452,10 @@
         </h3>
         
         <div id="bbcode-stats" class="bbcode-stats"></div>
+        
+        <div id="tropas-warning" class="tropas-warning" style="display: none;">
+          ⚠️ Alguns agendamentos não têm informações de tropas. Serão importados com tropas vazias.
+        </div>
         
         <div id="bbcode-preview-content"></div>
 
@@ -389,6 +479,7 @@
     const previewContent = document.getElementById('bbcode-preview-content');
     const statsDiv = document.getElementById('bbcode-stats');
     const formatBadge = document.getElementById('format-badge');
+    const tropasWarning = document.getElementById('tropas-warning');
     
     const btnParse = document.getElementById('bbcode-btn-parse');
     const btnImport = document.getElementById('bbcode-btn-import');
@@ -428,6 +519,18 @@
           return;
         }
 
+        // Verificar se há agendamentos sem tropas
+        const agendamentosSemTropas = parsedAgendamentos.filter(a => 
+          !a.units || Object.keys(a.units).length === 0
+        ).length;
+        
+        if (agendamentosSemTropas > 0) {
+          tropasWarning.style.display = 'block';
+          tropasWarning.innerHTML = `⚠️ ${agendamentosSemTropas} agendamento(s) não têm informações de tropas. Serão importados com tropas vazias.`;
+        } else {
+          tropasWarning.style.display = 'none';
+        }
+
         // Calcular estatísticas
         const now = Date.now();
         const validDates = parsedAgendamentos.filter(a => {
@@ -442,6 +545,9 @@
           const t = parseDateTimeToMs(a.datetime);
           return isNaN(t);
         }).length;
+        const comTropas = parsedAgendamentos.filter(a => 
+          a.units && Object.keys(a.units).length > 0
+        ).length;
 
         // Mostrar estatísticas
         statsDiv.innerHTML = `
@@ -452,6 +558,10 @@
           <div class="bbcode-stat-item">
             <span>✅ Válidos:</span>
             <span style="color: #4CAF50;">${validDates}</span>
+          </div>
+          <div class="bbcode-stat-item">
+            <span>🎯 Com tropas:</span>
+            <span style="color: #9C27B0;">${comTropas}</span>
           </div>
           ${pastDates > 0 ? `
             <div class="bbcode-stat-item">
@@ -465,10 +575,6 @@
               <span style="color: #FF9800;">${invalidDates}</span>
             </div>
           ` : ''}
-          <div class="bbcode-stat-item">
-            <span>📋 Formato:</span>
-            <span style="color: #8B4513;">${detectedFormat === 'table' ? 'Tabela' : 'Lista'}</span>
-          </div>
         `;
 
         // Renderizar preview
@@ -534,5 +640,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.4 - Suporte Universal)');
+  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.5 - Extração de Tropas)');
 })();
