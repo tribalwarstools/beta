@@ -76,10 +76,27 @@
       setList(agendamentos);
       console.log('[BBCode Modal] ✅ Lista substituída completamente');
     } else {
-      // Adicionar aos existentes
-      list.push(...agendamentos);
+      // ✅ PROTEÇÃO: Verificar duplicatas antes de adicionar
+      const existingKeys = new Set(
+        list.map(a => `${a.origemId}_${a.alvo}_${a.datetime}`)
+      );
+      
+      const novos = agendamentos.filter(a => {
+        const key = `${a.origemId}_${a.alvo}_${a.datetime}`;
+        return !existingKeys.has(key);
+      });
+      
+      const duplicados = agendamentos.length - novos.length;
+      
+      list.push(...novos);
       setList(list);
-      console.log('[BBCode Modal] ✅ Agendamentos adicionados à lista existente');
+      
+      console.log(`[BBCode Modal] ✅ ${novos.length} agendamentos adicionados`);
+      if (duplicados > 0) {
+        console.warn(`[BBCode Modal] ⚠️ ${duplicados} duplicados ignorados`);
+      }
+      
+      return { novos: novos.length, duplicados };
     }
 
     // Disparar evento de atualização
@@ -360,8 +377,13 @@
         : `Importar ${parsedAgendamentos.length} agendamentos?`;
 
       if (confirm(msg)) {
-        handleImport(parsedAgendamentos, false);
-        alert(`✅ ${parsedAgendamentos.length} agendamento(s) importado(s) com sucesso!`);
+        const result = handleImport(parsedAgendamentos, false);
+        
+        if (result.duplicados > 0) {
+          alert(`✅ ${result.novos} agendamento(s) importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
+        } else {
+          alert(`✅ ${result.novos} agendamento(s) importado(s) com sucesso!`);
+        }
         overlay.remove();
       }
     };
@@ -394,5 +416,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso!');
+  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.2)');
 })();
