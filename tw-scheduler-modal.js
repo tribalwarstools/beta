@@ -14,6 +14,7 @@
     getVillageTroops,
     validateTroops,
     loadVillageTxt,
+    generateUniqueId, // ✅ NOVO
     TROOP_LIST,
     _internal
   } = window.TWS_Backend;
@@ -108,6 +109,13 @@
         return;
       }
 
+      // ✅ NOVO: Validação de horário muito próximo
+      const diff = t - Date.now();
+      if (diff < 3000 && diff > 0) {
+        showMsg('⚠️ Horário muito próximo! Mínimo recomendado: 3 segundos', 'error');
+        return;
+      }
+
       // Coletar tropas
       const troops = {};
       let hasTroops = false;
@@ -136,23 +144,15 @@
       }
 
       // Criar agendamento
-      const cfg = {
-        origem: origemCoord,
-        origemId,
-        alvo: alvoParsed,
-        datetime,
-        done: false,
-        ...troops
-      };
-
       const list = getList();
       
-      // ✅ DEBUG: Verificar se já existe agendamento idêntico
+      // ✅ PROTEÇÃO: Verificar duplicatas mais rigorosa
       const isDuplicate = list.some(item => 
         item.origemId === origemId && 
         item.alvo === alvoParsed && 
         item.datetime === datetime &&
-        !item.done
+        !item.done &&
+        !item.locked
       );
       
       if (isDuplicate) {
@@ -161,15 +161,21 @@
         return;
       }
       
-      // ✅ PROTEÇÃO EXTRA: Adicionar UUID único para rastreamento
-      const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // ✅ NOVO: Usar gerador de ID único do backend
+      const uniqueId = generateUniqueId();
       
-      const cfgToAdd = {
-        ...cfg,
-        _id: uniqueId // ID único para rastreamento
+      const cfg = {
+        _id: uniqueId, // ✅ ID único PRIMEIRO
+        origem: origemCoord,
+        origemId,
+        alvo: alvoParsed,
+        datetime,
+        done: false,
+        locked: false, // ✅ NOVO
+        ...troops
       };
       
-      list.push(cfgToAdd);
+      list.push(cfg);
       setList(list);
       
       console.log('[Modal] ✅ Agendamento adicionado com ID:', uniqueId);
@@ -391,7 +397,7 @@
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
-    // ✅ CORREÇÃO: Atalhos de data/hora com incremento acumulativo
+    // Atalhos de data/hora com incremento acumulativo
     document.getElementById('tws-set-now').onclick = (e) => {
       e.preventDefault();
       const now = new Date();
@@ -405,7 +411,6 @@
       
       let baseTime;
       if (currentValue) {
-        // Tentar parsear o valor atual
         const parsed = parseDateTimeToMs(currentValue);
         baseTime = isNaN(parsed) ? Date.now() : parsed;
       } else {
@@ -423,7 +428,6 @@
       
       let baseTime;
       if (currentValue) {
-        // Tentar parsear o valor atual
         const parsed = parseDateTimeToMs(currentValue);
         baseTime = isNaN(parsed) ? Date.now() : parsed;
       } else {
@@ -437,7 +441,7 @@
     // Submit form
     document.getElementById('tws-add-form').onsubmit = async (e) => {
       e.preventDefault();
-      e.stopPropagation(); // ✅ PROTEÇÃO: Impedir propagação do evento
+      e.stopPropagation();
       await handleFormSubmit(overlay);
     };
   }
@@ -447,5 +451,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler Modal] Módulo carregado com sucesso!');
+  console.log('[TW Scheduler Modal] Módulo carregado com sucesso! (v2.2)');
 })();
