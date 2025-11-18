@@ -107,6 +107,9 @@
   function normalizarCoordenadas(coord) {
     if (!coord) return coord;
     
+    // Limpar espaços
+    coord = coord.trim();
+    
     // Verificar se já está no formato XXX|XXX
     if (/^\d{3}\|\d{3}$/.test(coord)) {
       return coord;
@@ -116,26 +119,61 @@
     const match = coord.match(/^(\d{3})\|(\d{2})$/);
     if (match) {
       const x = match[1];
-      const y = match[2].padStart(3, '0'); // Adiciona zero à esquerda se necessário
+      const y = match[2].padStart(3, '0');
       return `${x}|${y}`;
     }
     
     return coord;
   }
 
-  // === Função modificada para aceitar ambos os formatos ===
-  function importarDeBBCodeComSuporteXXX_XX(bbcode) {
-    const agendamentos = importarDeBBCode(bbcode);
+  // === Função para processar BBCode em formato de tabela ===
+  function importarDeBBCodeTabela(bbcode) {
+    const agendamentos = [];
     
-    // Normalizar coordenadas para o formato XXX|XXX
-    return agendamentos.map(agendamento => {
-      return {
-        ...agendamento,
-        origem: normalizarCoordenadas(agendamento.origem),
-        alvo: normalizarCoordenadas(agendamento.alvo),
-        origemId: normalizarCoordenadas(agendamento.origemId)
-      };
-    });
+    // Padrão para formato de tabela: [*][unit]...[/unit] [|] ORIGEM [|] DESTINO [|] DATA_LANCAMENTO [|] DATA_CHEGADA [|] [url=...]
+    const padraoTabela = /\[\*\](?:\[unit\][^[]*\[\/unit\])?\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d|]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*([\d\/]+\s+[\d:]+)\s*\[\|\]\s*\[url=([^\]]+)\]/gi;
+    
+    let match;
+    while ((match = padraoTabela.exec(bbcode)) !== null) {
+      const origem = normalizarCoordenadas(match[1].trim());
+      const alvo = normalizarCoordenadas(match[2].trim());
+      const dataLancamento = match[3].trim();
+      const dataChegada = match[4].trim();
+      const url = match[5].trim();
+      
+      // Usar a data de lançamento como horário do agendamento
+      agendamentos.push({
+        origem: origem,
+        alvo: alvo,
+        datetime: dataLancamento,
+        origemId: origem,
+        url: url
+      });
+    }
+    
+    return agendamentos;
+  }
+
+  // === Função principal de importação que detecta automaticamente o formato ===
+  function importarDeBBCodeUniversal(bbcode) {
+    // Verificar se é formato de tabela (contém [table] e [|])
+    if (bbcode.includes('[table]') && bbcode.includes('[|]')) {
+      console.log('[BBCode Modal] 📊 Detectado formato de TABELA');
+      return importarDeBBCodeTabela(bbcode);
+    } else {
+      console.log('[BBCode Modal] 📝 Detectado formato de LISTA tradicional');
+      const agendamentos = importarDeBBCode(bbcode);
+      
+      // Normalizar coordenadas para o formato XXX|XXX
+      return agendamentos.map(agendamento => {
+        return {
+          ...agendamento,
+          origem: normalizarCoordenadas(agendamento.origem),
+          alvo: normalizarCoordenadas(agendamento.alvo),
+          origemId: normalizarCoordenadas(agendamento.origemId)
+        };
+      });
+    }
   }
 
   // === Cria e exibe o modal ===
@@ -273,25 +311,47 @@
           align-items: center;
           gap: 5px;
         }
+        .bbcode-format-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: bold;
+          margin-left: 8px;
+        }
+        .badge-table {
+          background: #FF9800;
+          color: white;
+        }
+        .badge-list {
+          background: #4CAF50;
+          color: white;
+        }
       </style>
 
       <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
 
       <div class="bbcode-info">
-        <strong>📝 Como usar:</strong><br>
-        1️⃣ Cole o BBCode no campo abaixo<br>
-        2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
-        3️⃣ Escolha <strong>"Adicionar"</strong> (mantém agendamentos existentes) ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Formatos aceitos:</strong><br>
-        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]</code><br>
-        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|43 → 529|43 em 16/11/2024 14:30:00 [url=...]</code><br>
-        <em>✅ Agora aceita XXX|XXX e XXX|XX</em>
+        <strong>📝 Formatos aceitos:</strong><br>
+        
+        <strong>📊 Formato TABELA</strong> <span class="bbcode-format-badge badge-table">NOVO</span><br>
+        <code style="background: white; padding: 2px 6px; border-radius: 3px; display: block; margin: 5px 0; font-size: 11px;">
+          [*][unit]spear[/unit] [|] 314|79 [|] 313|82 [|] 18/11/2025 05:00:00 [|] 18/11/2025 05:56:55 [|] [url=...]
+        </code>
+        
+        <strong>📝 Formato LISTA tradicional</strong> <span class="bbcode-format-badge badge-list">ORIGINAL</span><br>
+        <code style="background: white; padding: 2px 6px; border-radius: 3px; display: block; margin: 5px 0; font-size: 11px;">
+          [*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]
+        </code>
+        
+        <br><strong>✅ Coordenadas aceitas:</strong> XXX|XXX e XXX|XX (converte automaticamente)<br>
+        <em>O sistema detecta automaticamente o formato do BBCode!</em>
       </div>
 
       <textarea 
         id="bbcode-input" 
         class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]545|43 → 530|43 em 16/11/2024 14:35:00 [url=https://...]"
+        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplo formato TABELA:&#10;[*][unit]spear[/unit] [|] 314|79 [|] 313|82 [|] 18/11/2025 05:00:00 [|] 18/11/2025 05:56:55 [|] [url=...]&#10;&#10;Exemplo formato LISTA:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]"
       ></textarea>
 
       <div class="bbcode-btn-group">
@@ -300,7 +360,10 @@
       </div>
 
       <div id="bbcode-preview" class="bbcode-preview">
-        <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 Preview dos Agendamentos</h3>
+        <h3 style="margin: 0 0 15px 0; color: #8B4513;">
+          📊 Preview dos Agendamentos 
+          <span id="format-badge" class="bbcode-format-badge" style="display: none;"></span>
+        </h3>
         
         <div id="bbcode-stats" class="bbcode-stats"></div>
         
@@ -318,12 +381,14 @@
 
     // Estado
     let parsedAgendamentos = [];
+    let detectedFormat = '';
 
     // Event listeners
     const inputTextarea = document.getElementById('bbcode-input');
     const previewDiv = document.getElementById('bbcode-preview');
     const previewContent = document.getElementById('bbcode-preview-content');
     const statsDiv = document.getElementById('bbcode-stats');
+    const formatBadge = document.getElementById('format-badge');
     
     const btnParse = document.getElementById('bbcode-btn-parse');
     const btnImport = document.getElementById('bbcode-btn-import');
@@ -344,10 +409,22 @@
       }
 
       try {
-        parsedAgendamentos = importarDeBBCodeComSuporteXXX_XX(bbcode);
+        parsedAgendamentos = importarDeBBCodeUniversal(bbcode);
+        
+        // Detectar formato para exibir badge
+        if (bbcode.includes('[table]') && bbcode.includes('[|]')) {
+          detectedFormat = 'table';
+          formatBadge.textContent = 'FORMATO TABELA';
+          formatBadge.className = 'bbcode-format-badge badge-table';
+        } else {
+          detectedFormat = 'list';
+          formatBadge.textContent = 'FORMATO LISTA';
+          formatBadge.className = 'bbcode-format-badge badge-list';
+        }
+        formatBadge.style.display = 'inline-block';
         
         if (parsedAgendamentos.length === 0) {
-          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]XXX|YYY → XXX|YYY em DD/MM/YYYY HH:MM:SS [url=...]\n\n✅ Agora aceita XXX|XXX e XXX|XX');
+          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique se o formato está correto.');
           return;
         }
 
@@ -388,13 +465,17 @@
               <span style="color: #FF9800;">${invalidDates}</span>
             </div>
           ` : ''}
+          <div class="bbcode-stat-item">
+            <span>📋 Formato:</span>
+            <span style="color: #8B4513;">${detectedFormat === 'table' ? 'Tabela' : 'Lista'}</span>
+          </div>
         `;
 
         // Renderizar preview
         previewContent.innerHTML = renderPreview(parsedAgendamentos);
         previewDiv.style.display = 'block';
 
-        console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos');
+        console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos no formato', detectedFormat);
       } catch (error) {
         console.error('[BBCode Modal] Erro ao analisar:', error);
         alert('❌ Erro ao analisar BBCode:\n' + error.message);
@@ -453,5 +534,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.3 - Suporte XXX|XX)');
+  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.4 - Suporte Universal)');
 })();
