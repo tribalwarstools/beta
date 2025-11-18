@@ -435,7 +435,7 @@ function testSend() {
   createUI();
   console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
   
-  // Verificar se os modais estão carregados
+// Verificar se os modais estão carregados
 setTimeout(() => {
   if (!window.TWS_Modal) {
     console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
@@ -456,4 +456,5 @@ setTimeout(() => {
   }
 }, 100);
 })();
+
 
