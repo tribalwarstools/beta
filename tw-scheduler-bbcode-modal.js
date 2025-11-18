@@ -103,6 +103,41 @@
     window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
   }
 
+  // === Função para normalizar coordenadas ===
+  function normalizarCoordenadas(coord) {
+    if (!coord) return coord;
+    
+    // Verificar se já está no formato XXX|XXX
+    if (/^\d{3}\|\d{3}$/.test(coord)) {
+      return coord;
+    }
+    
+    // Converter de XXX|XX para XXX|XXX (adicionar zero à esquerda)
+    const match = coord.match(/^(\d{3})\|(\d{2})$/);
+    if (match) {
+      const x = match[1];
+      const y = match[2].padStart(3, '0'); // Adiciona zero à esquerda se necessário
+      return `${x}|${y}`;
+    }
+    
+    return coord;
+  }
+
+  // === Função modificada para aceitar ambos os formatos ===
+  function importarDeBBCodeComSuporteXXX_XX(bbcode) {
+    const agendamentos = importarDeBBCode(bbcode);
+    
+    // Normalizar coordenadas para o formato XXX|XXX
+    return agendamentos.map(agendamento => {
+      return {
+        ...agendamento,
+        origem: normalizarCoordenadas(agendamento.origem),
+        alvo: normalizarCoordenadas(agendamento.alvo),
+        origemId: normalizarCoordenadas(agendamento.origemId)
+      };
+    });
+  }
+
   // === Cria e exibe o modal ===
   function showModal() {
     // Remove modal existente se houver
@@ -247,14 +282,16 @@
         1️⃣ Cole o BBCode no campo abaixo<br>
         2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
         3️⃣ Escolha <strong>"Adicionar"</strong> (mantém agendamentos existentes) ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Formato esperado:</strong><br>
-        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]</code>
+        <strong>🔍 Formatos aceitos:</strong><br>
+        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]</code><br>
+        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|43 → 529|43 em 16/11/2024 14:30:00 [url=...]</code><br>
+        <em>✅ Agora aceita XXX|XXX e XXX|XX</em>
       </div>
 
       <textarea 
         id="bbcode-input" 
         class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplo:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]545|437 → 530|432 em 16/11/2024 14:35:00 [url=https://...]"
+        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]545|43 → 530|43 em 16/11/2024 14:35:00 [url=https://...]"
       ></textarea>
 
       <div class="bbcode-btn-group">
@@ -307,10 +344,10 @@
       }
 
       try {
-        parsedAgendamentos = importarDeBBCode(bbcode);
+        parsedAgendamentos = importarDeBBCodeComSuporteXXX_XX(bbcode);
         
         if (parsedAgendamentos.length === 0) {
-          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]XXX|YYY → XXX|YYY em DD/MM/YYYY HH:MM:SS [url=...]');
+          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]XXX|YYY → XXX|YYY em DD/MM/YYYY HH:MM:SS [url=...]\n\n✅ Agora aceita XXX|XXX e XXX|XX');
           return;
         }
 
@@ -416,5 +453,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.2)');
+  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.3 - Suporte XXX|XX)');
 })();
