@@ -13,6 +13,18 @@
   
   // ✅ PROTEÇÃO: Rastrear agendamentos em execução
   const _executing = new Set();
+  
+  // ✅ NOVO: Contador global para IDs únicos
+  let _idCounter = 0;
+
+  // ✅ NOVO: Gerar ID único garantido
+  function generateUniqueId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback: timestamp + contador + random
+    return `${Date.now()}_${++_idCounter}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 
   // === Auto-confirm na página de confirmação ===
   try {
@@ -351,6 +363,11 @@
     }
   }
 
+  // ✅ NOVO: Delay entre execuções
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
@@ -361,32 +378,61 @@
       const msgs = [];
       let hasChanges = false;
 
+      // ✅ NOVO: Agrupar ataques por horário
+      const ataquesPorHorario = {};
+      
       for (const a of list) {
-        if (a.done) continue;
-        
-        // ✅ PROTEÇÃO: Criar ID único se não existir
-        if (!a._id) {
-          a._id = `${a.origem}_${a.alvo}_${a.datetime}`;
-        }
-        
-        // ✅ PROTEÇÃO: Verificar se já está executando
-        if (_executing.has(a._id)) {
-          console.log(`[TWScheduler] ⏳ Agendamento ${a._id} já em execução, aguardando...`);
-          continue;
-        }
+        if (a.done || a.locked) continue;
         
         const t = parseDateTimeToMs(a.datetime);
         if (!t || isNaN(t)) continue;
         
         const diff = t - now;
         
-        // Janela de 10 segundos para executar
+        // Agrupar ataques do mesmo horário
         if (diff <= 0 && diff > -10000) {
-          // ✅ PROTEÇÃO: Marcar como "executando" ANTES de chamar executeAttack
-          _executing.add(a._id);
-          msgs.push(`🔥 Executando: ${a.origem} → ${a.alvo}`);
+          if (!ataquesPorHorario[a.datetime]) {
+            ataquesPorHorario[a.datetime] = [];
+          }
+          ataquesPorHorario[a.datetime].push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+        }
+      }
+
+      // ✅ NOVO: Processar cada grupo de horário com debounce
+      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+        console.log(`[TWScheduler] 🔥 Processando ${ataques.length} ataques do horário ${horario}`);
+        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
+        
+        // Processar sequencialmente com delay
+        for (let i = 0; i < ataques.length; i++) {
+          const a = ataques[i];
           
-          console.log(`[TWScheduler] 🚀 Iniciando execução de ${a._id}`);
+          // ✅ PROTEÇÃO 1: Criar ID único se não existir
+          if (!a._id) {
+            a._id = generateUniqueId();
+            hasChanges = true;
+          }
+          
+          // ✅ PROTEÇÃO 2: Verificar se já está executando
+          if (_executing.has(a._id)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
+            continue;
+          }
+          
+          // ✅ PROTEÇÃO 3: Lock imediato ANTES de executar
+          a.locked = true;
+          hasChanges = true;
+          setList(list); // Salvar ANTES de executar
+          
+          // ✅ PROTEÇÃO 4: Adicionar ao Set
+          _executing.add(a._id);
+          
+          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
           
           try {
             const success = await executeAttack(a);
@@ -395,23 +441,26 @@
             a.executedAt = new Date().toISOString();
             hasChanges = true;
             
-            console.log(`[TWScheduler] ✅ Execução concluída: ${a._id}`);
+            console.log(`[TWScheduler] ✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
           } catch (err) {
             a.error = err.message;
             a.done = true;
             a.success = false;
             hasChanges = true;
-            console.error('[TWScheduler] Erro ao executar:', err);
+            console.error(`[TWScheduler] ❌ [${i + 1}/${ataques.length}] Erro:`, err);
           } finally {
-            // ✅ PROTEÇÃO: Remover da lista de execução
+            // ✅ PROTEÇÃO 5: Remover lock e do Set
+            a.locked = false;
             _executing.delete(a._id);
-            console.log(`[TWScheduler] 🏁 Finalizando execução de ${a._id}`);
+            hasChanges = true;
+            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
-        } else if (diff > 0) {
-          const seconds = Math.ceil(diff / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+          
+          // ✅ PROTEÇÃO 6: Debounce entre ataques (150ms)
+          if (i < ataques.length - 1) {
+            console.log(`[TWScheduler] ⏳ Aguardando 150ms antes do próximo...`);
+            await sleep(150);
+          }
         }
       }
 
@@ -458,7 +507,8 @@
         alvo: destino,
         datetime: dataHora,
         done: false,
-        _id: `${origem}_${destino}_${dataHora}` // ✅ Adicionar ID único
+        locked: false, // ✅ NOVO
+        _id: generateUniqueId() // ✅ NOVO: ID único garantido
       };
       
       TROOP_LIST.forEach(u => {
@@ -486,6 +536,7 @@
     executeAttack,
     getVillageTroops,
     validateTroops,
+    generateUniqueId, // ✅ NOVO
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -493,9 +544,9 @@
     _internal: {
       get villageMap() { return _villageMap; },
       get myVillages() { return _myVillages; },
-      get executing() { return _executing; } // ✅ Para debug
+      get executing() { return _executing; }
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado com sucesso');
+  console.log('[TWS_Backend] Backend carregado com sucesso (v2.2 - Anti-Duplicação)');
 })();
