@@ -99,7 +99,7 @@
 
       const alvoParsed = parseCoord(alvo);
       if (!alvoParsed) {
-        showMsg('❌ Coordenada de alvo inválida! Use formato: XXX|YYY', 'error');
+        showMsg('❌ Coordenada de alvo inválida! Use formato: X|Y (ex: 52|43 ou 529|431)', 'error');
         return;
       }
 
@@ -352,8 +352,9 @@
 
         <!-- Alvo -->
         <div class="tws-form-group">
-          <label class="tws-form-label">🎯 Alvo (Coordenada XXX|YYY):</label>
-          <input type="text" id="tws-alvo" class="tws-form-input" placeholder="529|431" pattern="\\d{3}\\|\\d{3}">
+          <label class="tws-form-label">🎯 Alvo (Coordenada):</label>
+          <input type="text" id="tws-alvo" class="tws-form-input" placeholder="529|431 ou 52|43" pattern="\\d{1,4}\\|\\d{1,4}">
+          <small style="color: #666; font-size: 11px;">Formatos aceitos: X|Y, XX|YY, XXX|YYY, XXXX|YYYY</small>
         </div>
 
         <!-- Data/Hora -->
