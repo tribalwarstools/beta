@@ -160,12 +160,21 @@
   }
 
   // === Verifica se o ataque foi confirmado ===
-  function isAttackConfirmed(htmlText) {
+  function isAttackConfirmed(htmlText, responseUrl) {
+    // ✅ PADRÃO 1: Verificar URL de redirecionamento (MAIS CONFIÁVEL)
+    if (responseUrl && /screen=info_command.*id=\d+.*type=own/i.test(responseUrl)) {
+      console.log('[TWS_Backend] ✅ Confirmado pela URL: info_command detectada');
+      return true;
+    }
+
+    // ✅ PADRÃO 2: Redirecionamento para info_command no HTML
     if (/screen=info_command.*type=own/i.test(htmlText)) {
+      console.log('[TWS_Backend] ✅ Confirmado no HTML: info_command detectada');
       return true;
     }
 
     if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      console.log('[TWS_Backend] ✅ Confirmado: command-row detectada');
       return true;
     }
 
@@ -347,7 +356,7 @@
         
         console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
         
-        if (isAttackConfirmed(finalText)) {
+        if (isAttackConfirmed(finalText, confirmRes.url)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
@@ -357,7 +366,7 @@
           return false;
         }
       } else {
-        if (isAttackConfirmed(postText)) {
+        if (isAttackConfirmed(postText, postRes.url)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
