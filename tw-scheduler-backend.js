@@ -14,7 +14,8 @@
   // ✅ PROTEÇÃO: Rastrear agendamentos em execução
   const _executing = new Set();
   
-  
+  // ✅ PROTEÇÃO: Rastrear ataques já processados (evita reprocessamento)
+  const _processedAttacks = new Set();
   
   // ✅ NOVO: Contador global para IDs únicos
   let _idCounter = Date.now();
@@ -341,7 +342,7 @@
   }
 
   // === Scheduler ===
-// === SCHEDULER CORRIGIDO - GARANTIA DE ATUALIZAÇÃO ===
+// === CORREÇÃO NO SCHEDULER ===
 function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -351,89 +352,107 @@ function startScheduler() {
       const msgs = [];
       let hasChanges = false;
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques pendentes de uma vez
-      const pendingAttacks = list.filter(a => !a.done && !a.locked);
-      const attacksToExecute = [];
+      // ✅ CORREÇÃO: Processar TODOS os ataques do horário, não agrupar
+      const ataquesParaExecutar = [];
       
-      for (const a of pendingAttacks) {
+      for (const a of list) {
+        // ✅ PROTEÇÃO: Pular se já foi processado
+        const fingerprint = getAttackFingerprint(a);
+        if (_processedAttacks.has(fingerprint)) {
+          continue;
+        }
+        
+        if (a.done || a.locked) continue;
+        
         const t = parseDateTimeToMs(a.datetime);
         if (!t || isNaN(t)) continue;
         
         const diff = t - now;
-        if (diff <= 0 && diff > -30000) { // ✅ 30 segundos de margem
-          attacksToExecute.push(a);
+        
+        // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
+        if (diff <= 0 && diff > -10000) {
+          ataquesParaExecutar.push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
         }
       }
 
-      if (attacksToExecute.length > 0) {
-        console.log(`[TWScheduler] 🔥 Executando ${attacksToExecute.length} ataques pendentes`);
+      // ✅ CORREÇÃO: Processar TODOS os ataques da lista
+      if (ataquesParaExecutar.length > 0) {
+        console.log(`[TWScheduler] 🔥 Processando ${ataquesParaExecutar.length} ataques`);
+        msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
         
-        for (let i = 0; i < attacksToExecute.length; i++) {
-          const a = attacksToExecute[i];
+        for (let i = 0; i < ataquesParaExecutar.length; i++) {
+          const a = ataquesParaExecutar[i];
           
-          // ✅ GARANTIR que tem ID único
+          const fingerprint = getAttackFingerprint(a);
+          
+          if (_processedAttacks.has(fingerprint)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
+            continue;
+          }
+          
           if (!a._id) {
             a._id = generateUniqueId();
             hasChanges = true;
           }
           
-          if (_executing.has(a._id)) continue;
+          if (_executing.has(a._id)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
+            continue;
+          }
           
-          // ✅ LOCK IMEDIATO
+          // ✅ MARCA COMO PROCESSADO ANTES DE EXECUTAR
+          _processedAttacks.add(fingerprint);
           a.locked = true;
           hasChanges = true;
-          setList(list); // ✅ SALVA O LOCK
+          setList(list); // ✅ SALVA IMEDIATAMENTE
           
           _executing.add(a._id);
           
+          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataquesParaExecutar.length}] Executando ${a._id}`);
+          
           try {
-            console.log(`[TWScheduler] 🚀 [${i+1}/${attacksToExecute.length}] ${a.origem} → ${a.alvo}`);
-            
             await executeAttack(a);
-            
-            // ✅ GARANTIR marcação como sucesso
             a.done = true;
-            a.success = true; 
+            a.success = true;
             a.executedAt = new Date().toISOString();
-            a.locked = false;
             hasChanges = true;
             
-            console.log(`[TWScheduler] ✅ [${i+1}/${attacksToExecute.length}] Concluído`);
-            
+            console.log(`[TWScheduler] ✅ [${i + 1}/${ataquesParaExecutar.length}] Concluído: ${a._id}`);
           } catch (err) {
-            // ✅ GARANTIR marcação como erro
+            a.error = err.message;
             a.done = true;
             a.success = false;
-            a.error = err.message;
-            a.locked = false;
             hasChanges = true;
-            
-            console.error(`[TWScheduler] ❌ [${i+1}/${attacksToExecute.length}] Erro:`, err);
+            console.error(`[TWScheduler] ❌ [${i + 1}/${ataquesParaExecutar.length}] Erro:`, err);
           } finally {
+            a.locked = false;
             _executing.delete(a._id);
+            hasChanges = true;
+            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataquesParaExecutar.length}] Finalizando ${a._id}`);
           }
           
-          // ✅ SALVAR APÓS CADA ATAQUE (GARANTIDO)
-          if (hasChanges) {
-            setList(list);
-            hasChanges = false; // Reset para próximo
-          }
-          
-          if (i < attacksToExecute.length - 1) {
+          if (i < ataquesParaExecutar.length - 1) {
             await sleep(200);
           }
         }
       }
 
+      if (hasChanges) {
+        setList(list); // ✅ SALVA TODAS AS ALTERAÇÕES
+      }
+
       const status = document.getElementById('tws-status');
       if (status) {
-        status.innerHTML = attacksToExecute.length > 0 
-          ? `🔥 Executando ${attacksToExecute.length} ataque(s)...`
-          : 'Sem agendamentos ativos.';
+        status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
       }
     }, 1000);
   }
-  
+
   // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
     const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
@@ -509,11 +528,9 @@ function startScheduler() {
       get villageMap() { return _villageMap; },
       get myVillages() { return _myVillages; },
       get executing() { return _executing; },
-      
+      get processedAttacks() { return _processedAttacks; }
     }
   };
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
-
-
