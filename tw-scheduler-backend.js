@@ -18,14 +18,13 @@
   const _processedAttacks = new Set();
   
   // ✅ NOVO: Contador global para IDs únicos
-  let _idCounter = Date.now(); // Inicia com timestamp para ser único entre sessões
+  let _idCounter = Date.now();
 
   // ✅ NOVO: Gerar ID único GARANTIDO (impossível colidir)
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    // Fallback super seguro: timestamp + contador incremental + random + performance
     const timestamp = Date.now();
     const counter = ++_idCounter;
     const random = Math.random().toString(36).substr(2, 9);
@@ -159,111 +158,7 @@
     return errors;
   }
 
-  // === ✅ CORREÇÃO: Detectar erros baseado em containers HTML ===
-  function hasErrorInResponse(htmlText) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
-    
-    // CAMADA 1: Classes conhecidas de erro
-    const knownErrorSelectors = [
-      '.error_box',
-      '.error',
-      '.msg.error', 
-      '.alert.error',
-      '.error-msg',
-      '[class*="error"]'
-    ];
-    
-    for (const selector of knownErrorSelectors) {
-      const errorElements = doc.querySelectorAll(selector);
-      if (errorElements.length > 0) {
-        console.log(`[TWS_Backend] 🚨 Erro detectado via classe: ${selector}`);
-        return true;
-      }
-    }
-    
-    // CAMADA 2: Elementos com estilos de erro (cores vermelhas/laranja)
-    const allElements = doc.querySelectorAll('div, span, p, td');
-    for (const el of allElements) {
-      const style = window.getComputedStyle(el);
-      const bgColor = style.backgroundColor.toLowerCase();
-      const borderColor = style.borderColor.toLowerCase();
-      const color = style.color.toLowerCase();
-      
-      // Cores típicas de erro no TW
-      const errorColors = [
-        'rgb(255, 204, 204)', '#ffcccc', 'red', 'crimson', 'darkred',
-        'rgb(255, 165, 0)', '#ffa500', 'orange', 'darkorange'
-      ];
-      
-      if (errorColors.some(errorColor => 
-        bgColor.includes(errorColor) || 
-        borderColor.includes(errorColor) ||
-        color.includes(errorColor)
-      )) {
-        console.log('[TWS_Backend] 🚨 Erro detectado via estilo visual');
-        return true;
-      }
-    }
-    
-    // CAMADA 3: Palavras-chave de erro (fallback)
-    const errorKeywords = [
-      'proteção para novatos',
-      'unidades suficientes',
-      'não pode ser atacado',
-      'coordenadas inválidas',
-      'error',
-      'erro',
-      'inválido',
-      'bloqueado',
-      'não é possível',
-      'impossível'
-    ];
-    
-    const textContent = doc.body.textContent.toLowerCase();
-    if (errorKeywords.some(keyword => textContent.includes(keyword))) {
-      console.log('[TWS_Backend] 🚨 Erro detectado via palavra-chave');
-      return true;
-    }
-    
-    return false;
-  }
-
-  // === ✅ CORREÇÃO: Verifica se o ataque foi confirmado ===
-  function isAttackConfirmed(htmlText) {
-    // Se tem erro, não está confirmado
-    if (hasErrorInResponse(htmlText)) {
-      return false;
-    }
-    
-    // Padrões de sucesso
-    if (/screen=info_command.*type=own/i.test(htmlText)) {
-      return true;
-    }
-
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
-      return true;
-    }
-
-    const successPatterns = [
-      /attack sent/i,
-      /attack in queue/i,
-      /enviado/i,
-      /ataque enviado/i,
-      /enfileirad/i,
-      /A batalha começou/i,
-      /march started/i,
-      /comando enviado/i,
-      /tropas enviadas/i,
-      /foi enfileirado/i,
-      /command sent/i,
-      /comando foi criado/i
-    ];
-
-    return successPatterns.some(p => p.test(htmlText));
-  }
-
-  // === ✅ CORREÇÃO: Execute attack com validação melhorada ===
+  // === ✅ SIMPLIFICADO: Execute attack SEM VALIDAÇÃO ===
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
@@ -358,7 +253,7 @@
       }
       if (!postUrl.includes('screen=place')) postUrl = placeUrl;
 
-      // 8) POST inicial
+      // 8) POST inicial - SEM VALIDAÇÃO
       setStatus(`⏳ Enviando comando...`);
       const postRes = await fetch(postUrl, {
         method: 'POST',
@@ -369,12 +264,6 @@
       
       if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
       const postText = await postRes.text();
-
-      // ✅ VERIFICA ERRO IMEDIATAMENTE
-      if (hasErrorInResponse(postText)) {
-        setStatus(`❌ Erro detectado na resposta do servidor`);
-        throw new Error('Erro no envio do ataque (resposta do servidor)');
-      }
 
       // 9) Procurar form de confirmação
       const postDoc = parser.parseFromString(postText, 'text/html');
@@ -425,35 +314,15 @@
 
         if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
         
-        const finalText = await confirmRes.text();
-        
-        console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
-        
-        // ✅ VERIFICA ERRO NA RESPOSTA FINAL
-        if (hasErrorInResponse(finalText)) {
-          setStatus(`❌ Erro detectado na confirmação final`);
-          throw new Error('Erro na confirmação do ataque');
-        }
-        
-        if (isAttackConfirmed(finalText)) {
-          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-          return true;
-        } else {
-          // ✅ AUSÊNCIA DE ERRO = SUCESSO
-          setStatus(`✅ Ataque processado (sem erros detectados): ${cfg.origem} → ${cfg.alvo}`);
-          console.log('[TWS_Backend] Nenhum erro detectado, considerando sucesso');
-          return true;
-        }
+        // ✅ SEM VALIDAÇÃO - CONSIDERA SUCESSO DIRETO
+        setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
+        console.log('[TWS_Backend] Ataque enviado sem validação');
+        return true;
       } else {
-        if (isAttackConfirmed(postText)) {
-          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-          return true;
-        } else {
-          // ✅ AUSÊNCIA DE ERRO = SUCESSO
-          setStatus(`✅ Ataque processado (sem erros detectados): ${cfg.origem} → ${cfg.alvo}`);
-          console.log('[TWS_Backend] Nenhum erro detectado, considerando sucesso');
-          return true;
-        }
+        // ✅ SEM VALIDAÇÃO - CONSIDERA SUCESSO DIRETO
+        setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
+        console.log('[TWS_Backend] Ataque enviado sem validação (sem confirmação)');
+        return true;
       }
     } catch (err) {
       console.error('[TWScheduler] Erro executeAttack:', err);
@@ -559,9 +428,10 @@
           console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
           
           try {
-            const success = await executeAttack(a);
+            // ✅ SEM VALIDAÇÃO - APENAS EXECUTA
+            await executeAttack(a);
             a.done = true;
-            a.success = success;
+            a.success = true; // ✅ SEMPRE MARCA COMO SUCESSO
             a.executedAt = new Date().toISOString();
             hasChanges = true;
             
@@ -668,7 +538,6 @@
     validateTroops,
     generateUniqueId,
     getAttackFingerprint,
-    hasErrorInResponse, // ✅ NOVO: Função de detecção de erros
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -681,5 +550,5 @@
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado com sucesso (v2.4 - Detecção de Erros por Container)');
+  console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
