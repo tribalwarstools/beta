@@ -342,7 +342,7 @@
   }
 
   // === Scheduler ===
-// === CORREÇÃO NO SCHEDULER ===
+// === SCHEDULER CORRIGIDO ===
 function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -352,16 +352,10 @@ function startScheduler() {
       const msgs = [];
       let hasChanges = false;
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques do horário, não agrupar
+      // ✅ CORREÇÃO: Janela de tempo mais ampla para processamento
       const ataquesParaExecutar = [];
       
       for (const a of list) {
-        // ✅ PROTEÇÃO: Pular se já foi processado
-        const fingerprint = getAttackFingerprint(a);
-        if (_processedAttacks.has(fingerprint)) {
-          continue;
-        }
-        
         if (a.done || a.locked) continue;
         
         const t = parseDateTimeToMs(a.datetime);
@@ -369,8 +363,9 @@ function startScheduler() {
         
         const diff = t - now;
         
-        // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
-        if (diff <= 0 && diff > -10000) {
+        // ✅ CORREÇÃO: Janela ampliada - processa qualquer ataque que deveria ter sido executado
+        // (incluindo ataques antigos que não foram processados)
+        if (diff <= 0) {
           ataquesParaExecutar.push(a);
         } else if (diff > 0) {
           const seconds = Math.ceil(diff / 1000);
@@ -380,21 +375,15 @@ function startScheduler() {
         }
       }
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques da lista
+      // ✅ CORREÇÃO: Processar TODOS os ataques em atraso
       if (ataquesParaExecutar.length > 0) {
-        console.log(`[TWScheduler] 🔥 Processando ${ataquesParaExecutar.length} ataques`);
-        msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
+        console.log(`[TWScheduler] 🔥 Processando ${ataquesParaExecutar.length} ataques em atraso`);
+        msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s) em atraso...`);
         
         for (let i = 0; i < ataquesParaExecutar.length; i++) {
           const a = ataquesParaExecutar[i];
           
-          const fingerprint = getAttackFingerprint(a);
-          
-          if (_processedAttacks.has(fingerprint)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
-            continue;
-          }
-          
+          // ✅ CORREÇÃO: Usar ID único para controle, não fingerprint
           if (!a._id) {
             a._id = generateUniqueId();
             hasChanges = true;
@@ -405,18 +394,20 @@ function startScheduler() {
             continue;
           }
           
-          // ✅ MARCA COMO PROCESSADO ANTES DE EXECUTAR
-          _processedAttacks.add(fingerprint);
+          // ✅ BLOQUEIA o ataque para evitar duplicatas
           a.locked = true;
           hasChanges = true;
-          setList(list); // ✅ SALVA IMEDIATAMENTE
+          setList(list); // ✅ SALVA IMEDIATAMENTE o estado locked
           
           _executing.add(a._id);
           
           console.log(`[TWScheduler] 🚀 [${i + 1}/${ataquesParaExecutar.length}] Executando ${a._id}`);
           
           try {
+            // ✅ EXECUTA o ataque
             await executeAttack(a);
+            
+            // ✅ MARCA COMO SUCESSO
             a.done = true;
             a.success = true;
             a.executedAt = new Date().toISOString();
@@ -424,20 +415,20 @@ function startScheduler() {
             
             console.log(`[TWScheduler] ✅ [${i + 1}/${ataquesParaExecutar.length}] Concluído: ${a._id}`);
           } catch (err) {
+            // ✅ CORREÇÃO: Em caso de erro, DESBLOQUEIA para tentar novamente
             a.error = err.message;
-            a.done = true;
-            a.success = false;
+            a.locked = false; // ✅ DESBLOQUEIA para retentar
             hasChanges = true;
             console.error(`[TWScheduler] ❌ [${i + 1}/${ataquesParaExecutar.length}] Erro:`, err);
           } finally {
-            a.locked = false;
             _executing.delete(a._id);
             hasChanges = true;
             console.log(`[TWScheduler] 🏁 [${i + 1}/${ataquesParaExecutar.length}] Finalizando ${a._id}`);
           }
           
+          // ✅ Delay entre execuções
           if (i < ataquesParaExecutar.length - 1) {
-            await sleep(200);
+            await sleep(500); // ✅ Aumentado para 500ms
           }
         }
       }
@@ -534,3 +525,4 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
