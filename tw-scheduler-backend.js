@@ -18,13 +18,14 @@
   const _processedAttacks = new Set();
   
   // ✅ NOVO: Contador global para IDs únicos
-  let _idCounter = Date.now();
+  let _idCounter = Date.now(); // Inicia com timestamp para ser único entre sessões
 
   // ✅ NOVO: Gerar ID único GARANTIDO (impossível colidir)
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
+    // Fallback super seguro: timestamp + contador incremental + random + performance
     const timestamp = Date.now();
     const counter = ++_idCounter;
     const random = Math.random().toString(36).substr(2, 9);
@@ -158,22 +159,89 @@
     return errors;
   }
 
-  // === Verifica se o ataque foi confirmado (SIMPLES - apenas valida HTTP) ===
-  function isAttackConfirmed(htmlText, responseUrl) {
-    // ✅ PADRÃO 1: Verificar URL de redirecionamento
-    if (responseUrl && /screen=info_command.*id=\d+.*type=own/i.test(responseUrl)) {
-      console.log('[TWS_Backend] ✅ URL detectada: info_command');
+  // === ✅ CORREÇÃO: Detectar erros baseado em containers HTML ===
+  function hasErrorInResponse(htmlText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, 'text/html');
+    
+    // CAMADA 1: Classes conhecidas de erro
+    const knownErrorSelectors = [
+      '.error_box',
+      '.error',
+      '.msg.error', 
+      '.alert.error',
+      '.error-msg',
+      '[class*="error"]'
+    ];
+    
+    for (const selector of knownErrorSelectors) {
+      const errorElements = doc.querySelectorAll(selector);
+      if (errorElements.length > 0) {
+        console.log(`[TWS_Backend] 🚨 Erro detectado via classe: ${selector}`);
+        return true;
+      }
+    }
+    
+    // CAMADA 2: Elementos com estilos de erro (cores vermelhas/laranja)
+    const allElements = doc.querySelectorAll('div, span, p, td');
+    for (const el of allElements) {
+      const style = window.getComputedStyle(el);
+      const bgColor = style.backgroundColor.toLowerCase();
+      const borderColor = style.borderColor.toLowerCase();
+      const color = style.color.toLowerCase();
+      
+      // Cores típicas de erro no TW
+      const errorColors = [
+        'rgb(255, 204, 204)', '#ffcccc', 'red', 'crimson', 'darkred',
+        'rgb(255, 165, 0)', '#ffa500', 'orange', 'darkorange'
+      ];
+      
+      if (errorColors.some(errorColor => 
+        bgColor.includes(errorColor) || 
+        borderColor.includes(errorColor) ||
+        color.includes(errorColor)
+      )) {
+        console.log('[TWS_Backend] 🚨 Erro detectado via estilo visual');
+        return true;
+      }
+    }
+    
+    // CAMADA 3: Palavras-chave de erro (fallback)
+    const errorKeywords = [
+      'proteção para novatos',
+      'unidades suficientes',
+      'não pode ser atacado',
+      'coordenadas inválidas',
+      'error',
+      'erro',
+      'inválido',
+      'bloqueado',
+      'não é possível',
+      'impossível'
+    ];
+    
+    const textContent = doc.body.textContent.toLowerCase();
+    if (errorKeywords.some(keyword => textContent.includes(keyword))) {
+      console.log('[TWS_Backend] 🚨 Erro detectado via palavra-chave');
       return true;
     }
+    
+    return false;
+  }
 
-    // ✅ PADRÃO 2: Redirecionamento no HTML
+  // === ✅ CORREÇÃO: Verifica se o ataque foi confirmado ===
+  function isAttackConfirmed(htmlText) {
+    // Se tem erro, não está confirmado
+    if (hasErrorInResponse(htmlText)) {
+      return false;
+    }
+    
+    // Padrões de sucesso
     if (/screen=info_command.*type=own/i.test(htmlText)) {
-      console.log('[TWS_Backend] ✅ HTML detectado: info_command');
       return true;
     }
 
     if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
-      console.log('[TWS_Backend] ✅ HTML detectado: command-row');
       return true;
     }
 
@@ -195,136 +263,7 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
-  // === NOVO: Validação em CAMADAS (simples e robusta) ===
-  function validateResponseInLayers(htmlText, responseUrl) {
-    // ✅ CAMADA 1: Busca por ESTRUTURAS de erro conhecidas
-    console.log('[TWS_Backend] Camada 1: Procurando estruturas de erro...');
-    const errorStructures = [
-      /<div class="error_box">/i,           // Erro genérico Tribal Wars
-      /class="error"/i,
-      /class="alert-danger"/i,
-      /class="warning error"/i,
-      /<strong>Erro<\/strong>/i,
-      /<strong>Error<\/strong>/i,
-      /selecione uma aldeia/i,
-      /aldeia alvo/i,
-      /força de ataque/i,
-      /unidades suficientes/i,
-      /razão entre.*pontos/i,
-      /proteção para novatos/i,
-      /não pode ser atacado/i,
-      /sob proteção/i,
-      /impossível executar/i,
-      /você não pode/i,
-      /não é possível/i
-    ];
-    
-    if (errorStructures.some(p => p.test(htmlText))) {
-      console.log('[TWS_Backend] ❌ Camada 1: Estrutura de erro encontrada');
-      return false;
-    }
-
-    // ✅ CAMADA 2: Busca por ESTRUTURAS VISUAIS (confirmação)
-    console.log('[TWS_Backend] Camada 2: Procurando estruturas visuais de confirmação...');
-    const visualStructures = [
-      /screen=info_command.*id=\d+.*type=own/i,
-      /<tr class="command-row">/i,
-      /data-command-id=/i,
-      /class="command.*confirmed"/i,
-      /<div class="info">.*comando/i
-    ];
-    
-    if (visualStructures.some(p => p.test(htmlText))) {
-      console.log('[TWS_Backend] ✅ Camada 2: Estrutura visual de confirmação encontrada');
-      return true;
-    }
-
-    // ✅ CAMADA 3: Busca por PALAVRAS-CHAVE de sucesso
-    console.log('[TWS_Backend] Camada 3: Procurando palavras-chave de sucesso...');
-    const successKeywords = [
-      /attack sent/i,
-      /attack in queue/i,
-      /enviado/i,
-      /ataque enviado/i,
-      /enfileirado/i,
-      /enfileirad/i,
-      /A batalha começou/i,
-      /march started/i,
-      /comando enviado/i,
-      /tropas enviadas/i,
-      /foi enfileirado/i,
-      /command sent/i,
-      /comando foi criado/i,
-      /sucesso/i,
-      /success/i
-    ];
-    
-    if (successKeywords.some(p => p.test(htmlText))) {
-      console.log('[TWS_Backend] ✅ Camada 3: Palavra-chave de sucesso encontrada');
-      return true;
-    }
-
-    // ✅ CAMADA 4: Se NADA foi encontrado, considera SUCESSO
-    // (porque se houve erro crítico, teria lançado exceção no fetch)
-    console.log('[TWS_Backend] ✅ Camada 4: Nenhum erro detectado - considerando sucesso');
-    return true;
-  }
-
-  // === NOVO: Validação PÓS-EXECUÇÃO (valida comandos enviados) ===
-  async function validateAttacksAfterExecution() {
-    console.log('[TWS_Backend] 🔄 Iniciando validação pós-execução em 10 segundos...');
-    await sleep(10000);
-    
-    const list = getList();
-    const attacksToValidate = list.filter(a => a.done && a.success === undefined && !a.error);
-    
-    if (attacksToValidate.length === 0) {
-      console.log('[TWS_Backend] ✅ Nenhum ataque para validar');
-      return;
-    }
-    
-    console.log(`[TWS_Backend] 🔍 Validando ${attacksToValidate.length} ataques...`);
-    let hasChanges = false;
-    
-    for (const ataque of attacksToValidate) {
-      try {
-        if (ataque.commandId) {
-          const infoUrl = `${location.protocol}//${location.host}/game.php?village=${ataque.origemId}&screen=info_command&id=${ataque.commandId}&type=own`;
-          const res = await fetch(infoUrl, { credentials: 'same-origin' });
-          
-          if (res.ok) {
-            const html = await res.text();
-            const isValid = validateResponseInLayers(html, res.url);
-            ataque.success = isValid;
-            console.log(`[TWS_Backend] ${isValid ? '✅' : '❌'} Validado: ${ataque.origem} → ${ataque.alvo}`);
-            hasChanges = true;
-          } else {
-            ataque.success = false;
-            console.log(`[TWS_Backend] ❌ HTTP ${res.status}: ${ataque.origem} → ${ataque.alvo}`);
-            hasChanges = true;
-          }
-        } else {
-          // Se não tem ID, marca como sucesso (foi executado sem erro HTTP)
-          ataque.success = true;
-          console.log(`[TWS_Backend] ✅ Confirmado: ${ataque.origem} → ${ataque.alvo}`);
-          hasChanges = true;
-        }
-      } catch (err) {
-        console.error(`[TWS_Backend] ⚠️ Erro ao validar ${ataque.origem}:`, err);
-        ataque.success = false;
-        hasChanges = true;
-      }
-      
-      await sleep(300);
-    }
-    
-    if (hasChanges) {
-      setList(list);
-      console.log('[TWS_Backend] ✅ Validação concluída e salva');
-    }
-  }
-
-  // === Execute attack ===
+  // === ✅ CORREÇÃO: Execute attack com validação melhorada ===
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
@@ -334,6 +273,7 @@
       console.log('[TWScheduler]', msg);
     };
 
+    // Resolve origem
     const origemId = cfg.origemId || _villageMap[cfg.origem] || null;
     if (!origemId) {
       setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
@@ -346,6 +286,7 @@
       throw new Error('Alvo inválido');
     }
 
+    // Valida tropas disponíveis
     setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
     const availableTroops = await getVillageTroops(origemId);
     if (availableTroops) {
@@ -360,6 +301,7 @@
     setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
 
     try {
+      // 1) GET /place
       const getRes = await fetch(placeUrl, { credentials: 'same-origin' });
       if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
       
@@ -367,6 +309,7 @@
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
 
+      // 2) Localizar form
       let form = Array.from(doc.querySelectorAll('form')).find(f => 
         (f.action && f.action.includes('screen=place')) || 
         f.querySelector('input[name="x"]') ||
@@ -375,6 +318,7 @@
       
       if (!form) throw new Error('Form de envio não encontrado');
 
+      // 3) Construir payload
       const payloadObj = {};
       Array.from(form.querySelectorAll('input, select, textarea')).forEach(inp => {
         const name = inp.getAttribute('name');
@@ -387,12 +331,14 @@
         }
       });
 
+      // 4) Sobrescrever destino e tropas
       payloadObj['x'] = String(x);
       payloadObj['y'] = String(y);
       TROOP_LIST.forEach(u => {
         payloadObj[u] = String(cfg[u] !== undefined ? cfg[u] : '0');
       });
 
+      // 5) Submit button
       const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
       if (submitBtn) {
         const n = submitBtn.getAttribute('name');
@@ -400,16 +346,19 @@
         if (n) payloadObj[n] = v;
       }
 
+      // 6) URL encode
       const urlEncoded = Object.entries(payloadObj)
         .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
         .join('&');
 
+      // 7) POST URL
       let postUrl = form.getAttribute('action') || placeUrl;
       if (postUrl.startsWith('/')) {
         postUrl = `${location.protocol}//${location.host}${postUrl}`;
       }
       if (!postUrl.includes('screen=place')) postUrl = placeUrl;
 
+      // 8) POST inicial
       setStatus(`⏳ Enviando comando...`);
       const postRes = await fetch(postUrl, {
         method: 'POST',
@@ -421,6 +370,13 @@
       if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
       const postText = await postRes.text();
 
+      // ✅ VERIFICA ERRO IMEDIATAMENTE
+      if (hasErrorInResponse(postText)) {
+        setStatus(`❌ Erro detectado na resposta do servidor`);
+        throw new Error('Erro no envio do ataque (resposta do servidor)');
+      }
+
+      // 9) Procurar form de confirmação
       const postDoc = parser.parseFromString(postText, 'text/html');
       let confirmForm = Array.from(postDoc.querySelectorAll('form')).find(f => 
         (f.action && f.action.includes('try=confirm')) || 
@@ -471,29 +427,32 @@
         
         const finalText = await confirmRes.text();
         
-        console.log('[TWS_Backend] Resposta final recebida');
+        console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
         
-        // ✅ Extrai o ID do comando se disponível
-        const idMatch = confirmRes.url?.match(/id=(\d+)/) || finalText.match(/id=(\d+)/);
-        if (idMatch) cfg.commandId = idMatch[1];
+        // ✅ VERIFICA ERRO NA RESPOSTA FINAL
+        if (hasErrorInResponse(finalText)) {
+          setStatus(`❌ Erro detectado na confirmação final`);
+          throw new Error('Erro na confirmação do ataque');
+        }
         
-        if (isAttackConfirmed(finalText, confirmRes.url)) {
+        if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
-          return true; // HTTP 200 = foi enviado
+          // ✅ AUSÊNCIA DE ERRO = SUCESSO
+          setStatus(`✅ Ataque processado (sem erros detectados): ${cfg.origem} → ${cfg.alvo}`);
+          console.log('[TWS_Backend] Nenhum erro detectado, considerando sucesso');
+          return true;
         }
       } else {
-        const idMatch = postRes.url?.match(/id=(\d+)/) || postText.match(/id=(\d+)/);
-        if (idMatch) cfg.commandId = idMatch[1];
-        
-        if (isAttackConfirmed(postText, postRes.url)) {
+        if (isAttackConfirmed(postText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
-          return true; // HTTP 200 = foi enviado
+          // ✅ AUSÊNCIA DE ERRO = SUCESSO
+          setStatus(`✅ Ataque processado (sem erros detectados): ${cfg.origem} → ${cfg.alvo}`);
+          console.log('[TWS_Backend] Nenhum erro detectado, considerando sucesso');
+          return true;
         }
       }
     } catch (err) {
@@ -508,7 +467,7 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // ✅ NOVO: Criar fingerprint único do ataque
+  // ✅ NOVO: Criar fingerprint único do ataque (para detectar duplicatas)
   function getAttackFingerprint(a) {
     return `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
   }
@@ -523,12 +482,14 @@
       const msgs = [];
       let hasChanges = false;
 
+      // ✅ PROTEÇÃO: Agrupar ataques por horário E fingerprint único
       const ataquesPorHorario = {};
       
       for (const a of list) {
+        // ✅ PROTEÇÃO 0: Pular se já foi processado (mesmo que done=false)
         const fingerprint = getAttackFingerprint(a);
         if (_processedAttacks.has(fingerprint)) {
-          console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado`);
+          console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado anteriormente`);
           continue;
         }
         
@@ -539,6 +500,7 @@
         
         const diff = t - now;
         
+        // Agrupar ataques do mesmo horário
         if (diff <= 0 && diff > -10000) {
           if (!ataquesPorHorario[a.datetime]) {
             ataquesPorHorario[a.datetime] = [];
@@ -552,36 +514,46 @@
         }
       }
 
+      // ✅ PROTEÇÃO: Processar cada grupo de horário com debounce
       for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
         console.log(`[TWScheduler] 🔥 Processando ${ataques.length} ataques do horário ${horario}`);
         msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
         
+        // Processar sequencialmente com delay
         for (let i = 0; i < ataques.length; i++) {
           const a = ataques[i];
+          
+          // ✅ PROTEÇÃO 1: Criar fingerprint único
           const fingerprint = getAttackFingerprint(a);
           
+          // ✅ PROTEÇÃO 2: Verificar se já foi processado
           if (_processedAttacks.has(fingerprint)) {
             console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
             continue;
           }
           
+          // ✅ PROTEÇÃO 3: Criar ID único se não existir
           if (!a._id) {
             a._id = generateUniqueId();
             hasChanges = true;
           }
           
+          // ✅ PROTEÇÃO 4: Verificar se já está executando
           if (_executing.has(a._id)) {
             console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
             continue;
           }
           
+          // ✅ PROTEÇÃO 5: Marcar como processado IMEDIATAMENTE
           _processedAttacks.add(fingerprint);
           console.log(`[TWScheduler] 🔒 Marcando ${fingerprint} como processado`);
           
+          // ✅ PROTEÇÃO 6: Lock imediato ANTES de executar
           a.locked = true;
           hasChanges = true;
-          setList(list);
+          setList(list); // Salvar ANTES de executar
           
+          // ✅ PROTEÇÃO 7: Adicionar ao Set
           _executing.add(a._id);
           
           console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
@@ -589,7 +561,7 @@
           try {
             const success = await executeAttack(a);
             a.done = true;
-            // ✅ NÃO marca success aqui - será validado depois
+            a.success = success;
             a.executedAt = new Date().toISOString();
             hasChanges = true;
             
@@ -601,21 +573,19 @@
             hasChanges = true;
             console.error(`[TWScheduler] ❌ [${i + 1}/${ataques.length}] Erro:`, err);
           } finally {
+            // ✅ PROTEÇÃO 8: Remover lock e do Set
             a.locked = false;
             _executing.delete(a._id);
             hasChanges = true;
             console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
           
+          // ✅ PROTEÇÃO 9: Debounce entre ataques (200ms)
           if (i < ataques.length - 1) {
             console.log(`[TWScheduler] ⏳ Aguardando 200ms antes do próximo...`);
             await sleep(200);
           }
         }
-
-        // ✅ NOVO: Após executar todos os ataques, inicia validação pós-execução
-        console.log(`[TWScheduler] ⏳ Todos os ataques executados, agendando validação...`);
-        validateAttacksAfterExecution();
       }
 
       if (hasChanges) {
@@ -655,10 +625,12 @@
       }
       
       const origemId = params.village || _villageMap[origem];
+      
+      // ✅ PROTEÇÃO: Gerar ID único ANTES de adicionar à lista
       const uniqueId = generateUniqueId();
       
       const cfg = {
-        _id: uniqueId,
+        _id: uniqueId, // ✅ ID único PRIMEIRO
         origem,
         origemId,
         alvo: destino,
@@ -696,7 +668,7 @@
     validateTroops,
     generateUniqueId,
     getAttackFingerprint,
-    validateAttacksAfterExecution, // ✅ NOVO: Função de validação pós-execução
+    hasErrorInResponse, // ✅ NOVO: Função de detecção de erros
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -709,5 +681,5 @@
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - Validação Pós-Execução)');
+  console.log('[TWS_Backend] Backend carregado com sucesso (v2.4 - Detecção de Erros por Container)');
 })();
