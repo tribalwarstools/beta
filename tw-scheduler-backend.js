@@ -437,7 +437,7 @@ function startScheduler() {
           }
           
           if (i < ataquesParaExecutar.length - 1) {
-            await sleep(200);
+            await sleep(500);
           }
         }
       }
@@ -450,7 +450,7 @@ function startScheduler() {
       if (status) {
         status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
       }
-    }, 1000);
+    }, 1500);
   }
 
   // === Importar de BBCode ===
@@ -534,3 +534,4 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
