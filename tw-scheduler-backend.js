@@ -195,13 +195,88 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
+  // === NOVO: Validação em CAMADAS (simples e robusta) ===
+  function validateResponseInLayers(htmlText, responseUrl) {
+    // ✅ CAMADA 1: Busca por ESTRUTURAS de erro conhecidas
+    console.log('[TWS_Backend] Camada 1: Procurando estruturas de erro...');
+    const errorStructures = [
+      /<div class="error_box">/i,           // Erro genérico Tribal Wars
+      /class="error"/i,
+      /class="alert-danger"/i,
+      /class="warning error"/i,
+      /<strong>Erro<\/strong>/i,
+      /<strong>Error<\/strong>/i,
+      /selecione uma aldeia/i,
+      /aldeia alvo/i,
+      /força de ataque/i,
+      /unidades suficientes/i,
+      /razão entre.*pontos/i,
+      /proteção para novatos/i,
+      /não pode ser atacado/i,
+      /sob proteção/i,
+      /impossível executar/i,
+      /você não pode/i,
+      /não é possível/i
+    ];
+    
+    if (errorStructures.some(p => p.test(htmlText))) {
+      console.log('[TWS_Backend] ❌ Camada 1: Estrutura de erro encontrada');
+      return false;
+    }
+
+    // ✅ CAMADA 2: Busca por ESTRUTURAS VISUAIS (confirmação)
+    console.log('[TWS_Backend] Camada 2: Procurando estruturas visuais de confirmação...');
+    const visualStructures = [
+      /screen=info_command.*id=\d+.*type=own/i,
+      /<tr class="command-row">/i,
+      /data-command-id=/i,
+      /class="command.*confirmed"/i,
+      /<div class="info">.*comando/i
+    ];
+    
+    if (visualStructures.some(p => p.test(htmlText))) {
+      console.log('[TWS_Backend] ✅ Camada 2: Estrutura visual de confirmação encontrada');
+      return true;
+    }
+
+    // ✅ CAMADA 3: Busca por PALAVRAS-CHAVE de sucesso
+    console.log('[TWS_Backend] Camada 3: Procurando palavras-chave de sucesso...');
+    const successKeywords = [
+      /attack sent/i,
+      /attack in queue/i,
+      /enviado/i,
+      /ataque enviado/i,
+      /enfileirado/i,
+      /enfileirad/i,
+      /A batalha começou/i,
+      /march started/i,
+      /comando enviado/i,
+      /tropas enviadas/i,
+      /foi enfileirado/i,
+      /command sent/i,
+      /comando foi criado/i,
+      /sucesso/i,
+      /success/i
+    ];
+    
+    if (successKeywords.some(p => p.test(htmlText))) {
+      console.log('[TWS_Backend] ✅ Camada 3: Palavra-chave de sucesso encontrada');
+      return true;
+    }
+
+    // ✅ CAMADA 4: Se NADA foi encontrado, considera SUCESSO
+    // (porque se houve erro crítico, teria lançado exceção no fetch)
+    console.log('[TWS_Backend] ✅ Camada 4: Nenhum erro detectado - considerando sucesso');
+    return true;
+  }
+
   // === NOVO: Validação PÓS-EXECUÇÃO (valida comandos enviados) ===
   async function validateAttacksAfterExecution() {
     console.log('[TWS_Backend] 🔄 Iniciando validação pós-execução em 10 segundos...');
-    await sleep(10000); // Aguarda 10 segundos para servidor processar
+    await sleep(10000);
     
     const list = getList();
-    const attacksToValidate = list.filter(a => a.done && !a.success && !a.error);
+    const attacksToValidate = list.filter(a => a.done && a.success === undefined && !a.error);
     
     if (attacksToValidate.length === 0) {
       console.log('[TWS_Backend] ✅ Nenhum ataque para validar');
@@ -213,31 +288,33 @@
     
     for (const ataque of attacksToValidate) {
       try {
-        // Tenta extrair o ID da URL se foi armazenado
         if (ataque.commandId) {
           const infoUrl = `${location.protocol}//${location.host}/game.php?village=${ataque.origemId}&screen=info_command&id=${ataque.commandId}&type=own`;
           const res = await fetch(infoUrl, { credentials: 'same-origin' });
           
           if (res.ok) {
             const html = await res.text();
-            // Se conseguiu acessar a página do comando, é porque foi criado
-            if (/info_command/i.test(html) || /command-row/i.test(html)) {
-              ataque.success = true;
-              console.log(`[TWS_Backend] ✅ Validado: ${ataque.origem} → ${ataque.alvo}`);
-              hasChanges = true;
-            }
+            const isValid = validateResponseInLayers(html, res.url);
+            ataque.success = isValid;
+            console.log(`[TWS_Backend] ${isValid ? '✅' : '❌'} Validado: ${ataque.origem} → ${ataque.alvo}`);
+            hasChanges = true;
+          } else {
+            ataque.success = false;
+            console.log(`[TWS_Backend] ❌ HTTP ${res.status}: ${ataque.origem} → ${ataque.alvo}`);
+            hasChanges = true;
           }
         } else {
-          // Se não tem ID, marca como sucesso por padrão (foi executado sem erro)
+          // Se não tem ID, marca como sucesso (foi executado sem erro HTTP)
           ataque.success = true;
           console.log(`[TWS_Backend] ✅ Confirmado: ${ataque.origem} → ${ataque.alvo}`);
           hasChanges = true;
         }
       } catch (err) {
         console.error(`[TWS_Backend] ⚠️ Erro ao validar ${ataque.origem}:`, err);
+        ataque.success = false;
+        hasChanges = true;
       }
       
-      // Delay entre validações para não sobrecarregar
       await sleep(300);
     }
     
