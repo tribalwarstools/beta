@@ -160,31 +160,69 @@
   }
 
   // === Verifica se o ataque foi confirmado ===
-  function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) {
+  function isAttackConfirmed(htmlText, responseUrl) {
+    // ✅ PADRÃO 1: Verificar URL de redirecionamento (MAIS CONFIÁVEL)
+    if (responseUrl) {
+      if (/screen=info_command.*id=\d+.*type=own/i.test(responseUrl) || 
+          /screen=info_command&id=\d+&type=own/i.test(responseUrl)) {
+        console.log('[TWS_Backend] ✅ Confirmado: URL de redirecionamento info_command detectada');
+        return true;
+      }
+    }
+
+    // ✅ PADRÃO 2: Redirecionamento para info_command no HTML
+    if (/screen=info_command.*id=\d+.*type=own/i.test(htmlText) || 
+        /screen=info_command&id=\d+&type=own/i.test(htmlText)) {
+      console.log('[TWS_Backend] ✅ Confirmado: Redirecionou para info_command');
       return true;
     }
 
+    // ✅ PADRÃO 3: Command row na tabela (indica comando criado)
     if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      console.log('[TWS_Backend] ✅ Confirmado: Command row encontrada');
       return true;
     }
 
+    // ✅ PADRÃO 4: Mensagens de sucesso conhecidas
     const successPatterns = [
+      // Inglês
       /attack sent/i,
       /attack in queue/i,
-      /enviado/i,
+      /march started/i,
+      /command sent/i,
+      /comando foi criado/i,
+      
+      // Português
       /ataque enviado/i,
+      /enviado/i,
       /enfileirad/i,
       /A batalha começou/i,
-      /march started/i,
-      /comando enviado/i,
       /tropas enviadas/i,
       /foi enfileirado/i,
-      /command sent/i,
-      /comando foi criado/i
+      /comando enviado/i,
+      
+      // Padrões gerais
+      /command.*created/i,
+      /troops.*sent/i,
+      /operação concluída/i
     ];
 
-    return successPatterns.some(p => p.test(htmlText));
+    if (successPatterns.some(p => p.test(htmlText))) {
+      console.log('[TWS_Backend] ✅ Confirmado: Padrão de mensagem de sucesso detectado');
+      return true;
+    }
+
+    // ✅ PADRÃO 5: Verificar presença de elementos de confirmação REMOVIDOS
+    // Se vemos o form de confirmação ainda presente, é porque NÃO foi enviado
+    if (/troop_confirm_submit|try=confirm/i.test(htmlText) && 
+        !/screen=info_command/i.test(htmlText)) {
+      console.log('[TWS_Backend] ❌ Form de confirmação ainda presente - não foi enviado');
+      return false;
+    }
+
+    // Se chegou aqui, não conseguiu confirmar
+    console.log('[TWS_Backend] ⚠️ Não foi possível confirmar o envio');
+    return false;
   }
 
   // === Execute attack ===
@@ -344,10 +382,12 @@
         if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
         
         const finalText = await confirmRes.text();
+        const finalUrl = confirmRes.url || '';
         
         console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
+        console.log('[TWS_Backend] URL final:', finalUrl);
         
-        if (isAttackConfirmed(finalText)) {
+        if (isAttackConfirmed(finalText, finalUrl)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
@@ -357,7 +397,10 @@
           return false;
         }
       } else {
-        if (isAttackConfirmed(postText)) {
+        const postUrl = postRes.url || '';
+        console.log('[TWS_Backend] URL após POST inicial:', postUrl);
+        
+        if (isAttackConfirmed(postText, postUrl)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
@@ -591,5 +634,5 @@
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
+  console.log('[TWS_Backend] Backend carregado com sucesso (v2.4 - Detecção URL info_command)');
 })();
