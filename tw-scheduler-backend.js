@@ -347,120 +347,118 @@ function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
 
     _schedulerInterval = setInterval(async () => {
+
         const list = getList();
         const now = Date.now();
         const msgs = [];
-        let hasChanges = false;
-
-        const ataquesParaExecutar = [];
+        let changed = false;
+        const fila = [];
 
         for (const a of list) {
-            const fingerprint = getAttackFingerprint(a);
+
+            const fp = a._id;  // fingerprint DEFINITIVO
+
+            if (!a._id) {
+                a._id = generateUniqueId();
+                changed = true;
+            }
+
+            if (a.done) {
+                a.status = a.success ? "✅ Enviado" : `❌ ${a.error || "Erro"}`;
+                continue;
+            }
+
             const t = parseDateTimeToMs(a.datetime);
             if (!t || isNaN(t)) continue;
 
             const diff = t - now;
 
-            // ============================
-            // STATUS: Já concluído
-            // ============================
-            if (a.done) {
-                a.status = a.success ? "✅ Enviado com sucesso" : `❌ ${a.error || 'Erro'}`;
-                continue;
-            }
-
-            // ============================
-            // STATUS: Já processado, mas ainda terminando
-            // ============================
-            if (_processedAttacks.has(fingerprint)) {
+            // Já processado → não reexecuta
+            if (_processedAttacks.has(fp)) {
                 a.status = "⏳ Processando...";
                 continue;
             }
 
-            // ============================
-            // STATUS: É AGORA (janela de -5 minutos)
-            // ============================
+            // Dentro da janela de execução (-5min até +0)
             if (diff <= 0 && diff > -300000) {
-                a.status = "⚔️ Executando...";
-                ataquesParaExecutar.push(a);
-                hasChanges = true;
+                fila.push(a);
                 continue;
             }
 
-            // ============================
-            // STATUS: AINDA FALTA TEMPO
-            // ============================
+            // Futuro → contador
             if (diff > 0) {
-                const seconds = Math.ceil(diff / 1000);
-                const minutes = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-
-                a.status = `🕒 Em ${minutes}:${secs.toString().padStart(2, '0')}`;
+                const s = Math.ceil(diff / 1000);
+                const m = Math.floor(s / 60);
+                const ss = (s % 60).toString().padStart(2, "0");
+                a.status = `🕒 Em ${m}:${ss}`;
                 msgs.push(`${a.origem} → ${a.alvo}: ${a.status}`);
-                hasChanges = true;
+                changed = true;
             }
         }
 
-        // =====================================
-        // EXECUÇÃO DOS ATAQUES
-        // =====================================
-        if (ataquesParaExecutar.length > 0) {
-            msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
+        // ==============================
+        // EXECUTAR TODOS DA FILA
+        // ==============================
+        if (fila.length > 0) {
 
-            for (let i = 0; i < ataquesParaExecutar.length; i++) {
-                const a = ataquesParaExecutar[i];
-                const fingerprint = getAttackFingerprint(a);
+            msgs.push(`🔥 Executando ${fila.length} ataque(s)...`);
 
-                if (_processedAttacks.has(fingerprint)) continue;
+            for (let i = 0; i < fila.length; i++) {
 
-                if (!a._id) {
-                    a._id = generateUniqueId();
-                    hasChanges = true;
-                }
+                const a = fila[i];
+                const fp = a._id;
 
-                if (_executing.has(a._id)) continue;
+                if (_processedAttacks.has(fp)) continue;
+                if (_executing.has(fp)) continue;
 
-                // Marca como em execução
-                _processedAttacks.add(fingerprint);
-                _executing.add(a._id);
-                a.locked = true;
+                // Marcar como processado ANTES de executar → NÃO DUPLICA NUNCA MAIS
+                _processedAttacks.add(fp);
+                _executing.add(fp);
+
                 a.status = "⚔️ Executando...";
-                hasChanges = true;
+                a.locked = true;
+                a.startAt = now;
+                changed = true;
                 setList(list);
 
                 try {
+
                     await executeAttack(a);
+
                     a.done = true;
                     a.success = true;
                     a.executedAt = new Date().toISOString();
-                    a.status = "✅ Enviado com sucesso";
+                    a.status = "✅ Enviado";
+
                 } catch (err) {
+
                     a.done = true;
                     a.success = false;
                     a.error = err.message;
                     a.status = `❌ ${err.message}`;
+
                 } finally {
+
                     a.locked = false;
-                    _executing.delete(a._id);
-                    hasChanges = true;
+                    _executing.delete(fp);
+                    changed = true;
+                    setList(list);
                 }
 
-                if (i < ataquesParaExecutar.length - 1) {
-                    await sleep(500);
+                if (i < fila.length - 1) {
+                    await sleep(300);
                 }
             }
         }
 
-        // Salvar modificações
-        if (hasChanges) setList(list);
+        if (changed) setList(list);
 
-        // Atualizar painel de status
-        const status = document.getElementById('tws-status');
-        if (status) {
-            status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
+        const statusBox = document.getElementById("tws-status");
+        if (statusBox) {
+            statusBox.innerHTML = msgs.length ? msgs.join("<br>") : "Sem agendamentos ativos.";
         }
 
-    }, 1500);
+    }, 1400);
 }
 
 
@@ -553,5 +551,6 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
 
 
