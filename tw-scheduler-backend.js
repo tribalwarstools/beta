@@ -437,144 +437,122 @@
   }
 
   // === Scheduler ===
-  // === Scheduler ===
-function startScheduler() {
-  if (_schedulerInterval) clearInterval(_schedulerInterval);
+  function startScheduler() {
+    if (_schedulerInterval) clearInterval(_schedulerInterval);
+    
+    _schedulerInterval = setInterval(async () => {
+      const list = getList();
+      const now = Date.now();
+      const msgs = [];
+      let hasChanges = false;
 
-  _schedulerInterval = setInterval(async () => {
-
-    const now = Date.now();
-    const list = getList();
-    const msgs = [];
-    let hasChanges = false;
-
-    const ataquesPorHorario = Object.create(null);
-
-    for (const a of list) {
-
-      const fingerprint = getAttackFingerprint(a);
-      if (_processedAttacks.has(fingerprint)) {
-        console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado`);
-        continue;
-      }
-
-      if (a.done || a.locked) continue;
-
-      const t = parseDateTimeToMs(a.datetime);
-      if (!t) continue;
-
-      const diff = t - now;
-
-      // atacar
-      if (diff <= 0 && diff > -10000) {
-        (ataquesPorHorario[a.datetime] ||= []).push(a);
-        continue;
-      }
-
-      // futuro — apenas exibe contagem
-      if (diff > 0) {
-        const seconds = (diff / 1000) | 0;
-        const minutes = (seconds / 60) | 0;
-        const secs = seconds % 60;
-        msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
-      }
-    }
-
-    // === EXECUÇÃO POR HORÁRIO ===
-    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-
-      const total = ataques.length;
-
-      console.log(`[TWScheduler] 🔥 Processando ${total} ataques do horário ${horario}`);
-      msgs.push(`🔥 Executando ${total} ataque(s)...`);
-
-      for (let i = 0; i < total; i++) {
-
-        const a = ataques[i];
+      const ataquesPorHorario = {};
+      
+      for (const a of list) {
         const fingerprint = getAttackFingerprint(a);
-
         if (_processedAttacks.has(fingerprint)) {
-          console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
+          console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado`);
           continue;
         }
-
-        // gera ID apenas uma vez
-        if (!a._id) {
-          a._id = generateUniqueId();
-          hasChanges = true;
-        }
-
-        if (_executing.has(a._id)) {
-          console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
-          continue;
-        }
-
-        // marca como processado antes de executar
-        _processedAttacks.add(fingerprint);
-        console.log(`[TWScheduler] 🔒 Marcando ${fingerprint} como processado`);
-
-        a.locked = true;
-        _executing.add(a._id);
-        hasChanges = true;
-
-        // grava imediatamente, como no seu código original
-        setList(list);
-
-        console.log(`[TWScheduler] 🚀 [${i + 1}/${total}] Executando ${a._id}`);
-
-        try {
-          await executeAttack(a);
-
-          a.done = true;
-          a.executedAt = new Date().toISOString();
-          hasChanges = true;
-
-          console.log(`[TWScheduler] ✅ [${i + 1}/${total}] Concluído: ${a._id}`);
-
-        } catch (err) {
-
-          a.error = err.message;
-          a.done = true;
-          a.success = false;
-          hasChanges = true;
-
-          console.error(`[TWScheduler] ❌ [${i + 1}/${total}] Erro:`, err);
-
-        } finally {
-
-          a.locked = false;
-          _executing.delete(a._id);
-          hasChanges = true;
-
-          console.log(`[TWScheduler] 🏁 [${i + 1}/${total}] Finalizando ${a._id}`);
-        }
-
-        // delay curto
-        if (i < total - 1) {
-          console.log(`[TWScheduler] ⏳ Aguardando 200ms antes do próximo...`);
-          await sleep(200);
+        
+        if (a.done || a.locked) continue;
+        
+        const t = parseDateTimeToMs(a.datetime);
+        if (!t || isNaN(t)) continue;
+        
+        const diff = t - now;
+        
+        if (diff <= 0 && diff > -10000) {
+          if (!ataquesPorHorario[a.datetime]) {
+            ataquesPorHorario[a.datetime] = [];
+          }
+          ataquesPorHorario[a.datetime].push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
         }
       }
 
-      // mesma chamada pós-execução
-      console.log(`[TWScheduler] ⏳ Todos os ataques executados, agendando validação...`);
-      validateAttacksAfterExecution();
-    }
+      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+        console.log(`[TWScheduler] 🔥 Processando ${ataques.length} ataques do horário ${horario}`);
+        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
+        
+        for (let i = 0; i < ataques.length; i++) {
+          const a = ataques[i];
+          const fingerprint = getAttackFingerprint(a);
+          
+          if (_processedAttacks.has(fingerprint)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
+            continue;
+          }
+          
+          if (!a._id) {
+            a._id = generateUniqueId();
+            hasChanges = true;
+          }
+          
+          if (_executing.has(a._id)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
+            continue;
+          }
+          
+          _processedAttacks.add(fingerprint);
+          console.log(`[TWScheduler] 🔒 Marcando ${fingerprint} como processado`);
+          
+          a.locked = true;
+          hasChanges = true;
+          setList(list);
+          
+          _executing.add(a._id);
+          
+          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
+          
+          try {
+            const success = await executeAttack(a);
+            a.done = true;
+            // ✅ NÃO marca success aqui - será validado depois
+            a.executedAt = new Date().toISOString();
+            hasChanges = true;
+            
+            console.log(`[TWScheduler] ✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
+          } catch (err) {
+            a.error = err.message;
+            a.done = true;
+            a.success = false;
+            hasChanges = true;
+            console.error(`[TWScheduler] ❌ [${i + 1}/${ataques.length}] Erro:`, err);
+          } finally {
+            a.locked = false;
+            _executing.delete(a._id);
+            hasChanges = true;
+            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
+          }
+          
+          if (i < ataques.length - 1) {
+            console.log(`[TWScheduler] ⏳ Aguardando 200ms antes do próximo...`);
+            await sleep(200);
+          }
+        }
 
-    // grava apenas uma vez quando necessário
-    if (hasChanges) setList(list);
+        // ✅ NOVO: Após executar todos os ataques, inicia validação pós-execução
+        console.log(`[TWScheduler] ⏳ Todos os ataques executados, agendando validação...`);
+        validateAttacksAfterExecution();
+      }
 
-    const status = document.getElementById('tws-status');
-    if (status) {
-      status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
-    }
+      if (hasChanges) {
+        setList(list);
+      }
 
-  }, 1000);
-
-  console.log('[TWS_Backend] Scheduler iniciado');
-}
-
-
+      const status = document.getElementById('tws-status');
+      if (status) {
+        status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
+      }
+    }, 1000);
+    
+    console.log('[TWS_Backend] Scheduler iniciado');
+  }
 
   // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
@@ -656,6 +634,4 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - Validação Pós-Execução)');
 })();
-
-
 
