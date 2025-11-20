@@ -356,7 +356,7 @@ function testSend() {
 
     panel.innerHTML = `
       <div style="margin-bottom: 15px;">
-        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW CLAUDE</h2>
+        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW (VERSÃO ESTÁVEL)</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
@@ -456,6 +456,7 @@ setTimeout(() => {
   }
 }, 100);
 })();
+
 
 
 
