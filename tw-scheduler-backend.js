@@ -370,23 +370,15 @@ function startScheduler() {
         const diff = t - now;
         
         // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
-if (diff <= 0 && diff > -300000) {
-
-    // ❌ REMOVIDO: trava ataques simultâneos
-    // if (_executing.has(a.id)) continue;
-
-    // ✔️ CORREÇÃO:
-    // Só bloqueia se o ataque JÁ tiver sido realmente processado
-    const fp = getAttackFingerprint(a);
-    if (_processedAttacks.has(fp)) {
-        continue; // já executado
-    }
-
-    // ✔️ Todos ataques simultâneos entram na fila
-    _executing.add(a.id);
-    ataquesParaExecutar.push(a);
-}
-
+        if (diff <= 0 && diff > -300000) {
+          ataquesParaExecutar.push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+        }
+      }
 
       // ✅ CORREÇÃO: Processar TODOS os ataques da lista
       if (ataquesParaExecutar.length > 0) {
@@ -549,4 +541,3 @@ if (diff <= 0 && diff > -300000) {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
-
