@@ -238,6 +238,14 @@
           align-items: center;
           gap: 5px;
         }
+        .bbcode-format-examples {
+          background: #F5F5F5;
+          border-left: 4px solid #2196F3;
+          padding: 8px 12px;
+          margin-top: 8px;
+          font-size: 12px;
+          font-family: monospace;
+        }
       </style>
 
       <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
@@ -247,14 +255,17 @@
         1️⃣ Cole o BBCode no campo abaixo<br>
         2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
         3️⃣ Escolha <strong>"Adicionar"</strong> (mantém agendamentos existentes) ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Formato esperado:</strong><br>
-        <code style="background: white; padding: 2px 6px; border-radius: 3px;">[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]</code>
+        <strong>🔍 Formatos aceitos:</strong><br>
+        <div class="bbcode-format-examples">
+[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=...]<br>
+[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]
+        </div>
       </div>
 
       <textarea 
         id="bbcode-input" 
         class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplo:&#10;[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]545|437 → 530|432 em 16/11/2024 14:35:00 [url=https://...]"
+        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]544|436 → 529|431 em 16/11/2024 14:35:00 [url=https://...]"
       ></textarea>
 
       <div class="bbcode-btn-group">
@@ -310,7 +321,7 @@
         parsedAgendamentos = importarDeBBCode(bbcode);
         
         if (parsedAgendamentos.length === 0) {
-          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]XXX|YYY → XXX|YYY em DD/MM/YYYY HH:MM:SS [url=...]');
+          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]X|Y → XX|YY em DD/MM/YYYY HH:MM:SS [url=...]');
           return;
         }
 
