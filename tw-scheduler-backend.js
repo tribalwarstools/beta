@@ -459,11 +459,16 @@ function startScheduler() {
     const agendamentos = [];
     
     for (const linha of linhas) {
-      // ✅ CORREÇÃO: Aceita 1-2 dígitos em cada coordenada (X|Y ou XX|YY)
-      const coords = linha.match(/(\d{1,2}\|\d{1,2})/g) || [];
-      const origem = coords[0] || '';
-      const destino = coords[1] || '';
+      // ✅ CORREÇÃO: Parse inteligente de coordenadas separadas por [|]
+      // Extrai padrão: COORD [|] COORD [|] DATA/HORA [|] ...
+      const coordMatch = linha.match(/(\d{1,3}\|\d{1,3})\s*\[?\|?\]?\s*(\d{1,3}\|\d{1,3})/);
+      const origem = coordMatch?.[1] || '';
+      const destino = coordMatch?.[2] || '';
+      
+      // Extrai data/hora no formato DD/MM/YYYY HH:MM:SS
       const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)?.[1] || '';
+      
+      // Extrai URL com parâmetros
       const url = linha.match(/\[url=(.*?)\]/)?.[1] || '';
       
       const params = {};
@@ -498,6 +503,7 @@ function startScheduler() {
       
       if (origem && destino && dataHora) {
         agendamentos.push(cfg);
+        console.log(`[TWS_Backend] ✅ Parsed: ${origem} → ${destino} em ${dataHora}`);
       }
     }
     
