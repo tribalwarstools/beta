@@ -462,7 +462,7 @@
         
         const diff = t - now;
         
-        if (diff <= 0 && diff > -10000) {
+        if (diff <= 0 && diff > -60000) { // tolerância de 60s
           if (!ataquesPorHorario[a.datetime]) {
             ataquesPorHorario[a.datetime] = [];
           }
@@ -634,4 +634,5 @@
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - Validação Pós-Execução)');
 })();
+
 
