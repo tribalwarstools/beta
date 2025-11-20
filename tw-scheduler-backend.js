@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  // === Configs / Constantes ===
+  // === Configs /Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
@@ -634,3 +634,4 @@
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - Validação Pós-Execução)');
 })();
+
