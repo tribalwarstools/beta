@@ -370,7 +370,7 @@ function startScheduler() {
         const diff = t - now;
         
         // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
-        if (diff <= 0 && diff > -60000) {
+        if (diff <= 0 && diff > -300000) {
           ataquesParaExecutar.push(a);
         } else if (diff > 0) {
           const seconds = Math.ceil(diff / 1000);
@@ -534,4 +534,5 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
 
