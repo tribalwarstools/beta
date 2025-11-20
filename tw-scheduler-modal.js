@@ -14,7 +14,7 @@
     getVillageTroops,
     validateTroops,
     loadVillageTxt,
-    generateUniqueId, // ✅ NOVO
+    generateUniqueId,
     TROOP_LIST,
     _internal
   } = window.TWS_Backend;
@@ -23,6 +23,55 @@
   function formatDateTime(date) {
     const pad = (n) => n.toString().padStart(2, '0');
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  // === ✅ NOVO: Auto-preencher tropas ao selecionar aldeia ===
+  async function autoFillTroops(villageId) {
+    const msgEl = document.getElementById('tws-validation-msg');
+    
+    if (!villageId) {
+      // Limpar campos de tropa se nenhuma aldeia selecionada
+      TROOP_LIST.forEach(u => {
+        const input = document.getElementById(`tws-troop-${u}`);
+        if (input) input.value = '0';
+      });
+      return;
+    }
+
+    try {
+      msgEl.textContent = '🔍 Buscando tropas disponíveis...';
+      msgEl.className = 'tws-validation-msg tws-validation-success';
+      msgEl.style.display = 'block';
+
+      const troops = await getVillageTroops(villageId);
+      
+      if (!troops) {
+        msgEl.textContent = '⚠️ Não foi possível obter as tropas disponíveis';
+        msgEl.className = 'tws-validation-msg tws-validation-error';
+        return;
+      }
+
+      // ✅ Preencher todos os campos com as tropas disponíveis
+      TROOP_LIST.forEach(u => {
+        const input = document.getElementById(`tws-troop-${u}`);
+        if (input) {
+          input.value = troops[u] || '0';
+        }
+      });
+
+      msgEl.textContent = `✅ Tropas carregadas! Total de ${Object.values(troops).reduce((a, b) => a + b, 0)} unidades`;
+      msgEl.className = 'tws-validation-msg tws-validation-success';
+      
+      setTimeout(() => {
+        msgEl.style.display = 'none';
+      }, 3000);
+
+      console.log('[Modal] ✅ Tropas preenchidas automaticamente:', troops);
+    } catch (error) {
+      console.error('[Modal] ❌ Erro ao carregar tropas:', error);
+      msgEl.textContent = `❌ Erro ao carregar tropas: ${error.message}`;
+      msgEl.className = 'tws-validation-msg tws-validation-error';
+    }
   }
 
   // === Carrega aldeias no select ===
@@ -165,13 +214,13 @@
       const uniqueId = generateUniqueId();
       
       const cfg = {
-        _id: uniqueId, // ✅ ID único PRIMEIRO
+        _id: uniqueId,
         origem: origemCoord,
         origemId,
         alvo: alvoParsed,
         datetime,
         done: false,
-        locked: false, // ✅ NOVO
+        locked: false,
         ...troops
       };
       
@@ -348,6 +397,7 @@
           <select id="tws-origem" class="tws-form-select">
             <option value="">Carregando aldeias...</option>
           </select>
+          <small style="color: #666; font-size: 11px;">⚡ Selecione para auto-preencher as tropas disponíveis</small>
         </div>
 
         <!-- Alvo -->
@@ -397,6 +447,12 @@
     // Event listeners
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    
+    // ✅ NOVO: Auto-preencher tropas ao mudar aldeia
+    document.getElementById('tws-origem').onchange = (e) => {
+      const villageId = e.target.value;
+      autoFillTroops(villageId);
+    };
     
     // Atalhos de data/hora com incremento acumulativo
     document.getElementById('tws-set-now').onclick = (e) => {
@@ -452,5 +508,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler Modal] Módulo carregado com sucesso! (v2.2)');
+  console.log('[TW Scheduler Modal] Módulo carregado com sucesso! (v2.3 - Auto-Fill Tropas)');
 })();
