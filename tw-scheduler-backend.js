@@ -60,7 +60,7 @@
   function parseCoord(s) {
     if (!s) return null;
     const t = s.trim();
-    return /^\d{1,2}\|\d{1,2}$/.test(t) ? t : null;
+    return /^\d{1,4}\|\d{1,4}$/.test(t) ? t : null;
   }
 
   function getList() {
