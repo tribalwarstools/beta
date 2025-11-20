@@ -23,7 +23,7 @@
   let updateInterval = null; // ✅ Controlar o interval
 
   // === Renderiza tabela de agendamentos ===
-function renderTable() {
+  function renderTable() {
     const tbody = document.getElementById('tws-tbody');
     if (!tbody) return;
 
@@ -31,42 +31,66 @@ function renderTable() {
     tbody.innerHTML = '';
 
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Nenhum agendamento</td></tr>';
-        return;
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Nenhum agendamento</td></tr>';
+      return;
     }
 
+    const now = Date.now();
+
     list.forEach((cfg, idx) => {
-        const tr = document.createElement('tr');
+      const tr = document.createElement('tr');
+      
+      // Status visual
+      let statusIcon = '⏳';
+      let statusColor = '#fff';
+      let statusText = 'Agendado';
+      
+      if (cfg.done) {
+        if (cfg.success) {
+          statusIcon = '✅';
+          statusColor = '#90EE90';
+          statusText = 'Enviado';
+        } else {
+          statusIcon = '❌';
+          statusColor = '#FFB6C1';
+          statusText = cfg.error || 'Erro';
+        }
+      } else {
+        const t = parseDateTimeToMs(cfg.datetime);
+        if (t && !isNaN(t)) {
+          const diff = t - now;
+          if (diff > 0) {
+            const seconds = Math.ceil(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            statusText = `${minutes}:${secs.toString().padStart(2, '0')}`;
+            statusIcon = '🕒';
+          } else if (diff > -300000) {
+            statusIcon = '🔥';
+            statusColor = '#FFD700';
+            statusText = 'Executando...';
+          }
+        }
+      }
 
-        // Cor de fundo pelo status (opcional, mas preservado)
-        let bg = '#fff';
-
-        if (cfg.status?.startsWith('🔥') || cfg.status?.includes('Executando')) bg = '#FFD700';
-        if (cfg.status?.startsWith('🕒')) bg = '#fff';
-        if (cfg.status?.startsWith('❌')) bg = '#FFB6C1';
-        if (cfg.status?.startsWith('✅')) bg = '#90EE90';
-
-        tr.style.backgroundColor = bg;
-
-        tr.innerHTML = `
-            <td style="text-align:center;">${cfg.status?.charAt(0) || '⏳'}</td>
-            <td>${cfg.origem || cfg.origemId || '?'}</td>
-            <td>${cfg.alvo || '?'}</td>
-            <td style="font-size:11px;">${cfg.datetime || '?'}</td>
-            <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u] || 0}`).join(' ')}</td>
-            <td style="font-size:11px;">${cfg.status || 'Agendado'}</td>
-            <td style="text-align:center;">
-                ${cfg.done 
-                    ? `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>`
-                    : `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`
-                }
-            </td>
-        `;
-
-        tbody.appendChild(tr);
+      tr.style.backgroundColor = statusColor;
+      tr.innerHTML = `
+        <td style="text-align:center;">${statusIcon}</td>
+        <td>${cfg.origem || cfg.origemId || '?'}</td>
+        <td>${cfg.alvo || '?'}</td>
+        <td style="font-size:11px;">${cfg.datetime || '?'}</td>
+        <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u] || 0}`).join(' ')}</td>
+        <td style="text-align:center;font-size:11px;">${statusText}</td>
+        <td style="text-align:center;">
+          ${cfg.done ? 
+            `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
+            `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`
+          }
+        </td>
+      `;
+      tbody.appendChild(tr);
     });
-}
-
+  }
 
   // === View detalhes de um agendamento executado ===
   function viewDetails(idx) {
@@ -332,7 +356,7 @@ function testSend() {
 
     panel.innerHTML = `
       <div style="margin-bottom: 15px;">
-        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW v5.2</h2>
+        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW v4.9</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
@@ -432,10 +456,6 @@ setTimeout(() => {
   }
 }, 100);
 })();
-
-
-
-
 
 
 
