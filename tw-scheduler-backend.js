@@ -60,7 +60,7 @@
   function parseCoord(s) {
     if (!s) return null;
     const t = s.trim();
-    return /^(\d+)\|(\d+)$/.test(t) ? t : null;
+    return /^\d{1,2}\|\d{1,2}$/.test(t) ? t : null;
   }
 
   function getList() {
@@ -459,7 +459,8 @@ function startScheduler() {
     const agendamentos = [];
     
     for (const linha of linhas) {
-      const coords = linha.match(/(\d{3}\|\d{3})/g) || [];
+      // ✅ CORREÇÃO: Aceita 1-2 dígitos em cada coordenada (X|Y ou XX|YY)
+      const coords = linha.match(/(\d{1,2}\|\d{1,2})/g) || [];
       const origem = coords[0] || '';
       const destino = coords[1] || '';
       const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)?.[1] || '';
@@ -534,5 +535,3 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
-
-
