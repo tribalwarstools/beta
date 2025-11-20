@@ -345,113 +345,103 @@
 // === CORREÇÃO NO SCHEDULER ===
 function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
-    
+
     _schedulerInterval = setInterval(async () => {
-      const list = getList();
-      const now = Date.now();
-      const msgs = [];
-      let hasChanges = false;
+        const list = getList();
+        const now = Date.now();
+        const msgs = [];
+        let hasChanges = false;
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques do horário, não agrupar
-      const ataquesParaExecutar = [];
-      
-      for (const a of list) {
-        // ✅ PROTEÇÃO: Pular se já foi processado
-        const fingerprint = getAttackFingerprint(a);
-        if (_processedAttacks.has(fingerprint)) {
-          continue;
+        const ataquesParaExecutar = [];
+
+        for (const a of list) {
+            const fingerprint = getAttackFingerprint(a);
+            const t = parseDateTimeToMs(a.datetime);
+
+            if (!t || isNaN(t)) continue;
+
+            const diff = t - now;
+
+            if (a.done) {
+                a.status = a.success ? "✅ Enviado" : "❌ Erro";
+                continue;
+            }
+
+            if (_processedAttacks.has(fingerprint)) {
+                a.status = "⏳ Processando...";
+                continue;
+            }
+
+            if (diff <= 0 && diff > -300000) {
+                ataquesParaExecutar.push(a);
+                a.status = "⚔️ Executando...";
+                hasChanges = true;
+            } else if (diff > 0) {
+                const seconds = Math.ceil(diff / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                a.status = `🕒 Em ${minutes}:${secs.toString().padStart(2,'0')}`;
+                msgs.push(`${a.origem} → ${a.alvo}: ${a.status}`);
+                hasChanges = true;
+            }
         }
-        
-        if (a.done || a.locked) continue;
-        
-        const t = parseDateTimeToMs(a.datetime);
-        if (!t || isNaN(t)) continue;
-        
-        const diff = t - now;
-        
-        // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
-        if (diff <= 0 && diff > -300000) {
-          ataquesParaExecutar.push(a);
-        } else if (diff > 0) {
-          const seconds = Math.ceil(diff / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+
+        if (ataquesParaExecutar.length > 0) {
+            msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
+
+            for (let i = 0; i < ataquesParaExecutar.length; i++) {
+                const a = ataquesParaExecutar[i];
+                const fingerprint = getAttackFingerprint(a);
+
+                if (_processedAttacks.has(fingerprint)) continue;
+
+                if (!a._id) {
+                    a._id = generateUniqueId();
+                    hasChanges = true;
+                }
+
+                if (_executing.has(a._id)) continue;
+
+                _processedAttacks.add(fingerprint);
+                _executing.add(a._id);
+                a.locked = true;
+                a.status = "⚔️ Executando...";
+                hasChanges = true;
+                setList(list);
+
+                try {
+                    await executeAttack(a);
+                    a.done = true;
+                    a.success = true;
+                    a.executedAt = new Date().toISOString();
+                    a.status = "✅ Enviado com sucesso";
+                } catch (err) {
+                    a.done = true;
+                    a.success = false;
+                    a.error = err.message;
+                    a.status = "❌ Falhou";
+                } finally {
+                    a.locked = false;
+                    _executing.delete(a._id);
+                    hasChanges = true;
+                }
+
+                if (i < ataquesParaExecutar.length - 1) {
+                    await sleep(500);
+                }
+            }
         }
-      }
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques da lista
-      if (ataquesParaExecutar.length > 0) {
-        console.log(`[TWScheduler] 🔥 Processando ${ataquesParaExecutar.length} ataques`);
-        msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
-        
-        for (let i = 0; i < ataquesParaExecutar.length; i++) {
-          const a = ataquesParaExecutar[i];
-          
-          const fingerprint = getAttackFingerprint(a);
-          
-          if (_processedAttacks.has(fingerprint)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
-            continue;
-          }
-          
-          if (!a._id) {
-            a._id = generateUniqueId();
-            hasChanges = true;
-          }
-          
-          if (_executing.has(a._id)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
-            continue;
-          }
-          
-          // ✅ MARCA COMO PROCESSADO ANTES DE EXECUTAR
-          _processedAttacks.add(fingerprint);
-          a.locked = true;
-          hasChanges = true;
-          setList(list); // ✅ SALVA IMEDIATAMENTE
-          
-          _executing.add(a._id);
-          
-          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataquesParaExecutar.length}] Executando ${a._id}`);
-          
-          try {
-            await executeAttack(a);
-            a.done = true;
-            a.success = true;
-            a.executedAt = new Date().toISOString();
-            hasChanges = true;
-            
-            console.log(`[TWScheduler] ✅ [${i + 1}/${ataquesParaExecutar.length}] Concluído: ${a._id}`);
-          } catch (err) {
-            a.error = err.message;
-            a.done = true;
-            a.success = false;
-            hasChanges = true;
-            console.error(`[TWScheduler] ❌ [${i + 1}/${ataquesParaExecutar.length}] Erro:`, err);
-          } finally {
-            a.locked = false;
-            _executing.delete(a._id);
-            hasChanges = true;
-            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataquesParaExecutar.length}] Finalizando ${a._id}`);
-          }
-          
-          if (i < ataquesParaExecutar.length - 1) {
-            await sleep(500);
-          }
+        if (hasChanges) setList(list);
+
+        const status = document.getElementById('tws-status');
+        if (status) {
+            status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
         }
-      }
 
-      if (hasChanges) {
-        setList(list); // ✅ SALVA TODAS AS ALTERAÇÕES
-      }
-
-      const status = document.getElementById('tws-status');
-      if (status) {
-        status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
-      }
     }, 1500);
-  }
+}
+
 
   // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
@@ -541,3 +531,4 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
