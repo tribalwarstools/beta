@@ -357,35 +357,53 @@ function startScheduler() {
         for (const a of list) {
             const fingerprint = getAttackFingerprint(a);
             const t = parseDateTimeToMs(a.datetime);
-
             if (!t || isNaN(t)) continue;
 
             const diff = t - now;
 
+            // ============================
+            // STATUS: Já concluído
+            // ============================
             if (a.done) {
-                a.status = a.success ? "✅ Enviado" : "❌ Erro";
+                a.status = a.success ? "✅ Enviado com sucesso" : `❌ ${a.error || 'Erro'}`;
                 continue;
             }
 
+            // ============================
+            // STATUS: Já processado, mas ainda terminando
+            // ============================
             if (_processedAttacks.has(fingerprint)) {
                 a.status = "⏳ Processando...";
                 continue;
             }
 
+            // ============================
+            // STATUS: É AGORA (janela de -5 minutos)
+            // ============================
             if (diff <= 0 && diff > -300000) {
-                ataquesParaExecutar.push(a);
                 a.status = "⚔️ Executando...";
+                ataquesParaExecutar.push(a);
                 hasChanges = true;
-            } else if (diff > 0) {
+                continue;
+            }
+
+            // ============================
+            // STATUS: AINDA FALTA TEMPO
+            // ============================
+            if (diff > 0) {
                 const seconds = Math.ceil(diff / 1000);
                 const minutes = Math.floor(seconds / 60);
                 const secs = seconds % 60;
-                a.status = `🕒 Em ${minutes}:${secs.toString().padStart(2,'0')}`;
+
+                a.status = `🕒 Em ${minutes}:${secs.toString().padStart(2, '0')}`;
                 msgs.push(`${a.origem} → ${a.alvo}: ${a.status}`);
                 hasChanges = true;
             }
         }
 
+        // =====================================
+        // EXECUÇÃO DOS ATAQUES
+        // =====================================
         if (ataquesParaExecutar.length > 0) {
             msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
 
@@ -402,6 +420,7 @@ function startScheduler() {
 
                 if (_executing.has(a._id)) continue;
 
+                // Marca como em execução
                 _processedAttacks.add(fingerprint);
                 _executing.add(a._id);
                 a.locked = true;
@@ -419,7 +438,7 @@ function startScheduler() {
                     a.done = true;
                     a.success = false;
                     a.error = err.message;
-                    a.status = "❌ Falhou";
+                    a.status = `❌ ${err.message}`;
                 } finally {
                     a.locked = false;
                     _executing.delete(a._id);
@@ -432,8 +451,10 @@ function startScheduler() {
             }
         }
 
+        // Salvar modificações
         if (hasChanges) setList(list);
 
+        // Atualizar painel de status
         const status = document.getElementById('tws-status');
         if (status) {
             status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
@@ -441,6 +462,7 @@ function startScheduler() {
 
     }, 1500);
 }
+
 
 
   // === Importar de BBCode ===
@@ -531,4 +553,5 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
 })();
+
 
