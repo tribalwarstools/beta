@@ -10,30 +10,6 @@
   let _villageMap = {};
   let _myVillages = [];
   let _schedulerInterval = null;
-  
-  // ✅ PROTEÇÃO: Rastrear agendamentos em execução
-  const _executing = new Set();
-  
-  // ✅ PROTEÇÃO: Rastrear ataques já processados (evita reprocessamento)
-  const _processedAttacks = new Set();
-  
-  // ✅ NOVO: Contador global para IDs únicos
-  let _idCounter = Date.now();
-
-  // ✅ NOVO: Gerar ID único GARANTIDO (impossível colidir)
-  function generateUniqueId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    const timestamp = Date.now();
-    const counter = ++_idCounter;
-    const random = Math.random().toString(36).substr(2, 9);
-    const perf = (typeof performance !== 'undefined' && performance.now) 
-      ? performance.now().toString(36) 
-      : Math.random().toString(36).substr(2, 5);
-    
-    return `${timestamp}_${counter}_${random}_${perf}`;
-  }
 
   // === Auto-confirm na página de confirmação ===
   try {
@@ -60,7 +36,7 @@
   function parseCoord(s) {
     if (!s) return null;
     const t = s.trim();
-    return /^\d{1,2}\|\d{1,2}$/.test(t) ? t : null;
+    return /^(\d+)\|(\d+)$/.test(t) ? t : null;
   }
 
   function getList() {
@@ -124,6 +100,7 @@
 
       const troops = {};
       TROOP_LIST.forEach(u => {
+        // Prioriza o elemento que mostra tropas disponíveis
         const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
                            doc.querySelector(`#units_home_${u}`) ||
                            doc.querySelector(`[id*="${u}"][class*="unit"]`);
@@ -158,7 +135,38 @@
     return errors;
   }
 
-  // === ✅ SIMPLIFICADO: Execute attack SEM VALIDAÇÃO ===
+  // === Verifica se o ataque foi confirmado ===
+  function isAttackConfirmed(htmlText) {
+    // PADRÃO 1: Verifica se há comando na lista (aparece após envio bem-sucedido)
+    if (/screen=info_command.*type=own/i.test(htmlText)) {
+      return true;
+    }
+
+    // PADRÃO 2: Verifica se há linha de comando na tabela
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      return true;
+    }
+
+    // PADRÃO 3: Textos tradicionais de sucesso (backup)
+    const successPatterns = [
+      /attack sent/i,
+      /attack in queue/i,
+      /enviado/i,
+      /ataque enviado/i,
+      /enfileirad/i,
+      /A batalha começou/i,
+      /march started/i,
+      /comando enviado/i,
+      /tropas enviadas/i,
+      /foi enfileirado/i,
+      /command sent/i,
+      /comando foi criado/i
+    ];
+
+    return successPatterns.some(p => p.test(htmlText));
+  }
+
+  // === Execute attack ===
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
@@ -253,7 +261,7 @@
       }
       if (!postUrl.includes('screen=place')) postUrl = placeUrl;
 
-      // 8) POST inicial - SEM VALIDAÇÃO
+      // 8) POST inicial
       setStatus(`⏳ Enviando comando...`);
       const postRes = await fetch(postUrl, {
         method: 'POST',
@@ -274,6 +282,7 @@
       );
 
       if (confirmForm) {
+        // Construir payload de confirmação
         const confirmPayload = {};
         Array.from(confirmForm.querySelectorAll('input, select, textarea')).forEach(inp => {
           const name = inp.getAttribute('name');
@@ -314,15 +323,31 @@
 
         if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
         
-        // ✅ SEM VALIDAÇÃO - CONSIDERA SUCESSO DIRETO
-        setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
-        console.log('[TWS_Backend] Ataque enviado sem validação');
-        return true;
+        const finalText = await confirmRes.text();
+        
+        // Log para debug (remover em produção)
+        console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
+        
+        if (isAttackConfirmed(finalText)) {
+          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+          return true;
+        } else {
+          setStatus(`⚠️ Confirmação concluída, verifique manualmente se o ataque foi enfileirado`);
+          console.warn('[TWS_Backend] Resposta de confirmação não indicou sucesso claro');
+          // Log da resposta para análise (primeiros 500 caracteres)
+          console.log('[TWS_Backend] Início da resposta:', finalText.substring(0, 500));
+          return false;
+        }
       } else {
-        // ✅ SEM VALIDAÇÃO - CONSIDERA SUCESSO DIRETO
-        setStatus(`✅ Ataque processado: ${cfg.origem} → ${cfg.alvo}`);
-        console.log('[TWS_Backend] Ataque enviado sem validação (sem confirmação)');
-        return true;
+        // Sem form de confirmação - verifica se já foi enviado
+        if (isAttackConfirmed(postText)) {
+          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+          return true;
+        } else {
+          setStatus('⚠️ Resposta não indicou confirmação; verifique manualmente');
+          console.log('[TWS_Backend] Início da resposta:', postText.substring(0, 500));
+          return false;
+        }
       }
     } catch (err) {
       console.error('[TWScheduler] Erro executeAttack:', err);
@@ -331,19 +356,8 @@
     }
   }
 
-  // ✅ NOVO: Delay entre execuções
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // ✅ NOVO: Criar fingerprint único do ataque (para detectar duplicatas)
-  function getAttackFingerprint(a) {
-    return `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
-  }
-
   // === Scheduler ===
-// === CORREÇÃO NO SCHEDULER ===
-function startScheduler() {
+  function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
     _schedulerInterval = setInterval(async () => {
@@ -352,26 +366,31 @@ function startScheduler() {
       const msgs = [];
       let hasChanges = false;
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques do horário, não agrupar
-      const ataquesParaExecutar = [];
-      
       for (const a of list) {
-        // ✅ PROTEÇÃO: Pular se já foi processado
-        const fingerprint = getAttackFingerprint(a);
-        if (_processedAttacks.has(fingerprint)) {
-          continue;
-        }
-        
-        if (a.done || a.locked) continue;
+        if (a.done) continue;
         
         const t = parseDateTimeToMs(a.datetime);
         if (!t || isNaN(t)) continue;
         
         const diff = t - now;
         
-        // ✅ CORREÇÃO: Adicionar à lista de execução (não agrupar por horário)
-        if (diff <= 0 && diff > -300000) {
-          ataquesParaExecutar.push(a);
+        // Janela de 10 segundos para executar
+        if (diff <= 0 && diff > -10000) {
+          msgs.push(`🔥 Executando: ${a.origem} → ${a.alvo}`);
+          
+          try {
+            const success = await executeAttack(a);
+            a.done = true;
+            a.success = success;
+            a.executedAt = new Date().toISOString();
+            hasChanges = true;
+          } catch (err) {
+            a.error = err.message;
+            a.done = true;
+            a.success = false;
+            hasChanges = true;
+            console.error('[TWScheduler] Erro ao executar:', err);
+          }
         } else if (diff > 0) {
           const seconds = Math.ceil(diff / 1000);
           const minutes = Math.floor(seconds / 60);
@@ -380,77 +399,17 @@ function startScheduler() {
         }
       }
 
-      // ✅ CORREÇÃO: Processar TODOS os ataques da lista
-      if (ataquesParaExecutar.length > 0) {
-        console.log(`[TWScheduler] 🔥 Processando ${ataquesParaExecutar.length} ataques`);
-        msgs.push(`🔥 Executando ${ataquesParaExecutar.length} ataque(s)...`);
-        
-        for (let i = 0; i < ataquesParaExecutar.length; i++) {
-          const a = ataquesParaExecutar[i];
-          
-          const fingerprint = getAttackFingerprint(a);
-          
-          if (_processedAttacks.has(fingerprint)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
-            continue;
-          }
-          
-          if (!a._id) {
-            a._id = generateUniqueId();
-            hasChanges = true;
-          }
-          
-          if (_executing.has(a._id)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
-            continue;
-          }
-          
-          // ✅ MARCA COMO PROCESSADO ANTES DE EXECUTAR
-          _processedAttacks.add(fingerprint);
-          a.locked = true;
-          hasChanges = true;
-          setList(list); // ✅ SALVA IMEDIATAMENTE
-          
-          _executing.add(a._id);
-          
-          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataquesParaExecutar.length}] Executando ${a._id}`);
-          
-          try {
-            await executeAttack(a);
-            a.done = true;
-            a.success = true;
-            a.executedAt = new Date().toISOString();
-            hasChanges = true;
-            
-            console.log(`[TWScheduler] ✅ [${i + 1}/${ataquesParaExecutar.length}] Concluído: ${a._id}`);
-          } catch (err) {
-            a.error = err.message;
-            a.done = true;
-            a.success = false;
-            hasChanges = true;
-            console.error(`[TWScheduler] ❌ [${i + 1}/${ataquesParaExecutar.length}] Erro:`, err);
-          } finally {
-            a.locked = false;
-            _executing.delete(a._id);
-            hasChanges = true;
-            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataquesParaExecutar.length}] Finalizando ${a._id}`);
-          }
-          
-          if (i < ataquesParaExecutar.length - 1) {
-            await sleep(500);
-          }
-        }
-      }
-
       if (hasChanges) {
-        setList(list); // ✅ SALVA TODAS AS ALTERAÇÕES
+        setList(list);
       }
 
       const status = document.getElementById('tws-status');
       if (status) {
         status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
       }
-    }, 1500);
+    }, 1000);
+    
+    console.log('[TWS_Backend] Scheduler iniciado');
   }
 
   // === Importar de BBCode ===
@@ -459,8 +418,7 @@ function startScheduler() {
     const agendamentos = [];
     
     for (const linha of linhas) {
-      // ✅ CORREÇÃO: Aceita 1-2 dígitos em cada coordenada (X|Y ou XX|YY)
-      const coords = linha.match(/(\d{1,2}\|\d{1,2})/g) || [];
+      const coords = linha.match(/(\d{3}\|\d{3})/g) || [];
       const origem = coords[0] || '';
       const destino = coords[1] || '';
       const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)?.[1] || '';
@@ -478,18 +436,12 @@ function startScheduler() {
       }
       
       const origemId = params.village || _villageMap[origem];
-      
-      // ✅ PROTEÇÃO: Gerar ID único ANTES de adicionar à lista
-      const uniqueId = generateUniqueId();
-      
       const cfg = {
-        _id: uniqueId, // ✅ ID único PRIMEIRO
         origem,
         origemId,
         alvo: destino,
         datetime: dataHora,
-        done: false,
-        locked: false
+        done: false
       };
       
       TROOP_LIST.forEach(u => {
@@ -501,9 +453,7 @@ function startScheduler() {
       }
     }
     
-    console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
-    console.log(`[TWS_Backend] IDs gerados:`, agendamentos.map(a => a._id.substring(0, 30) + '...'));
-    
+    console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos`);
     return agendamentos;
   }
 
@@ -519,19 +469,16 @@ function startScheduler() {
     executeAttack,
     getVillageTroops,
     validateTroops,
-    generateUniqueId,
-    getAttackFingerprint,
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
     
+    // Getters dinâmicos para debug
     _internal: {
       get villageMap() { return _villageMap; },
-      get myVillages() { return _myVillages; },
-      get executing() { return _executing; },
-      get processedAttacks() { return _processedAttacks; }
+      get myVillages() { return _myVillages; }
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado com sucesso (v2.5 - ZERO VALIDAÇÃO)');
+  console.log('[TWS_Backend] Backend carregado com sucesso');
 })();
