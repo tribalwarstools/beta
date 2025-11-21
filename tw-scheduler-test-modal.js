@@ -8,6 +8,7 @@
 
   const {
     parseCoord,
+    parseDateTimeToMs,
     getList,
     setList,
     executeAttack,
@@ -17,7 +18,13 @@
     _internal
   } = window.TWS_Backend;
 
-  // === Renderiza preview das tropas ===
+  // ✅ Formata data para DD/MM/YYYY HH:MM:SS
+  function formatDateTime(date) {
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  // ✅ Renderiza tropas em cards visuais
   function renderTroopsPreview(cfg) {
     let html = '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;">';
     
@@ -43,8 +50,224 @@
     return html;
   }
 
-  // === Executa o teste com os dados do modal ===
-  async function executeTest(cfg, statusDiv, overlay) {
+  // ✅ Renderiza lista de agendamentos (TAB 1)
+  function renderAgendamentosList(onSelect) {
+    const list = getList();
+    const pendentes = list.filter(a => !a.done);
+    
+    if (pendentes.length === 0) {
+      return `
+        <div style="text-align: center; padding: 40px; color: #999;">
+          <div style="font-size: 48px; margin-bottom: 10px;">📭</div>
+          <div style="font-size: 16px; font-weight: bold;">Nenhum agendamento pendente</div>
+          <small>Todos os agendamentos já foram processados</small>
+        </div>
+      `;
+    }
+
+    let html = '<div style="display: grid; gap: 10px;">';
+    
+    pendentes.forEach((agend, idx) => {
+      const now = Date.now();
+      const t = parseDateTimeToMs(agend.datetime);
+      const diff = t - now;
+      const seconds = Math.ceil(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      const timeStr = minutes > 0 
+        ? `${minutes}:${secs.toString().padStart(2, '0')}` 
+        : `${secs}s`;
+
+      let timeColor = '#4CAF50';
+      if (diff < 300000) timeColor = '#FF9800'; // < 5 min = laranja
+      if (diff < 60000) timeColor = '#F44336';  // < 1 min = vermelho
+
+      html += `
+        <div onclick="TWS_TestModal._selectAgenda(${idx})" style="
+          background: white;
+          border: 3px solid #8B4513;
+          border-radius: 8px;
+          padding: 12px;
+          cursor: pointer;
+          transition: all 0.3s;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        " onmouseover="this.style.background='#FFF9E6'; this.style.transform='scale(1.02)'" onmouseout="this.style.background='white'; this.style.transform='scale(1)'">
+          <div>
+            <div style="font-weight: bold; color: #8B4513;">
+              #${idx + 1}: ${agend.origem} → ${agend.alvo}
+            </div>
+            <small style="color: #666;">
+              📅 ${agend.datetime}
+            </small>
+          </div>
+          <div style="
+            background: ${timeColor};
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: center;
+            min-width: 60px;
+          ">
+            ${timeStr}
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    return html;
+  }
+
+  // ✅ Renderiza edição de dados (TAB 2)
+  function renderEditTab(cfg, onUpdate) {
+    const troopsHtml = TROOP_LIST.map(u => `
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <label style="width: 60px; font-weight: bold; color: #8B4513;">${u}:</label>
+        <input type="number" 
+          id="edit-troop-${u}" 
+          value="${cfg[u] || 0}" 
+          min="0"
+          style="
+            width: 80px;
+            padding: 6px;
+            border: 2px solid #8B4513;
+            border-radius: 4px;
+          "
+        />
+      </div>
+    `).join('');
+
+    return `
+      <div style="display: grid; gap: 15px;">
+        <!-- Info básica (leitura) -->
+        <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
+          <div style="font-weight: bold; color: #8B4513; margin-bottom: 8px;">📍 Dados Básicos</div>
+          <div style="font-size: 13px; line-height: 1.8;">
+            <strong>Origem:</strong> ${cfg.origem}<br>
+            <strong>Alvo:</strong> ${cfg.alvo}<br>
+            <strong>Data/Hora Agendada:</strong> ${cfg.datetime}
+          </div>
+        </div>
+
+        <!-- Opções de envio -->
+        <div style="background: #E3F2FD; padding: 12px; border-radius: 8px; border: 2px dashed #2196F3;">
+          <div style="font-weight: bold; color: #1976D2; margin-bottom: 10px;">🚀 Opções de Envio</div>
+          
+          <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer;">
+            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" checked style="cursor: pointer;">
+            <span style="color: #333;">
+              <strong>Envio Imediato</strong><br>
+              <small style="color: #666;">Envia o ataque AGORA, ignorando o horário</small>
+            </span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" style="cursor: pointer;">
+            <span style="color: #333;">
+              <strong>Data/Hora Customizada</strong><br>
+              <small style="color: #666;">Define um novo horário de envio</small>
+            </span>
+          </label>
+
+          <div id="datetime-editor" style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px; border: 2px solid #2196F3; display: none;">
+            <label style="display: block; font-weight: bold; color: #8B4513; margin-bottom: 8px;">📅 Nova Data/Hora:</label>
+            <input type="text" 
+              id="edit-datetime" 
+              placeholder="DD/MM/YYYY HH:MM:SS"
+              value="${cfg.datetime}"
+              style="
+                width: 100%;
+                padding: 8px;
+                border: 2px solid #8B4513;
+                border-radius: 4px;
+                box-sizing: border-box;
+              "
+            />
+            <small style="color: #666; display: block; margin-top: 8px;">
+              Atalhos: 
+              <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
+              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">+1min</a> | 
+              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">+5min</a>
+            </small>
+          </div>
+        </div>
+
+        <!-- Tropas editáveis -->
+        <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
+          <div style="font-weight: bold; color: #8B4513; margin-bottom: 10px;">🪖 Tropas (Editáveis)</div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+            ${troopsHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ✅ Renderiza confirmação final (TAB 3)
+  function renderConfirmTab(cfg, datetime) {
+    const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
+    
+    return `
+      <div style="display: grid; gap: 15px;">
+        <!-- Aviso destacado -->
+        <div style="
+          background: #FFE5E5;
+          border: 3px solid #F44336;
+          border-radius: 8px;
+          padding: 15px;
+          text-align: center;
+        ">
+          <div style="font-size: 28px; margin-bottom: 8px;">⚠️</div>
+          <div style="font-weight: bold; color: #D32F2F; font-size: 16px;">ATENÇÃO!</div>
+          <div style="color: #C62828; font-size: 14px; margin-top: 8px;">
+            ${envioType === 'imediato' 
+              ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
+              : `O ataque será enviado em: <strong>${datetime}</strong>`}
+          </div>
+        </div>
+
+        <!-- Info do ataque -->
+        <div style="background: white; border: 2px solid #8B4513; border-radius: 8px; padding: 15px;">
+          <div style="font-weight: bold; color: #8B4513; margin-bottom: 12px; font-size: 16px;">📋 RESUMO DO ATAQUE</div>
+          
+          <div style="display: grid; gap: 10px;">
+            <div style="background: #E3F2FD; padding: 12px; border-radius: 4px;">
+              <div style="font-size: 11px; color: #1976D2; font-weight: bold;">ORIGEM</div>
+              <div style="font-size: 18px; font-weight: bold; color: #8B4513;">${cfg.origem}</div>
+            </div>
+
+            <div style="text-align: center; font-size: 24px; color: #8B4513;">→</div>
+
+            <div style="background: #FFF3E0; padding: 12px; border-radius: 4px;">
+              <div style="font-size: 11px; color: #E65100; font-weight: bold;">DESTINO</div>
+              <div style="font-size: 18px; font-weight: bold; color: #8B4513;">${cfg.alvo}</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #E0E0E0;">
+            <div style="font-weight: bold; color: #8B4513; margin-bottom: 10px;">🪖 TROPAS</div>
+            ${renderTroopsPreview(cfg)}
+          </div>
+        </div>
+
+        <!-- Checkbox de confirmação -->
+        <div style="background: #FFF9E6; border: 2px dashed #FF9800; border-radius: 8px; padding: 15px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" id="confirm-checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span style="font-weight: bold; color: #E65100;">
+              Tenho certeza que quero enviar este ataque
+            </span>
+          </label>
+        </div>
+      </div>
+    `;
+  }
+
+  // ✅ Executa o ataque
+  async function executeTest(cfg, datetime, statusDiv, overlay) {
     try {
       statusDiv.innerHTML = '🔥 <strong>Executando teste...</strong>';
       statusDiv.style.background = '#FFF9C4';
@@ -57,12 +280,10 @@
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
         
-        // Marcar como concluído na lista
         const list = getList();
         const idx = list.findIndex(a => 
           a.origem === cfg.origem && 
-          a.alvo === cfg.alvo && 
-          a.datetime === cfg.datetime
+          a.alvo === cfg.alvo
         );
         
         if (idx !== -1) {
@@ -84,190 +305,26 @@
       }
       
     } catch (error) {
-      console.error('[Test Modal] Erro ao executar:', error);
-      statusDiv.innerHTML = `❌ <strong>Erro:</strong> ${error.message}`;
-      statusDiv.style.background = '#FFEBEE';
-      statusDiv.style.borderColor = '#F44336';
-      
-      // Marcar como erro na lista
-      const list = getList();
-      const idx = list.findIndex(a => 
-        a.origem === cfg.origem && 
-        a.alvo === cfg.alvo && 
-        a.datetime === cfg.datetime
-      );
-      
-      if (idx !== -1) {
-        list[idx].done = true;
-        list[idx].success = false;
-        list[idx].error = error.message;
-        setList(list);
-      }
-    }
-  }
-
-  // === Valida e executa ===
-  async function handleExecute(overlay) {
-    const statusDiv = document.getElementById('test-status');
-    const executeBtn = document.getElementById('test-btn-execute');
-    
-    // Prevenir múltiplos submits
-    if (executeBtn.disabled) {
-      console.warn('[Test Modal] Execução já em andamento...');
-      return;
-    }
-    
-    executeBtn.disabled = true;
-    executeBtn.textContent = '⏳ Executando...';
-
-    try {
-      // Coletar dados do formulário
-      const origemSelect = document.getElementById('test-origem');
-      const origemId = origemSelect.value;
-      const origemCoord = origemSelect.options[origemSelect.selectedIndex]?.dataset?.coord;
-      const alvo = document.getElementById('test-alvo').value.trim();
-
-      // Validar origem
-      if (!origemId || !origemCoord) {
-        statusDiv.innerHTML = '❌ Selecione uma aldeia de origem válida!';
-        statusDiv.style.background = '#FFEBEE';
-        statusDiv.style.borderColor = '#F44336';
-        executeBtn.disabled = false;
-        executeBtn.textContent = '🚀 Executar Teste';
-        return;
-      }
-
-      // Validar alvo
-      const alvoParsed = parseCoord(alvo);
-      if (!alvoParsed) {
-        statusDiv.innerHTML = '❌ Coordenada de alvo inválida! Use formato: XXX|YYY';
-        statusDiv.style.background = '#FFEBEE';
-        statusDiv.style.borderColor = '#F44336';
-        executeBtn.disabled = false;
-        executeBtn.textContent = '🚀 Executar Teste';
-        return;
-      }
-
-      // Coletar tropas
-      const troops = {};
-      let hasTroops = false;
-      TROOP_LIST.forEach(u => {
-        const val = document.getElementById(`test-troop-${u}`).value;
-        const num = parseInt(val, 10);
-        troops[u] = isNaN(num) ? 0 : num;
-        if (troops[u] > 0) hasTroops = true;
-      });
-
-      if (!hasTroops) {
-        statusDiv.innerHTML = '❌ Adicione pelo menos uma tropa!';
-        statusDiv.style.background = '#FFEBEE';
-        statusDiv.style.borderColor = '#F44336';
-        executeBtn.disabled = false;
-        executeBtn.textContent = '🚀 Executar Teste';
-        return;
-      }
-
-      // Validar tropas disponíveis
-      statusDiv.innerHTML = '🔍 Verificando tropas disponíveis...';
-      statusDiv.style.background = '#E3F2FD';
-      statusDiv.style.borderColor = '#2196F3';
-      
-      const available = await getVillageTroops(origemId);
-      
-      if (available) {
-        const errors = validateTroops(troops, available);
-        if (errors.length > 0) {
-          statusDiv.innerHTML = `❌ <strong>Tropas insuficientes:</strong><br>${errors.map(e => `<small>${e}</small>`).join('<br>')}`;
-          statusDiv.style.background = '#FFEBEE';
-          statusDiv.style.borderColor = '#F44336';
-          executeBtn.disabled = false;
-          executeBtn.textContent = '🚀 Executar Teste';
-          return;
-        }
-      }
-
-      // Criar config de ataque
-      const cfg = {
-        origem: origemCoord,
-        origemId,
-        alvo: alvoParsed,
-        datetime: new Date().toLocaleString('pt-BR').replace(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2}):(\d{2})/, '$1/$2/$3 $4:$5:$6'),
-        done: false,
-        ...troops
-      };
-
-      // Executar
-      await executeTest(cfg, statusDiv, overlay);
-      
-    } catch (error) {
       console.error('[Test Modal] Erro:', error);
       statusDiv.innerHTML = `❌ <strong>Erro:</strong> ${error.message}`;
       statusDiv.style.background = '#FFEBEE';
       statusDiv.style.borderColor = '#F44336';
-      executeBtn.disabled = false;
-      executeBtn.textContent = '🚀 Executar Teste';
     }
   }
 
-  // === Preenche os selects de origem ===
-  function loadOriginSelects(currentOrigemId) {
-    const select = document.getElementById('test-origem');
-    if (!select) return;
-
-    const { myVillages } = _internal;
+  // === Cria e exibe o modal com abas ===
+  function showModal() {
+    const list = getList();
+    const pendentes = list.filter(a => !a.done);
     
-    if (myVillages.length === 0) {
-      select.innerHTML = '<option value="">❌ Carregue as aldeias primeiro</option>';
+    if (pendentes.length === 0) {
+      alert('❌ Nenhum agendamento pendente encontrado!');
       return;
     }
 
-    select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
-      myVillages.map(v => {
-        const selected = v.id === currentOrigemId ? 'selected' : '';
-        return `<option value="${v.id}" data-coord="${v.coord}" ${selected}>${v.name} (${v.coord})</option>`;
-      }).join('');
-  }
-
-  // === Cria e exibe o modal ===
-  function showModal(agendamento = null) {
-    // Se não foi passado um agendamento, pegar da lista
-    if (!agendamento) {
-      const list = getList();
-      const pendentes = list.filter(a => !a.done);
-      
-      if (pendentes.length === 0) {
-        alert('❌ Nenhum agendamento pendente encontrado!\n\nAdicione um agendamento primeiro.');
-        return;
-      }
-
-      // Se há múltiplos, mostrar seletor
-      if (pendentes.length > 1) {
-        const choices = pendentes.map((a, i) => 
-          `${i + 1}. ${a.origem} → ${a.alvo} (${a.datetime})`
-        ).join('\n');
-        
-        const choice = prompt(
-          `📋 Selecione um agendamento para testar:\n\n${choices}\n\nDigite o número (1-${pendentes.length}):`
-        );
-        
-        const idx = parseInt(choice, 10) - 1;
-        
-        if (idx < 0 || idx >= pendentes.length) {
-          alert('❌ Seleção inválida!');
-          return;
-        }
-        
-        agendamento = pendentes[idx];
-      } else {
-        agendamento = pendentes[0];
-      }
-    }
-
-    // Remove modal existente
     const existing = document.getElementById('tws-test-modal');
     if (existing) existing.remove();
 
-    // Criar overlay
     const overlay = document.createElement('div');
     overlay.id = 'tws-test-modal';
     overlay.style.cssText = `
@@ -284,129 +341,90 @@
       animation: fadeIn 0.2s ease;
     `;
 
-    // Criar modal
     const modal = document.createElement('div');
     modal.style.cssText = `
       background: linear-gradient(135deg, #F4E4C1 0%, #E8D4A8 100%);
       border: 3px solid #8B4513;
       border-radius: 12px;
-      padding: 25px;
+      padding: 0;
       width: 90%;
-      max-width: 700px;
+      max-width: 800px;
       max-height: 85vh;
-      overflow-y: auto;
+      overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       animation: slideIn 0.3s ease;
+      display: flex;
+      flex-direction: column;
     `;
 
     modal.innerHTML = `
       <style>
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: scale(0.9) translateY(-20px); opacity: 0; }
-          to { transform: scale(1) translateY(0); opacity: 1; }
-        }
-        .test-section {
-          background: white;
-          border: 2px solid #8B4513;
-          border-radius: 8px;
-          padding: 15px;
-          margin-bottom: 15px;
-        }
-        .test-section-title {
-          font-size: 16px;
-          font-weight: bold;
-          color: #8B4513;
-          margin-bottom: 10px;
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: scale(0.9) translateY(-20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        
+        .tab-header {
           display: flex;
-          align-items: center;
-          gap: 8px;
+          gap: 0;
+          background: #8B4513;
+          border-bottom: 3px solid #654321;
         }
-        .test-input, .test-select {
-          width: 100%;
-          padding: 10px;
-          border: 2px solid #8B4513;
-          border-radius: 6px;
-          font-size: 14px;
-          box-sizing: border-box;
-          transition: all 0.2s;
-        }
-        .test-input:focus, .test-select:focus {
-          outline: none;
-          border-color: #654321;
-          box-shadow: 0 0 8px rgba(139, 69, 19, 0.3);
-        }
-        .test-troops-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
-          margin-top: 10px;
-        }
-        .test-troop-input {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          background: #F5F5F5;
-          border: 2px solid #E0E0E0;
-          border-radius: 6px;
-          padding: 8px;
-          transition: all 0.2s;
-        }
-        .test-troop-input:hover {
-          border-color: #8B4513;
-          transform: translateY(-2px);
-        }
-        .test-troop-input label {
-          font-size: 11px;
-          margin-bottom: 5px;
-          color: #654321;
-          font-weight: bold;
-        }
-        .test-troop-input input {
-          width: 70px;
-          padding: 6px;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          text-align: center;
-          font-weight: bold;
-          font-size: 14px;
-        }
-        .test-btn-group {
-          display: flex;
-          gap: 10px;
-          margin-top: 20px;
-        }
-        .test-btn {
+        .tab-btn {
           flex: 1;
-          padding: 12px;
+          padding: 15px;
+          border: none;
+          background: #A0522D;
+          color: white;
+          font-weight: bold;
+          cursor: pointer;
+          border-bottom: 4px solid transparent;
+          transition: all 0.3s;
+          font-size: 14px;
+        }
+        .tab-btn:hover {
+          background: #8B4513;
+        }
+        .tab-btn.active {
+          background: #8B4513;
+          border-bottom-color: #FFD700;
+          box-shadow: inset 0 -2px 0 #FFD700;
+        }
+        .tab-content {
+          flex: 1;
+          padding: 20px;
+          overflow-y: auto;
+          display: none;
+        }
+        .tab-content.active {
+          display: block;
+        }
+        .tab-footer {
+          padding: 15px 20px;
+          background: #E8D4A8;
+          border-top: 2px solid #8B4513;
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+        }
+        .btn {
+          padding: 10px 20px;
           border: none;
           border-radius: 6px;
-          font-size: 15px;
           font-weight: bold;
           cursor: pointer;
           transition: all 0.2s;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
-        .test-btn:hover:not(:disabled) {
+        .btn:hover:not(:disabled) {
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        .test-btn:disabled {
-          opacity: 0.6;
+        .btn:disabled {
+          opacity: 0.5;
           cursor: not-allowed;
-          transform: none !important;
         }
-        .test-btn-execute {
-          background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-          color: white;
-        }
-        .test-btn-cancel {
-          background: linear-gradient(135deg, #9E9E9E 0%, #757575 100%);
-          color: white;
-        }
+        .btn-cancel { background: #9E9E9E; color: white; }
+        .btn-next { background: #2196F3; color: white; }
+        .btn-prev { background: #9C27B0; color: white; }
+        .btn-send { background: #F44336; color: white; }
         #test-status {
           padding: 12px;
           border: 2px solid #2196F3;
@@ -415,106 +433,137 @@
           margin-bottom: 15px;
           font-size: 13px;
           line-height: 1.6;
-          transition: all 0.3s;
-        }
-        .test-warning {
-          background: #FFF3E0;
-          border: 2px solid #FF9800;
-          border-radius: 6px;
-          padding: 12px;
-          margin-bottom: 15px;
-          font-size: 13px;
-          color: #E65100;
         }
       </style>
 
-      <h2 style="margin: 0 0 20px 0; color: #8B4513; font-size: 24px; display: flex; align-items: center; gap: 10px;">
-        🔥 Teste de Envio
-      </h2>
-
-      <div class="test-warning">
-        <strong>⚠️ ATENÇÃO:</strong> Este teste vai enviar o ataque <strong>IMEDIATAMENTE</strong>, ignorando o horário agendado. Verifique todos os dados antes de confirmar!
+      <!-- Abas -->
+      <div class="tab-header">
+        <button class="tab-btn active" onclick="TWS_TestModal._switchTab(0)">1️⃣ Selecionar</button>
+        <button class="tab-btn" onclick="TWS_TestModal._switchTab(1)">2️⃣ Editar</button>
+        <button class="tab-btn" onclick="TWS_TestModal._switchTab(2)">3️⃣ Confirmar</button>
       </div>
 
-      <div id="test-status">
-        ℹ️ Revise os dados abaixo e clique em <strong>"Executar Teste"</strong> quando estiver pronto.
+      <!-- Conteúdo das abas -->
+      <div id="test-content" style="flex: 1; overflow-y: auto; padding: 20px;">
+        <div id="test-status"></div>
+        <div id="tab-0" class="tab-content active"></div>
+        <div id="tab-1" class="tab-content"></div>
+        <div id="tab-2" class="tab-content"></div>
       </div>
 
-      <!-- ORIGEM -->
-      <div class="test-section">
-        <div class="test-section-title">
-          📍 Aldeia de Origem
-        </div>
-        <select id="test-origem" class="test-select"></select>
-      </div>
-
-      <!-- ALVO -->
-      <div class="test-section">
-        <div class="test-section-title">
-          🎯 Alvo
-        </div>
-        <input type="text" id="test-alvo" class="test-input" placeholder="XXX|YYY" value="${agendamento.alvo || ''}">
-      </div>
-
-      <!-- TROPAS -->
-      <div class="test-section">
-        <div class="test-section-title">
-          🪖 Tropas a Enviar
-        </div>
-        <div class="test-troops-grid">
-          ${TROOP_LIST.map(u => `
-            <div class="test-troop-input">
-              <label>${u}</label>
-              <input type="number" id="test-troop-${u}" min="0" value="${agendamento[u] || 0}">
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- PREVIEW -->
-      <div class="test-section">
-        <div class="test-section-title">
-          📊 Preview
-        </div>
-        <div style="font-size: 13px; color: #666;">
-          <strong>Origem:</strong> ${agendamento.origem || agendamento.origemId}<br>
-          <strong>Destino:</strong> ${agendamento.alvo}<br>
-          <strong>Horário Original:</strong> <span style="color: #F44336;">${agendamento.datetime} (SERÁ IGNORADO)</span>
-        </div>
-        ${renderTroopsPreview(agendamento)}
-      </div>
-
-      <!-- BOTÕES -->
-      <div class="test-btn-group">
-        <button id="test-btn-cancel" class="test-btn test-btn-cancel">❌ Cancelar</button>
-        <button id="test-btn-execute" class="test-btn test-btn-execute">🚀 Executar Teste</button>
+      <!-- Rodapé com botões -->
+      <div class="tab-footer">
+        <button class="btn btn-cancel" onclick="document.getElementById('tws-test-modal').remove()">❌ Cancelar</button>
+        <button class="btn btn-prev" id="btn-prev" onclick="TWS_TestModal._prevTab()" style="display: none;">⬅️ Voltar</button>
+        <button class="btn btn-next" id="btn-next" onclick="TWS_TestModal._nextTab()">Próximo ➡️</button>
+        <button class="btn btn-send" id="btn-send" onclick="TWS_TestModal._executeFinal()" style="display: none;">🚀 Enviar Agora</button>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Carregar selects de origem
-    loadOriginSelects(agendamento.origemId);
+    // Estado compartilhado
+    let currentTab = 0;
+    let selectedAgenda = pendentes[0];
+    let currentDatetime = selectedAgenda.datetime;
 
-    // Event listeners
-    const btnCancel = document.getElementById('test-btn-cancel');
-    const btnExecute = document.getElementById('test-btn-execute');
+    // Renderizar TAB 1 (Seleção)
+    document.getElementById('tab-0').innerHTML = renderAgendamentosList();
 
-    btnCancel.onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    // Funções expostas globalmente
+    window.TWS_TestModal = {
+      _selectAgenda(idx) {
+        selectedAgenda = pendentes[idx];
+        currentDatetime = selectedAgenda.datetime;
+        
+        // Renderizar TAB 2
+        document.getElementById('tab-1').innerHTML = renderEditTab(selectedAgenda);
+        
+        // Ir para TAB 2
+        TWS_TestModal._switchTab(1);
+        
+        console.log('[Test Modal] Agendamento selecionado:', selectedAgenda);
+      },
 
-    btnExecute.onclick = async () => {
-      if (confirm('⚠️ CONFIRMAR TESTE\n\nO ataque será enviado AGORA.\n\nTem certeza?')) {
-        await handleExecute(overlay);
+      _switchTab(tab) {
+        currentTab = tab;
+        
+        // Ocultar todas as abas
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        
+        // Mostrar aba atual
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.querySelectorAll('.tab-btn')[tab].classList.add('active');
+        
+        // Atualizar botões
+        document.getElementById('btn-prev').style.display = tab === 0 ? 'none' : 'block';
+        document.getElementById('btn-next').style.display = tab === 2 ? 'none' : 'block';
+        document.getElementById('btn-send').style.display = tab === 2 ? 'block' : 'none';
+        
+        // Se tab 2, renderizar confirmação
+        if (tab === 2) {
+          // Capturar dados editados
+          const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
+          
+          if (envioType === 'agendado') {
+            currentDatetime = document.getElementById('edit-datetime')?.value || selectedAgenda.datetime;
+          } else {
+            currentDatetime = formatDateTime(new Date());
+          }
+
+          // Atualizar tropas se editadas
+          TROOP_LIST.forEach(u => {
+            const val = document.getElementById(`edit-troop-${u}`)?.value || selectedAgenda[u];
+            selectedAgenda[u] = parseInt(val, 10);
+          });
+
+          document.getElementById('tab-2').innerHTML = renderConfirmTab(selectedAgenda, currentDatetime);
+        }
+
+        // Listener para tipo de envio
+        if (tab === 1) {
+          document.getElementById('envio-imediato').onchange = () => {
+            document.getElementById('datetime-editor').style.display = 'none';
+          };
+          document.getElementById('envio-agendado').onchange = () => {
+            document.getElementById('datetime-editor').style.display = 'block';
+          };
+        }
+      },
+
+      _nextTab() {
+        if (currentTab < 2) TWS_TestModal._switchTab(currentTab + 1);
+      },
+
+      _prevTab() {
+        if (currentTab > 0) TWS_TestModal._switchTab(currentTab - 1);
+      },
+
+      _executeFinal() {
+        const confirmed = document.getElementById('confirm-checkbox')?.checked;
+        if (!confirmed) {
+          alert('⚠️ Marque o checkbox de confirmação antes de enviar!');
+          return;
+        }
+
+        const statusDiv = document.getElementById('test-status');
+        const overlay = document.getElementById('tws-test-modal');
+
+        // Preparar config final
+        const finalCfg = { ...selectedAgenda };
+        
+        executeTest(finalCfg, currentDatetime, statusDiv, overlay);
       }
     };
+
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   }
 
   // === Expor API global ===
-  window.TWS_TestModal = {
-    show: showModal
-  };
+  window.TWS_TestModal = window.TWS_TestModal || {};
+  window.TWS_TestModal.show = showModal;
 
-  console.log('[TW Scheduler Test Modal] Módulo carregado com sucesso!');
+  console.log('[TW Scheduler Test Modal] ✅ Carregado com interface de abas!');
 })();
