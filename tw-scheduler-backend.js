@@ -58,11 +58,249 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
-  function parseCoord(s) {
-    if (!s) return null;
-    const t = s.trim();
-    return /^(\d+)\|(\d+)$/.test(t) ? t : null;
+/**
+ * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
+ * Suporta todos os formatos: X|Y, XX|YY, XXX|YYY, XXXX|YYYY
+ */
+
+// ✅ Função melhorada para validar e normalizar coordenadas
+function parseCoord(s) {
+  if (!s) return null;
+  
+  const t = s.trim();
+  
+  // Padrão: permite 1-4 dígitos de cada lado do pipe
+  // Formatos válidos: 5|4, 52|43, 529|431, 5294|4312
+  const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+  
+  if (!match) return null;
+  
+  const x = parseInt(match[1], 10);
+  const y = parseInt(match[2], 10);
+  
+  // Validar limites do mapa (Tribal Wars: 0-499 em cada eixo)
+  if (x < 0 || x > 499 || y < 0 || y > 499) {
+    return null;
   }
+  
+  // Retornar em formato normalizado XXX|YYY
+  return `${x}|${y}`;
+}
+
+// ✅ Função para validar sem normalizar (apenas verificar formato)
+function isValidCoord(s) {
+  return parseCoord(s) !== null;
+}
+
+// ✅ Função para obter info sobre a coordenada
+function getCoordInfo(s) {
+  const normalized = parseCoord(s);
+  
+  if (!normalized) {
+    return {
+      valid: false,
+      error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
+    };
+  }
+  
+  const [x, y] = normalized.split('|').map(Number);
+  
+  return {
+    valid: true,
+    original: s.trim(),
+    normalized,
+    x,
+    y,
+    mapSection: getMapSection(x, y),
+    distance: null // Pode ser calculado se houver coordenada de origem
+  };
+}
+
+// ✅ Função auxiliar: determinar seção do mapa
+function getMapSection(x, y) {
+  const sections = [];
+  if (x < 250) sections.push('Oeste');
+  else if (x > 250) sections.push('Leste');
+  else sections.push('Centro');
+  
+  if (y < 250) sections.push('Norte');
+  else if (y > 250) sections.push('Sul');
+  else sections.push('Centro');
+  
+  return sections.join('-');
+}
+
+// ✅ Calcular distância entre coordenadas
+function getDistance(coord1, coord2) {
+  const c1 = parseCoord(coord1);
+  const c2 = parseCoord(coord2);
+  
+  if (!c1 || !c2) return null;
+  
+  const [x1, y1] = c1.split('|').map(Number);
+  const [x2, y2] = c2.split('|').map(Number);
+  
+  // Distância de Chebyshev (usada em Tribal Wars)
+  return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+}
+
+// ✅ Validar múltiplas coordenadas
+function validateCoordList(coordStrings) {
+  return coordStrings.map((coord, idx) => ({
+    index: idx + 1,
+    input: coord,
+    valid: isValidCoord(coord),
+    normalized: parseCoord(coord),
+    error: !isValidCoord(coord) ? 'Formato inválido' : null
+  }));
+}
+
+// ✅ Função para limpar e validar input de usuário
+function sanitizeCoordInput(input) {
+  if (!input) return null;
+  
+  // Remover espaços extras
+  let cleaned = input.trim().replace(/\s+/g, '');
+  
+  // Aceitar também formato com hífen: 5-4 → 5|4
+  cleaned = cleaned.replace(/-/g, '|');
+  
+  // Remover caracteres inválidos
+  cleaned = cleaned.replace(/[^\d|]/g, '');
+  
+  // Se vazio após limpeza, retornar null
+  if (!cleaned) return null;
+  
+  return parseCoord(cleaned);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TESTES UNITÁRIOS
+// ═══════════════════════════════════════════════════════════════════
+
+function runCoordTests() {
+  const testCases = [
+    // Formatos válidos
+    { input: '5|4', expected: '5|4', name: 'Formato X|Y (válido)' },
+    { input: '52|43', expected: '52|43', name: 'Formato XX|YY (válido)' },
+    { input: '529|431', expected: '529|431', name: 'Formato XXX|YYY (válido)' },
+    { input: '5294|4312', expected: '5294|4312', name: 'Formato XXXX|YYYY (válido)' },
+    
+    // Com espaços
+    { input: ' 52 | 43 ', expected: '52|43', name: 'Formato com espaços' },
+    { input: '529 | 431', expected: '529|431', name: 'Formato com espaços múltiplos' },
+    
+    // Casos inválidos
+    { input: '5', expected: null, name: 'Apenas um número' },
+    { input: '5|', expected: null, name: 'Número faltando' },
+    { input: '|43', expected: null, name: 'Primeiro número faltando' },
+    { input: 'abc|def', expected: null, name: 'Letras em vez de números' },
+    { input: '500|250', expected: null, name: 'X fora do intervalo (500)' },
+    { input: '250|500', expected: null, name: 'Y fora do intervalo (500)' },
+    { input: '-5|43', expected: null, name: 'Número negativo' },
+    { input: '', expected: null, name: 'String vazia' },
+    { input: null, expected: null, name: 'null' },
+    { input: '5|4|2', expected: null, name: 'Mais de dois números' },
+    { input: '5.5|4.3', expected: null, name: 'Números decimais' },
+  ];
+
+  console.log('\n═══════════════════════════════════════════════════════');
+  console.log('🧪 TESTES DE VALIDAÇÃO DE COORDENADAS');
+  console.log('═══════════════════════════════════════════════════════\n');
+  
+  let passed = 0;
+  let failed = 0;
+
+  testCases.forEach((test, idx) => {
+    const result = parseCoord(test.input);
+    const success = result === test.expected;
+    
+    if (success) {
+      console.log(`✅ [${idx + 1}] ${test.name}`);
+      console.log(`   Input: "${test.input}" → Output: "${result}"\n`);
+      passed++;
+    } else {
+      console.log(`❌ [${idx + 1}] ${test.name}`);
+      console.log(`   Input: "${test.input}"`);
+      console.log(`   Esperado: ${test.expected}`);
+      console.log(`   Obtido: ${result}\n`);
+      failed++;
+    }
+  });
+
+  console.log('═══════════════════════════════════════════════════════');
+  console.log(`📊 RESULTADO: ${passed} aprovados, ${failed} reprovados`);
+  console.log('═══════════════════════════════════════════════════════\n');
+
+  return { passed, failed, total: testCases.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEMONSTRAÇÃO
+// ═══════════════════════════════════════════════════════════════════
+
+function demonstracao() {
+  console.log('\n🎯 EXEMPLOS DE USO\n');
+  
+  console.log('1️⃣ Validar coordenadas:');
+  console.log('   isValidCoord("529|431"):', isValidCoord('529|431'));
+  console.log('   isValidCoord("5|4"):', isValidCoord('5|4'));
+  console.log('   isValidCoord("999|999"):', isValidCoord('999|999'));
+  
+  console.log('\n2️⃣ Obter informações:');
+  const info = getCoordInfo('529|431');
+  console.log('   Coordenada: 529|431');
+  console.log('   Válida:', info.valid);
+  console.log('   Normalizada:', info.normalized);
+  console.log('   Posição:', `X=${info.x}, Y=${info.y}`);
+  console.log('   Seção do Mapa:', info.mapSection);
+  
+  console.log('\n3️⃣ Calcular distância:');
+  const dist = getDistance('0|0', '100|100');
+  console.log('   De (0|0) até (100|100):', dist, 'casas');
+  
+  console.log('\n4️⃣ Limpar input de usuário:');
+  console.log('   Input: " 52 - 43 "');
+  console.log('   Resultado:', sanitizeCoordInput(' 52 - 43 '));
+  
+  console.log('\n5️⃣ Validar lista:');
+  const lista = validateCoordList(['5|4', '999|999', '52|43']);
+  lista.forEach(item => {
+    console.log(`   [${item.index}] "${item.input}" → ${item.valid ? '✅' : '❌'}`);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORTAR PARA USO GLOBAL
+// ═══════════════════════════════════════════════════════════════════
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    parseCoord,
+    isValidCoord,
+    getCoordInfo,
+    getMapSection,
+    getDistance,
+    validateCoordList,
+    sanitizeCoordInput,
+    runCoordTests
+  };
+}
+
+// Executar testes se disponível no console
+if (typeof window !== 'undefined') {
+  window.CoordValidator = {
+    parseCoord,
+    isValidCoord,
+    getCoordInfo,
+    getMapSection,
+    getDistance,
+    validateCoordList,
+    sanitizeCoordInput,
+    runCoordTests
+  };
+  console.log('✅ CoordValidator disponível. Use: CoordValidator.runCoordTests()');
+}
 
   function getList() {
     try {
@@ -593,3 +831,4 @@
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
