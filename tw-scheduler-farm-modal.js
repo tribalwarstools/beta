@@ -35,101 +35,6 @@
     return Math.max(60, Math.min(baseTime, 3600));
   }
 
-  // ✅ FUNÇÃO REAL: Captura tempo de viagem com IFRAME
-  function captureRealTravelTimeWithIframe(commandUrl) {
-    return new Promise((resolve, reject) => {
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = commandUrl;
-      
-      iframe.onload = function() {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          
-          // Extrair duração do comando do iframe
-          let durationText = '';
-          const durationElements = iframeDoc.querySelectorAll('*');
-          
-          for (let el of durationElements) {
-            if (el.textContent.includes('Duração:')) {
-              const text = el.textContent;
-              const match = text.match(/Duração:\s*([\d:]+)/);
-              if (match) {
-                durationText = match[1];
-                break;
-              }
-            }
-          }
-          
-          document.body.removeChild(iframe);
-          
-          if (!durationText) {
-            reject(new Error('Não foi possível encontrar o tempo de duração'));
-            return;
-          }
-          
-          // Converter para segundos
-          const seconds = convertDurationToSeconds(durationText);
-          console.log(`[Farm] Tempo de viagem detectado (iframe): ${durationText} (${seconds} segundos)`);
-          resolve(seconds);
-          
-        } catch (error) {
-          document.body.removeChild(iframe);
-          reject(new Error('Erro ao acessar iframe: ' + error.message));
-        }
-      };
-      
-      iframe.onerror = function() {
-        document.body.removeChild(iframe);
-        reject(new Error('Erro ao carregar iframe'));
-      };
-      
-      document.body.appendChild(iframe);
-    });
-  }
-
-  // ✅ Converter duração para segundos
-  function convertDurationToSeconds(durationText) {
-    const parts = durationText.split(':').map(Number);
-    let seconds = 0;
-    
-    if (parts.length === 3) { // HH:MM:SS
-      seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else if (parts.length === 2) { // MM:SS
-      seconds = parts[0] * 60 + parts[1];
-    } else { // SS
-      seconds = parts[0];
-    }
-    
-    return seconds;
-  }
-
-  // ✅ Obter ID da vila atual da URL
-  function getCurrentVillageId() {
-    const match = window.location.href.match(/village=(\d+)/);
-    return match ? match[1] : null;
-  }
-
-  // ✅ Tentar obter ID do último comando (aproximação)
-  function getLastCommandId() {
-    // Esta é uma aproximação - na prática precisaria monitorar a praça de reunião
-    // Por enquanto, vamos usar um timestamp como ID aproximado
-    return Promise.resolve('cmd_' + Date.now());
-  }
-
-  // ✅ Usar tempo estimado se não conseguir capturar real
-  function useEstimatedTime(farm, now) {
-    const origemCoord = parseCoord(farm.origem);
-    const alvoCoord = parseCoord(farm.alvo);
-    const travelTime = calculateTravelTime(origemCoord, alvoCoord, farm.troops);
-    
-    const intervaloMin = (farm.intervalo || 5) * 60 * 1000;
-    const nextRun = new Date(now + (travelTime * 2 * 1000) + intervaloMin);
-    farm.nextRun = formatDateTime(nextRun);
-    
-    console.log(`[Farm] Usando tempo estimado: ${farm.nextRun}`);
-  }
-
   // ✅ Gerar ID único
   function generateId() {
     return 'farm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -144,16 +49,121 @@
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-  // ✅ Renderiza lista de farms ativos
+  // ✅ NOVA FUNÇÃO: Converte agendamento normal em Farm Inteligente
+  function convertToFarm(agendamentoIndex, intervalo = 5) {
+    const lista = getList();
+    
+    if (agendamentoIndex < 0 || agendamentoIndex >= lista.length) {
+      alert('❌ Agendamento não encontrado!');
+      return false;
+    }
+    
+    const agendamento = lista[agendamentoIndex];
+    
+    // Extrair tropas do agendamento
+    const troops = {};
+    TROOP_LIST.forEach(u => {
+      troops[u] = agendamento[u] || 0;
+    });
+    
+    // Criar farm baseado no agendamento
+    const farm = {
+      id: generateId(),
+      agendamentoBaseId: agendamentoIndex, // Referência ao agendamento original
+      origem: agendamento.origem,
+      alvo: agendamento.alvo,
+      troops: troops,
+      intervalo: intervalo,
+      paused: false,
+      active: true,
+      stats: { totalRuns: 0, successRuns: 0 },
+      nextRun: agendamento.datetime, // Usar a data do agendamento original
+      created: new Date().toISOString()
+    };
+    
+    // Adicionar à lista de farms
+    const farms = getFarmList();
+    farms.push(farm);
+    setFarmList(farms);
+    
+    console.log(`[Farm] Agendamento convertido: ${farm.origem} → ${farm.alvo}`);
+    return true;
+  }
+
+  // ✅ NOVA FUNÇÃO: Monitora execução de agendamentos para Farms
+  function monitorAgendamentosParaFarm() {
+    const lista = getList();
+    const farms = getFarmList().filter(f => !f.paused && f.active !== false);
+    
+    farms.forEach(farm => {
+      // Verificar se o agendamento base foi executado
+      const agendamentoBase = lista[farm.agendamentoBaseId];
+      
+      if (agendamentoBase && agendamentoBase.done && agendamentoBase.success) {
+        // ✅ Agendamento foi executado com sucesso!
+        console.log(`[Farm] Agendamento executado: ${farm.origem} → ${farm.alvo}`);
+        
+        // Atualizar estatísticas do farm
+        farm.stats.totalRuns++;
+        farm.stats.successRuns++;
+        
+        // Calcular próximo horário baseado no tempo real de execução
+        const now = new Date();
+        const travelTime = calculateTravelTime(
+          parseCoord(farm.origem), 
+          parseCoord(farm.alvo), 
+          farm.troops
+        );
+        
+        // Próximo envio = agora + (tempo_viagem * 2) + intervalo
+        const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
+        const nextRun = new Date(now.getTime() + (travelTime * 2 * 1000) + intervaloMs);
+        
+        // Recriar o agendamento para próximo ciclo
+        const novoAgendamento = {
+          ...agendamentoBase,
+          datetime: formatDateTime(nextRun),
+          done: false,
+          success: false,
+          executedAt: null,
+          error: null
+        };
+        
+        // Substituir na lista (remove o concluído, adiciona novo)
+        lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
+        setList(lista);
+        
+        // Atualizar farm com nova data
+        farm.nextRun = novoAgendamento.datetime;
+        
+        // Salvar farm atualizado
+        const updatedFarms = getFarmList();
+        const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
+        if (farmIdx !== -1) {
+          updatedFarms[farmIdx] = farm;
+          setFarmList(updatedFarms);
+        }
+        
+        console.log(`[Farm] Novo ciclo agendado: ${novoAgendamento.datetime}`);
+        
+        // Disparar evento de atualização
+        window.dispatchEvent(new CustomEvent('tws-farm-updated'));
+        window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
+      }
+    });
+  }
+
+  // ✅ Renderiza lista de farms ativos ATUALIZADA
   function renderFarmList() {
     const farms = getFarmList().filter(f => f.active !== false);
+    const listaAgendamentos = getList();
     
     if (farms.length === 0) {
       return `
         <div style="text-align: center; padding: 40px; color: #999;">
           <div style="font-size: 48px; margin-bottom: 10px;">🌾</div>
           <div style="font-size: 16px; font-weight: bold;">Nenhum farm inteligente ativo</div>
-          <small>Clique em "Novo Farm" para começar</small>
+          <small>Use "Converter Agendamento" ou "Novo Farm" para começar</small>
         </div>
       `;
     }
@@ -178,22 +188,32 @@
 
       const stats = farm.stats || { totalRuns: 0, successRuns: 0 };
       
+      // Verificar status do agendamento base
+      const agendamentoBase = listaAgendamentos[farm.agendamentoBaseId];
+      const baseStatus = agendamentoBase ? 
+        (agendamentoBase.done ? 
+          (agendamentoBase.success ? '✅ Concluído' : '❌ Falhou') : 
+          '⏳ Pendente') : 
+        '❓ Não encontrado';
+      
       html += `
         <div style="
           background: white;
           border: 3px solid ${statusColor};
           border-radius: 8px;
           padding: 15px;
-          cursor: pointer;
           transition: all 0.3s;
         " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-          <div style="display: flex; justify-content: between; align-items: start; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
             <div style="flex: 1;">
               <div style="font-weight: bold; color: #8B4513; font-size: 16px;">
                 ${farm.origem} → ${farm.alvo}
               </div>
               <div style="color: #666; font-size: 12px; margin-top: 4px;">
                 🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}
+              </div>
+              <div style="color: #888; font-size: 11px; margin-top: 2px;">
+                📋 Agendamento base: ${baseStatus}
               </div>
             </div>
             <div style="
@@ -215,11 +235,11 @@
             </div>
             <div>
               <strong>Estatísticas:</strong><br>
-              ${stats.totalRuns} envios (${stats.successRuns} sucessos)
+              ${stats.totalRuns} ciclos (${stats.successRuns} sucessos)
             </div>
           </div>
           
-          <div style="margin-top: 10px; display: flex; gap: 8px;">
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
             <button onclick="TWS_FarmInteligente._toggleFarm('${farm.id}')" style="
               padding: 6px 12px;
               border: none;
@@ -329,24 +349,8 @@
           <div style="font-weight: bold; color: #1976D2; margin-bottom: 12px;">⚙️ Configurações do Farm</div>
           
           <div style="display: grid; gap: 10px;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-              <input type="checkbox" id="farm-iniciar-imediatamente" checked style="cursor: pointer;">
-              <span style="color: #333;">
-                <strong>Iniciar imediatamente</strong><br>
-                <small style="color: #666;">Começar o ciclo de farm assim que salvar</small>
-              </span>
-            </label>
-
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-              <input type="checkbox" id="farm-manter-tempo-viagem" checked style="cursor: pointer;">
-              <span style="color: #333;">
-                <strong>Ajustar automaticamente tempo de viagem</strong><br>
-                <small style="color: #666;">Recalcular horários baseado no tempo real de retorno</small>
-              </span>
-            </label>
-
             <div>
-              <label style="display: block; font-weight: bold; color: #666; margin-bottom: 8px;">⏰ Intervalo mínimo entre envios (minutos):</label>
+              <label style="display: block; font-weight: bold; color: #666; margin-bottom: 8px;">⏰ Intervalo entre ciclos (minutos):</label>
               <input type="number" 
                 id="farm-intervalo" 
                 value="5" 
@@ -365,107 +369,14 @@
     `;
   }
 
-  // ✅ Processa farm inteligente COM DETECÇÃO REAL
-  async function processFarmInteligente() {
-    const farms = getFarmList().filter(f => !f.paused && f.active !== false);
-    const now = Date.now();
-    
-    for (const farm of farms) {
-      try {
-        // Verificar se é hora de executar
-        const nextRunMs = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : 0;
-        
-        if (farm.nextRun && nextRunMs <= now) {
-          console.log(`[Farm Inteligente] Executando farm: ${farm.origem} → ${farm.alvo}`);
-          
-          // Criar configuração de ataque
-          const attackConfig = {
-            origem: farm.origem,
-            alvo: farm.alvo,
-            datetime: formatDateTime(new Date()),
-            ...farm.troops
-          };
-          
-          // Executar ataque
-          const success = await executeAttack(attackConfig);
-          
-          // Atualizar estatísticas
-          farm.stats = farm.stats || { totalRuns: 0, successRuns: 0 };
-          farm.stats.totalRuns++;
-          if (success) farm.stats.successRuns++;
-          
-          if (success) {
-            // ✅ TENTAR CAPTURAR TEMPO DE VIAGEM REAL
-            const villageId = getCurrentVillageId();
-            if (villageId) {
-              setTimeout(async () => {
-                try {
-                  // Construir URL aproximada do comando
-                  const commandUrl = `https://${window.location.host}/game.php?village=${villageId}&screen=info_command&type=own`;
-                  
-                  console.log(`[Farm] Tentando capturar tempo real: ${commandUrl}`);
-                  
-                  // Capturar tempo real de viagem
-                  const realTravelTime = await captureRealTravelTimeWithIframe(commandUrl);
-                  
-                  // Calcular horário de retorno (ida + volta)
-                  const returnTime = realTravelTime * 2;
-                  
-                  // Calcular próximo envio: agora + tempo_retorno + intervalo
-                  const intervaloMin = (farm.intervalo || 5) * 60 * 1000;
-                  const nextRun = new Date(now + (returnTime * 1000) + intervaloMin);
-                  farm.nextRun = formatDateTime(nextRun);
-                  
-                  console.log(`[Farm] Próximo envio baseado em tempo REAL: ${farm.nextRun}`);
-                  
-                } catch (error) {
-                  console.warn('[Farm] Não foi possível capturar tempo real, usando estimativa:', error.message);
-                  useEstimatedTime(farm, now);
-                }
-                
-                // Salvar alterações após tentativa de captura
-                const allFarms = getFarmList();
-                const idx = allFarms.findIndex(f => f.id === farm.id);
-                if (idx !== -1) {
-                  allFarms[idx] = farm;
-                  setFarmList(allFarms);
-                }
-                
-              }, 5000); // Aguardar 5 segundos para comando aparecer
-            } else {
-              useEstimatedTime(farm, now);
-            }
-          } else {
-            // Se falhou, tentar novamente em 2 minutos
-            const nextRun = new Date(now + 120000);
-            farm.nextRun = formatDateTime(nextRun);
-          }
-          
-          // Salvar estatísticas imediatamente
-          const allFarms = getFarmList();
-          const idx = allFarms.findIndex(f => f.id === farm.id);
-          if (idx !== -1) {
-            allFarms[idx] = farm;
-            setFarmList(allFarms);
-          }
-          
-          // Disparar evento de atualização
-          window.dispatchEvent(new CustomEvent('tws-farm-updated'));
-        }
-      } catch (error) {
-        console.error(`[Farm Inteligente] Erro no farm ${farm.id}:`, error);
-      }
-    }
-  }
-
   // ✅ Inicia verificação periódica
   function startFarmMonitor() {
-    // Verificar a cada 30 segundos
-    setInterval(processFarmInteligente, 30000);
-    console.log('[Farm Inteligente] Monitor iniciado - verificando a cada 30 segundos');
+    // Verificar agendamentos para farms a cada 10 segundos
+    setInterval(monitorAgendamentosParaFarm, 10000);
+    console.log('[Farm Inteligente] ✅ Monitor de agendamentos ativo!');
   }
 
-  // === Modal principal ===
+  // === Modal principal ATUALIZADO ===
   function showFarmModal() {
     const existing = document.getElementById('tws-farm-modal');
     if (existing) existing.remove();
@@ -569,13 +480,14 @@
         .btn-cancel { background: #9E9E9E; color: white; }
         .btn-save { background: #4CAF50; color: white; }
         .btn-new { background: #2196F3; color: white; }
+        .btn-convert { background: #9C27B0; color: white; }
       </style>
 
       <!-- Cabeçalho -->
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Automatize seus farms - o sistema gerencia os horários automaticamente
+          Converte agendamentos normais em ciclos automáticos infinitos
         </div>
       </div>
 
@@ -583,6 +495,7 @@
       <div class="tab-header">
         <button class="tab-btn active" onclick="TWS_FarmInteligente._switchTab(0)">📋 Farms Ativos</button>
         <button class="tab-btn" onclick="TWS_FarmInteligente._switchTab(1)">➕ Novo Farm</button>
+        <button class="tab-btn" onclick="TWS_FarmInteligente._convertAgendamento()">🔄 Converter Agendamento</button>
       </div>
 
       <!-- Conteúdo das abas -->
@@ -594,6 +507,7 @@
       <!-- Rodapé -->
       <div class="tab-footer">
         <button class="btn btn-cancel" onclick="document.getElementById('tws-farm-modal').remove()">❌ Fechar</button>
+        <button class="btn btn-convert" id="btn-convert-agendamento" onclick="TWS_FarmInteligente._convertAgendamento()" style="display: none;">🔄 Converter Agendamento</button>
         <button class="btn btn-new" id="btn-new-farm" onclick="TWS_FarmInteligente._switchTab(1)" style="display: none;">➕ Novo Farm</button>
         <button class="btn btn-save" id="btn-save-farm" onclick="TWS_FarmInteligente._saveFarm()" style="display: none;">💾 Salvar Farm</button>
       </div>
@@ -621,6 +535,7 @@
         document.querySelectorAll('.tab-btn')[tab].classList.add('active');
         
         // Atualizar botões
+        document.getElementById('btn-convert-agendamento').style.display = tab === 0 ? 'block' : 'none';
         document.getElementById('btn-new-farm').style.display = tab === 0 ? 'block' : 'none';
         document.getElementById('btn-save-farm').style.display = tab === 1 ? 'block' : 'none';
         
@@ -669,12 +584,51 @@
         }
       },
 
+      // ✅ NOVA FUNÇÃO: Converter Agendamento em Farm
+      _convertAgendamento() {
+        const lista = getList();
+        const pendentes = lista.filter(a => !a.done);
+        
+        if (pendentes.length === 0) {
+          alert('❌ Nenhum agendamento pendente para converter!\n\nCrie um agendamento normal primeiro.');
+          return;
+        }
+        
+        // Criar mensagem com lista de agendamentos
+        let mensagem = '📋 SELECIONE UM AGENDAMENTO PARA CONVERTER EM FARM:\n\n';
+        pendentes.forEach((agend, idx) => {
+          const listaIdx = lista.findIndex(a => a === agend);
+          const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
+          mensagem += `${idx + 1}. ${agend.origem} → ${agend.alvo}\n`;
+          mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n\n`;
+        });
+        
+        mensagem += 'Digite o número do agendamento:';
+        
+        const escolha = prompt(mensagem);
+        const idxEscolhido = parseInt(escolha) - 1;
+        
+        if (idxEscolhido >= 0 && idxEscolhido < pendentes.length) {
+          const agendamentoEscolhido = pendentes[idxEscolhido];
+          const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
+          
+          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):', '5');
+          const intervaloNum = parseInt(intervalo) || 5;
+          
+          if (convertToFarm(listaIdx, intervaloNum)) {
+            alert(`✅ Agendamento convertido em Farm Inteligente!\n\n${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n⏰ Ciclos a cada ${intervaloNum} minutos`);
+            this._switchTab(0); // Voltar para lista de farms
+          }
+        } else if (escolha !== null) {
+          alert('❌ Número inválido!');
+        }
+      },
+
       _saveFarm() {
         // Coletar dados
         const origem = document.getElementById('farm-origem').value.trim();
         const alvo = document.getElementById('farm-alvo').value.trim();
         const intervalo = parseInt(document.getElementById('farm-intervalo').value) || 5;
-        const iniciarImediatamente = document.getElementById('farm-iniciar-imediatamente').checked;
         
         // Validar
         if (!origem || !alvo) {
@@ -708,24 +662,38 @@
             farms[idx].intervalo = intervalo;
           }
         } else {
+          // Criar agendamento base para o farm
+          const agora = new Date();
+          const primeiroHorario = new Date(agora.getTime() + 30000); // 30 segundos
+          
+          const agendamentoBase = {
+            origem: origem,
+            alvo: alvo,
+            datetime: formatDateTime(primeiroHorario),
+            ...troops
+          };
+          
+          // Adicionar à lista principal
+          const lista = getList();
+          lista.push(agendamentoBase);
+          setList(lista);
+          
+          const agendamentoIndex = lista.length - 1;
+          
           // Novo farm
           const newFarm = {
             id: generateId(),
+            agendamentoBaseId: agendamentoIndex,
             origem,
             alvo,
             troops,
             intervalo,
-            paused: !iniciarImediatamente,
+            paused: false,
             active: true,
             stats: { totalRuns: 0, successRuns: 0 },
+            nextRun: agendamentoBase.datetime,
             created: new Date().toISOString()
           };
-
-          // Calcular primeiro horário
-          if (iniciarImediatamente) {
-            const nextRun = new Date(Date.now() + 10000); // 10 segundos
-            newFarm.nextRun = formatDateTime(nextRun);
-          }
 
           farms.push(newFarm);
         }
@@ -748,7 +716,7 @@
     // Iniciar monitor
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado e monitor ativo!');
+    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema de conversão ativo!');
   }
 
   // Aguardar carregamento
