@@ -24,17 +24,110 @@
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
-  // ✅ Calcula tempo de viagem (simulação - precisa adaptar para o jogo real)
+  // ✅ Calcula tempo de viagem (simulação - usado como fallback)
   function calculateTravelTime(origem, destino, troops) {
-    // Simulação básica - na prática isso viria do jogo
     const dist = Math.sqrt(
       Math.pow(origem.x - destino.x, 2) + 
       Math.pow(origem.y - destino.y, 2)
     );
     
-    // Baseado na distância e tropas (simplificado)
-    const baseTime = dist * 30; // 30 segundos por unidade de distância
-    return Math.max(60, Math.min(baseTime, 3600)); // Entre 1 minuto e 1 hora
+    const baseTime = dist * 30;
+    return Math.max(60, Math.min(baseTime, 3600));
+  }
+
+  // ✅ FUNÇÃO REAL: Captura tempo de viagem com IFRAME
+  function captureRealTravelTimeWithIframe(commandUrl) {
+    return new Promise((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = commandUrl;
+      
+      iframe.onload = function() {
+        try {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          
+          // Extrair duração do comando do iframe
+          let durationText = '';
+          const durationElements = iframeDoc.querySelectorAll('*');
+          
+          for (let el of durationElements) {
+            if (el.textContent.includes('Duração:')) {
+              const text = el.textContent;
+              const match = text.match(/Duração:\s*([\d:]+)/);
+              if (match) {
+                durationText = match[1];
+                break;
+              }
+            }
+          }
+          
+          document.body.removeChild(iframe);
+          
+          if (!durationText) {
+            reject(new Error('Não foi possível encontrar o tempo de duração'));
+            return;
+          }
+          
+          // Converter para segundos
+          const seconds = convertDurationToSeconds(durationText);
+          console.log(`[Farm] Tempo de viagem detectado (iframe): ${durationText} (${seconds} segundos)`);
+          resolve(seconds);
+          
+        } catch (error) {
+          document.body.removeChild(iframe);
+          reject(new Error('Erro ao acessar iframe: ' + error.message));
+        }
+      };
+      
+      iframe.onerror = function() {
+        document.body.removeChild(iframe);
+        reject(new Error('Erro ao carregar iframe'));
+      };
+      
+      document.body.appendChild(iframe);
+    });
+  }
+
+  // ✅ Converter duração para segundos
+  function convertDurationToSeconds(durationText) {
+    const parts = durationText.split(':').map(Number);
+    let seconds = 0;
+    
+    if (parts.length === 3) { // HH:MM:SS
+      seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) { // MM:SS
+      seconds = parts[0] * 60 + parts[1];
+    } else { // SS
+      seconds = parts[0];
+    }
+    
+    return seconds;
+  }
+
+  // ✅ Obter ID da vila atual da URL
+  function getCurrentVillageId() {
+    const match = window.location.href.match(/village=(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  // ✅ Tentar obter ID do último comando (aproximação)
+  function getLastCommandId() {
+    // Esta é uma aproximação - na prática precisaria monitorar a praça de reunião
+    // Por enquanto, vamos usar um timestamp como ID aproximado
+    return Promise.resolve('cmd_' + Date.now());
+  }
+
+  // ✅ Usar tempo estimado se não conseguir capturar real
+  function useEstimatedTime(farm, now) {
+    const origemCoord = parseCoord(farm.origem);
+    const alvoCoord = parseCoord(farm.alvo);
+    const travelTime = calculateTravelTime(origemCoord, alvoCoord, farm.troops);
+    
+    const intervaloMin = (farm.intervalo || 5) * 60 * 1000;
+    const nextRun = new Date(now + (travelTime * 2 * 1000) + intervaloMin);
+    farm.nextRun = formatDateTime(nextRun);
+    
+    console.log(`[Farm] Usando tempo estimado: ${farm.nextRun}`);
   }
 
   // ✅ Gerar ID único
@@ -272,7 +365,7 @@
     `;
   }
 
-  // ✅ Processa farm inteligente
+  // ✅ Processa farm inteligente COM DETECÇÃO REAL
   async function processFarmInteligente() {
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
     const now = Date.now();
@@ -301,19 +394,54 @@
           farm.stats.totalRuns++;
           if (success) farm.stats.successRuns++;
           
-          // Calcular próximo horário (baseado no tempo de viagem estimado)
-          const origemCoord = parseCoord(farm.origem);
-          const alvoCoord = parseCoord(farm.alvo);
-          const travelTime = calculateTravelTime(origemCoord, alvoCoord, farm.troops);
+          if (success) {
+            // ✅ TENTAR CAPTURAR TEMPO DE VIAGEM REAL
+            const villageId = getCurrentVillageId();
+            if (villageId) {
+              setTimeout(async () => {
+                try {
+                  // Construir URL aproximada do comando
+                  const commandUrl = `https://${window.location.host}/game.php?village=${villageId}&screen=info_command&type=own`;
+                  
+                  console.log(`[Farm] Tentando capturar tempo real: ${commandUrl}`);
+                  
+                  // Capturar tempo real de viagem
+                  const realTravelTime = await captureRealTravelTimeWithIframe(commandUrl);
+                  
+                  // Calcular horário de retorno (ida + volta)
+                  const returnTime = realTravelTime * 2;
+                  
+                  // Calcular próximo envio: agora + tempo_retorno + intervalo
+                  const intervaloMin = (farm.intervalo || 5) * 60 * 1000;
+                  const nextRun = new Date(now + (returnTime * 1000) + intervaloMin);
+                  farm.nextRun = formatDateTime(nextRun);
+                  
+                  console.log(`[Farm] Próximo envio baseado em tempo REAL: ${farm.nextRun}`);
+                  
+                } catch (error) {
+                  console.warn('[Farm] Não foi possível capturar tempo real, usando estimativa:', error.message);
+                  useEstimatedTime(farm, now);
+                }
+                
+                // Salvar alterações após tentativa de captura
+                const allFarms = getFarmList();
+                const idx = allFarms.findIndex(f => f.id === farm.id);
+                if (idx !== -1) {
+                  allFarms[idx] = farm;
+                  setFarmList(allFarms);
+                }
+                
+              }, 5000); // Aguardar 5 segundos para comando aparecer
+            } else {
+              useEstimatedTime(farm, now);
+            }
+          } else {
+            // Se falhou, tentar novamente em 2 minutos
+            const nextRun = new Date(now + 120000);
+            farm.nextRun = formatDateTime(nextRun);
+          }
           
-          // Próximo envio = agora + tempo_viagem*2 + intervalo
-          const intervaloMin = (farm.intervalo || 5) * 60 * 1000; // converter para ms
-          const nextRun = new Date(now + (travelTime * 2 * 1000) + intervaloMin);
-          farm.nextRun = formatDateTime(nextRun);
-          
-          console.log(`[Farm Inteligente] Próximo envio agendado para: ${farm.nextRun}`);
-          
-          // Salvar alterações
+          // Salvar estatísticas imediatamente
           const allFarms = getFarmList();
           const idx = allFarms.findIndex(f => f.id === farm.id);
           if (idx !== -1) {
