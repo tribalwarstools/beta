@@ -184,10 +184,8 @@
     return true;
   }
 
-  // ✅ MONITORAR execução de agendamentos para Farms (COM CÁLCULO CORRETO)
-
-  // ✅ CORREÇÃO NA LÓGICA DE REAGENDAMENTO
-function monitorAgendamentosParaFarm() {
+  // ✅ MONITORAR execução de agendamentos para Farms (CÁLCULO CORRETO IDA+VOLTA)
+  function monitorAgendamentosParaFarm() {
     const lista = getList();
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
     
@@ -206,26 +204,33 @@ function monitorAgendamentosParaFarm() {
         let nextRunTime;
         
         try {
-          // ✅ CORREÇÃO: SÓ AGRENDAR APÓS O RETORNO COMPLETO
+          // ✅ CORREÇÃO: CALCULAR PRÓXIMO ATAQUE BASEADO NA CHEGADA + VOLTA
           const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
           const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
           
-          // ✅ AGORA: Próximo ataque = horário de RETORNO + intervalo
-          const tempoTotalCiclo = (travelTimeToTarget + returnTime) * 1000; // ida + volta em ms
+          // ✅ CORREÇÃO CRÍTICA: Usar horário de CHEGADA como base, não o horário atual
+          let baseTime;
+          
+          if (agendamentoBase.executedAt) {
+            // Se temos horário de execução real, usar ele + tempo de ida para chegar na chegada
+            baseTime = new Date(agendamentoBase.executedAt);
+          } else {
+            // Calcular chegada estimada baseada no tempo de ida
+            const tempoIdaMs = travelTimeToTarget * 1000;
+            baseTime = new Date(now.getTime() + tempoIdaMs);
+          }
+          
+          // ✅ PRÓXIMO ATAQUE = CHEGADA + VOLTA + INTERVALO
           const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
+          nextRunTime = new Date(baseTime.getTime() + (returnTime * 1000) + intervaloMs);
           
-          // Usar o horário de chegada REAL como base
-          const chegadaReal = agendamentoBase.executedAt ? 
-            new Date(agendamentoBase.executedAt) : 
-            new Date(now.getTime() - travelTimeToTarget * 1000);
-          
-          // Próximo ataque = chegada + tempo_volta + intervalo
-          nextRunTime = new Date(chegadaReal.getTime() + (returnTime * 1000) + intervaloMs);
-          
-          console.log(`[Farm] Cálculo corrigido:`);
-          console.log(`  - Chegada real: ${chegadaReal.toLocaleTimeString()}`);
-          console.log(`  - Retorno: ${Math.round(returnTime/60)}min → ${new Date(chegadaReal.getTime() + returnTime * 1000).toLocaleTimeString()}`);
+          console.log(`[Farm] Cálculo CORRIGIDO (IDA+VOLTA):`);
+          console.log(`  - Tempo ida: ${Math.round(travelTimeToTarget/60)}min`);
+          console.log(`  - Tempo volta: ${Math.round(returnTime/60)}min`);
+          console.log(`  - Chegada base: ${baseTime.toLocaleTimeString()}`);
+          console.log(`  - Retorno: ${new Date(baseTime.getTime() + returnTime * 1000).toLocaleTimeString()}`);
           console.log(`  - Próximo ataque: ${nextRunTime.toLocaleTimeString()}`);
+          console.log(`  - Tempo total ciclo: ${Math.round((travelTimeToTarget + returnTime)/60)}min`);
           
           farm.lastReturnTime = returnTime;
           
@@ -236,7 +241,10 @@ function monitorAgendamentosParaFarm() {
         }
         
         // ✅ GARANTIR que não agenda antes do retorno
-        const retornoEstimado = new Date(now.getTime() + (calculateReturnTime(farm.origem, farm.alvo, farm.troops) * 1000));
+        const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+        const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
+        const retornoEstimado = new Date(now.getTime() + (travelTimeToTarget * 1000) + (returnTime * 1000));
+        
         if (nextRunTime < retornoEstimado) {
           console.warn(`[Farm] Correção: próximo ataque estava antes do retorno, ajustando...`);
           nextRunTime = new Date(retornoEstimado.getTime() + (farm.intervalo || 5) * 60000);
@@ -271,7 +279,7 @@ function monitorAgendamentosParaFarm() {
         window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
       }
     });
-}
+  }
 
   // ✅ RENDERIZAR lista de farms ativos
   function renderFarmList() {
@@ -342,7 +350,9 @@ function monitorAgendamentosParaFarm() {
       const distancia = calcularDistancia(farm.origem, farm.alvo);
       const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
       const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
-      const tempoEstimado = distancia * velocidade;
+      const tempoIda = distancia * velocidade;
+      const tempoVolta = tempoIda; // mesmo tempo
+      const tempoTotalCiclo = tempoIda + tempoVolta;
       
       html += `
         <div style="
@@ -365,7 +375,10 @@ function monitorAgendamentosParaFarm() {
                 ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
               </div>
               <div style="color: #666; font-size: 10px; margin-top: 2px;">
-                📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo | ⏱️ ~${Math.round(tempoEstimado)}min
+                📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo 
+              </div>
+              <div style="color: #888; font-size: 10px; margin-top: 1px;">
+                ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
               </div>
             </div>
             <div style="
@@ -475,17 +488,17 @@ function monitorAgendamentosParaFarm() {
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com cálculo real de distância e velocidade
+          Sistema automático com cálculo CORRETO de ida + volta
         </div>
       </div>
 
       <!-- Conteúdo -->
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
-        <div style="background: #FFF3CD; border: 1px solid #FFEEBA; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #856404;">
-          <strong>🎯 SISTEMA DE CÁLCULO INTEGRADO</strong><br>
-          • Usa algoritmo real do Tribal Wars para tempos<br>
-          • Considera unidade mais lenta: snob(35) > catapult(30) > ram(30) > sword(22) > spear(18)<br>
-          • Calcula automaticamente retorno das tropas
+        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
+          <strong>✅ CÁLCULO CORRIGIDO - IDA + VOLTA</strong><br>
+          • Agora calcula: Chegada + Tempo de Volta + Intervalo<br>
+          • Garante que tropas retornem antes do próximo ataque<br>
+          • Evita sobreposição de ciclos
         </div>
 
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -559,11 +572,13 @@ function monitorAgendamentosParaFarm() {
           const distancia = calcularDistancia(agend.origem, agend.alvo);
           const unidadeMaisLenta = getUnidadeMaisLenta(agend);
           const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
-          const tempoEstimado = Math.round(distancia * velocidade);
+          const tempoIda = Math.round(distancia * velocidade);
+          const tempoVolta = tempoIda;
+          const tempoTotal = tempoIda + tempoVolta;
           
           mensagem += `[${idx + 1}] ${agend.origem} → ${agend.alvo}\n`;
           mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n`;
-          mensagem += `   📏 ${distancia.toFixed(1)} campos | ⏱️ ~${tempoEstimado}min (${unidadeMaisLenta})\n\n`;
+          mensagem += `   📏 ${distancia.toFixed(1)} campos | ⏱️ ${tempoIda}min (ida) + ${tempoVolta}min (volta) = ${tempoTotal}min total\n\n`;
         });
         
         mensagem += 'Digite o número do agendamento:';
@@ -583,14 +598,13 @@ function monitorAgendamentosParaFarm() {
           const intervaloNum = parseInt(intervalo) || 5;
           
           if (convertToFarm(listaIdx, intervaloNum)) {
-            // Calcular tempo estimado para feedback
             const distancia = calcularDistancia(agendamentoEscolhido.origem, agendamentoEscolhido.alvo);
             const tropas = {};
             TROOP_LIST.forEach(u => { tropas[u] = agendamentoEscolhido[u] || 0; });
             const tempoIda = calculateTravelTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
             const tempoVolta = calculateReturnTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
             
-            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n📏 Distância: ${distancia.toFixed(1)} campos\n⏱️ Tempos calculados: ${Math.round(tempoIda/60)}min (ida) / ${Math.round(tempoVolta/60)}min (volta)\n🔄 Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema calculará automaticamente o retorno das tropas!`);
+            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n📏 Distância: ${distancia.toFixed(1)} campos\n⏱️ Tempos calculados: ${Math.round(tempoIda/60)}min (ida) + ${Math.round(tempoVolta/60)}min (volta)\n🔄 Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema agora calculará CORRETAMENTE o retorno das tropas!`);
             document.getElementById('farm-list-container').innerHTML = renderFarmList();
           }
         } else {
@@ -609,7 +623,7 @@ function monitorAgendamentosParaFarm() {
     
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema de cálculo integrado!');
+    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema CORRIGIDO com cálculo IDA+VOLTA!');
   }
 
   if (document.readyState === 'loading') {
