@@ -20,15 +20,50 @@
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
-  // ✅ Calcula tempo de viagem (simulação)
+  // ✅ CALCULA TEMPO DE VIAGEM COM BASE NAS TROPAS REAIS
   function calculateTravelTime(origem, destino, troops) {
+    const coord1 = parseCoord(origem);
+    const coord2 = parseCoord(destino);
+    
     const dist = Math.sqrt(
-      Math.pow(origem.x - destino.x, 2) + 
-      Math.pow(origem.y - destino.y, 2)
+      Math.pow(coord1.x - coord2.x, 2) + 
+      Math.pow(coord1.y - coord2.y, 2)
     );
     
-    const baseTime = dist * 30;
-    return Math.max(60, Math.min(baseTime, 3600));
+    // Velocidades das unidades (minutos por campo)
+    const velocidades = {
+      spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
+      light: 10, marcher: 10, heavy: 11, ram: 30, 
+      catapult: 30, knight: 10, snob: 35
+    };
+    
+    // Encontrar unidade mais lenta presente
+    let unidadeMaisLenta = null;
+    let velocidadeMaisLenta = 0;
+    
+    Object.entries(troops).forEach(([unidade, quantidade]) => {
+      if (quantidade > 0 && velocidades[unidade]) {
+        if (velocidades[unidade] > velocidadeMaisLenta) {
+          velocidadeMaisLenta = velocidades[unidade];
+          unidadeMaisLenta = unidade;
+        }
+      }
+    });
+    
+    if (!unidadeMaisLenta) {
+      return 60; // tempo mínimo padrão
+    }
+    
+    // Tempo = distância × velocidade da unidade mais lenta
+    const tempoMinutos = dist * velocidadeMaisLenta;
+    
+    // Converter para segundos e garantir limites razoáveis
+    return Math.max(60, Math.min(tempoMinutos * 60, 7200)); // 1 min a 2 horas
+  }
+
+  // ✅ CALCULA TEMPO DE RETORNO DAS TROPAS
+  function calculateReturnTime(origem, destino, troops) {
+    return calculateTravelTime(destino, origem, troops); // Retorno usa mesma lógica mas direção inversa
   }
 
   // ✅ Gerar ID único
@@ -45,9 +80,8 @@
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-// ✅ CONVERTER agendamento normal em Farm Inteligente
-// ✅ FUNÇÃO CORRIGIDA: Converte agendamento normal em Farm Inteligente
-function convertToFarm(agendamentoIndex, intervalo = 5) {
+  // ✅ CONVERTER agendamento normal em Farm Inteligente
+  function convertToFarm(agendamentoIndex, intervalo = 5) {
     const lista = getList();
     
     if (agendamentoIndex < 0 || agendamentoIndex >= lista.length) {
@@ -102,9 +136,10 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
         intervalo: intervalo,
         paused: false,
         active: true,
-        stats: { totalRuns: 0, successRuns: 0 },
+        stats: { totalRuns: 0, successRuns: 0, lastRun: null },
         nextRun: agendamento.datetime,
-        created: new Date().toISOString()
+        created: new Date().toISOString(),
+        lastReturnTime: null
     };
     
     // Adicionar à lista de farms
@@ -113,9 +148,9 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
     
     console.log(`[Farm] Agendamento convertido: ${farm.origem} → ${farm.alvo}`);
     return true;
-}
+  }
 
-  // ✅ MONITORAR execução de agendamentos para Farms
+  // ✅ MONITORAR execução de agendamentos para Farms (MODIFICADO)
   function monitorAgendamentosParaFarm() {
     const lista = getList();
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
@@ -124,30 +159,48 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
       // Verificar se o agendamento base foi executado
       const agendamentoBase = lista[farm.agendamentoBaseId];
       
-      if (agendamentoBase && agendamentoBase.done && agendamentoBase.success) {
-        // ✅ Agendamento foi executado com sucesso!
-        console.log(`[Farm] Agendamento executado: ${farm.origem} → ${farm.alvo}`);
+      if (agendamentoBase && agendamentoBase.done) {
+        // ✅ Agendamento foi processado (sucesso ou falha)
+        console.log(`[Farm] Agendamento processado: ${farm.origem} → ${farm.alvo} | Sucesso: ${agendamentoBase.success}`);
         
         // Atualizar estatísticas do farm
         farm.stats.totalRuns++;
-        farm.stats.successRuns++;
+        if (agendamentoBase.success) {
+          farm.stats.successRuns++;
+        }
+        farm.stats.lastRun = new Date().toISOString();
         
-        // Calcular próximo horário
+        // ✅ CALCULAR PRÓXIMO ATAQUE CONSIDERANDO RETORNO DAS TROPAS
         const now = new Date();
-        const travelTime = calculateTravelTime(
-          parseCoord(farm.origem), 
-          parseCoord(farm.alvo), 
-          farm.troops
-        );
+        let nextRunTime;
         
-        // Próximo envio = agora + (tempo_viagem * 2) + intervalo
-        const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-        const nextRun = new Date(now.getTime() + (travelTime * 2 * 1000) + intervaloMs);
+        if (agendamentoBase.success) {
+          // ✅ SUCESSO: Calcular baseado no tempo de retorno + intervalo
+          const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+          const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
+          
+          // Tempo total do ciclo = ida + volta + intervalo
+          const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
+          const totalCycleTime = (travelTimeToTarget + returnTime) * 1000 + intervaloMs;
+          
+          // Próximo ataque = agora + tempo de retorno + intervalo
+          nextRunTime = new Date(now.getTime() + returnTime * 1000 + intervaloMs);
+          
+          console.log(`[Farm] Ciclo calculado - Ida: ${travelTimeToTarget}s, Volta: ${returnTime}s, Intervalo: ${farm.intervalo}min, Próximo: ${formatDateTime(nextRunTime)}`);
+          
+          farm.lastReturnTime = returnTime;
+        } else {
+          // ✅ FALHA: Reagendar mais rapidamente (apenas intervalo)
+          const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
+          nextRunTime = new Date(now.getTime() + intervaloMs);
+          
+          console.log(`[Farm] Falha detectada - Reagendando em ${farm.intervalo}min`);
+        }
         
         // Recriar o agendamento para próximo ciclo
         const novoAgendamento = {
           ...agendamentoBase,
-          datetime: formatDateTime(nextRun),
+          datetime: formatDateTime(nextRunTime),
           done: false,
           success: false,
           executedAt: null,
@@ -178,7 +231,7 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
     });
   }
 
-  // ✅ RENDERIZAR lista de farms ativos
+  // ✅ RENDERIZAR lista de farms ativos (MODIFICADO)
   function renderFarmList() {
     const farms = getFarmList().filter(f => f.active !== false);
     const listaAgendamentos = getList();
@@ -221,6 +274,21 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
           '⏳ Pendente') : 
         '❓ Agendamento não encontrado';
       
+      // Calcular tempo até próximo ataque
+      let tempoRestante = '';
+      if (nextRun && nextRun > now) {
+        const diffMs = nextRun - now;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const remainingMins = diffMins % 60;
+        
+        if (diffHours > 0) {
+          tempoRestante = `${diffHours}h ${remainingMins}m`;
+        } else {
+          tempoRestante = `${diffMins}m`;
+        }
+      }
+      
       html += `
         <div style="
           background: white;
@@ -239,6 +307,7 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
               </div>
               <div style="color: #888; font-size: 11px; margin-top: 2px;">
                 📋 ${baseStatus} | ⏰ Ciclo: ${farm.intervalo} min
+                ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
               </div>
             </div>
             <div style="
@@ -257,10 +326,12 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
             <div>
               <strong>Próximo envio:</strong><br>
               ${farm.nextRun || 'Calculando...'}
+              ${tempoRestante ? `<br><small>⏱️ ${tempoRestante}</small>` : ''}
             </div>
             <div>
               <strong>Estatísticas:</strong><br>
               ${stats.totalRuns} ciclos (${stats.successRuns} sucessos)
+              ${stats.lastRun ? `<br><small>Último: ${new Date(stats.lastRun).toLocaleTimeString()}</small>` : ''}
             </div>
           </div>
           
@@ -300,7 +371,7 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
     console.log('[Farm Inteligente] ✅ Monitor de agendamentos ativo!');
   }
 
-  // === MODAL PRINCIPAL SIMPLIFICADO ===
+  // === MODAL PRINCIPAL ===
   function showFarmModal() {
     const existing = document.getElementById('tws-farm-modal');
     if (existing) existing.remove();
@@ -347,12 +418,20 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Transforme agendamentos normais em ciclos automáticos infinitos
+          Sistema automático que recalcula retorno das tropas para novos ataques
         </div>
       </div>
 
       <!-- Conteúdo -->
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
+        <div style="background: #FFF3CD; border: 1px solid #FFEEBA; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #856404;">
+          <strong>🔄 NOVO: Cálculo Automático de Retorno</strong><br>
+          O sistema agora calcula automaticamente o tempo de retorno das tropas e agenda o próximo ataque considerando:
+          • Tempo de ida até o alvo<br>
+          • Tempo de volta das tropas<br>
+          • Intervalo configurado entre ataques
+        </div>
+
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
           <button class="btn-convert" onclick="TWS_FarmInteligente._convertAgendamento()" style="
             padding: 12px 20px;
@@ -443,7 +522,7 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
           const intervaloNum = parseInt(intervalo) || 5;
           
           if (convertToFarm(listaIdx, intervaloNum)) {
-            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM INTELIGENTE!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n⏰ Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema agora recriará automaticamente este ataque!`);
+            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM INTELIGENTE!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n⏰ Ciclos automáticos a cada ${intervaloNum} minutos\n🔄 Sistema calcula automaticamente o retorno das tropas\n\nO sistema agora recriará automaticamente este ataque considerando o tempo de retorno!`);
             document.getElementById('farm-list-container').innerHTML = renderFarmList();
           }
         } else {
@@ -464,7 +543,7 @@ function convertToFarm(agendamentoIndex, intervalo = 5) {
     // Iniciar monitor
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema de conversão ativo!');
+    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema de retorno automático ativo!');
   }
 
   // Aguardar carregamento
