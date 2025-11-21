@@ -551,6 +551,30 @@
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
+        // ✅ NOVO: Atualizar data no agendamento original ANTES de executar
+        const list = getList();
+        const idx = list.findIndex(a => 
+          a.origem === selectedAgenda.origem && 
+          a.alvo === selectedAgenda.alvo &&
+          a.datetime === selectedAgenda.datetime
+        );
+
+        if (idx !== -1) {
+          // Atualizar tropas (caso tenha sido editado)
+          TROOP_LIST.forEach(u => {
+            list[idx][u] = selectedAgenda[u];
+          });
+
+          // ✅ Substituir data apenas se foi customizada
+          const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value;
+          if (envioType === 'agendado') {
+            list[idx].datetime = currentDatetime;
+            console.log('[Test Modal] ✅ Data atualizada de:', selectedAgenda.datetime, 'para:', currentDatetime);
+          }
+
+          setList(list);
+        }
+
         // Preparar config final
         const finalCfg = { ...selectedAgenda };
         
