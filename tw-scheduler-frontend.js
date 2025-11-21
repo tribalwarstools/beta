@@ -533,11 +533,14 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 
     panel.innerHTML = `
       <div style="margin-bottom: 15px;">
-        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW (2.3)</h2>
+        <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW (2.4)</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
           <button onclick="TWS_Panel.testSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Testar Envio</button>
+
+          <button onclick="TWS_Panel.Farm()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Farm</button>
+          
           <button onclick="TWS_Panel.clearCompleted()" style="padding: 6px 12px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding: 6px 12px; background: #FF6F00; color: white; border: none; border-radius: 4px; cursor: pointer;">⏳ Limpar Pendentes</button>
           <button onclick="TWS_Panel.clearAll()" style="padding: 6px 12px; background: #D32F2F; color: white; border: none; border-radius: 4px; cursor: pointer;">🚫 Limpar Tudo</button>
@@ -629,8 +632,18 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     } else {
       console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
     }
+
+    if (!window.TWS_FarmInteligente) {
+      console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal de Farm pronto!');
+    }
+
+
+    
   }, 100);
 })();
+
 
 
 
