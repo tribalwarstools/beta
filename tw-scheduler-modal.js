@@ -35,8 +35,8 @@
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
     
-    // Validar limites (0-499)
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
+    // Validar limites (0-999)
+    if (x < 0 || x > 999 || y < 0 || y > 999) {
       console.warn(`[Modal] ❌ Coordenada fora do mapa: ${x}|${y}`);
       return null;
     }
