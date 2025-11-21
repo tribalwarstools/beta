@@ -417,6 +417,22 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     window.TWS_TestModal.show();
   }
 
+
+  // === Farm Inteligente ===
+  function FarmSend() {
+    if (!window.TWS_FarmInteligente) {
+      alert(
+        '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
+        '📋 Certifique-se de que você carregou:\n' +
+        '   <script src="tw-scheduler-farm-modal.js"></script>'
+      );
+      console.error('[TW Scheduler] window.TWS_FarmInteligente não encontrado.');
+      return;
+    }
+    window.TWS_FarmInteligente.show();
+  }
+  
+
   // === Exportar lista ===
   function exportList() {
     const list = getList();
@@ -539,7 +555,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
           <button onclick="TWS_Panel.testSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Testar Envio</button>
 
-          <button onclick="TWS_Panel.Farm()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Farm</button>
+          <button onclick="TWS_Panel.FarmSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Farm</button>          
           
           <button onclick="TWS_Panel.clearCompleted()" style="padding: 6px 12px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding: 6px 12px; background: #FF6F00; color: white; border: none; border-radius: 4px; cursor: pointer;">⏳ Limpar Pendentes</button>
@@ -643,6 +659,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     
   }, 100);
 })();
+
 
 
 
