@@ -29,57 +29,75 @@
   }
 
   // ✅ CALCULA TEMPO DE VIAGEM COM BASE NAS TROPAS REAIS (CORRIGIDA)
-  function calculateTravelTime(origem, destino, troops) {
+  // ✅ CALCULA TEMPO DE VIAGEM COM BASE NAS TROPAS REAIS (CORRIGIDA)
+function calculateTravelTime(origem, destino, troops) {
     try {
-      const coord1 = parseCoord(origem);
-      const coord2 = parseCoord(destino);
-      
-      if (!coord1 || !coord2) {
-        console.error('[Farm] Coordenadas inválidas:', { origem, destino });
-        return 60; // tempo mínimo padrão
-      }
-      
-      const dist = Math.sqrt(
-        Math.pow(coord1.x - coord2.x, 2) + 
-        Math.pow(coord1.y - coord2.y, 2)
-      );
-      
-      // Velocidades das unidades (minutos por campo)
-      const velocidades = {
-        spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
-        light: 10, marcher: 10, heavy: 11, ram: 30, 
-        catapult: 30, knight: 10, snob: 35
-      };
-      
-      // Encontrar unidade mais lenta presente
-      let unidadeMaisLenta = null;
-      let velocidadeMaisLenta = 0;
-      
-      Object.entries(troops).forEach(([unidade, quantidade]) => {
-        if (quantidade > 0 && velocidades[unidade]) {
-          if (velocidades[unidade] > velocidadeMaisLenta) {
-            velocidadeMaisLenta = velocidades[unidade];
-            unidadeMaisLenta = unidade;
-          }
+        const coord1 = parseCoord(origem);
+        const coord2 = parseCoord(destino);
+        
+        if (!coord1 || !coord2) {
+            console.error('[Farm] Coordenadas inválidas:', { origem, destino });
+            return 3600; // 1 hora como fallback
         }
-      });
-      
-      if (!unidadeMaisLenta) {
-        console.warn('[Farm] Nenhuma unidade encontrada, usando padrão');
-        return 60; // tempo mínimo padrão
-      }
-      
-      // Tempo = distância × velocidade da unidade mais lenta (em minutos)
-      const tempoMinutos = dist * velocidadeMaisLenta;
-      
-      // Converter para segundos e garantir limites razoáveis
-      const tempoSegundos = tempoMinutos * 60;
-      return Math.max(60, Math.min(tempoSegundos, 7200)); // 1 min a 2 horas
+        
+        // Calcular distância euclidiana
+        const deltaX = Math.abs(coord1.x - coord2.x);
+        const deltaY = Math.abs(coord1.y - coord2.y);
+        const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        console.log(`[Farm] Distância calculada: ${dist} campos entre ${origem} e ${destino}`);
+        
+        // Velocidades das unidades (minutos por campo) - VALORES REAIS DO TW
+        const velocidades = {
+            spear: 18,      // Lanceiro
+            sword: 22,      // Espadachim  
+            axe: 18,        // Machado
+            archer: 18,     // Arqueiro
+            spy: 9,         // Espião
+            light: 10,      // Cavalaria Leve
+            marcher: 10,    // Arqueiro a Cavalo
+            heavy: 11,      // Cavalaria Pesada
+            ram: 30,        // Ariete
+            catapult: 30,   // Catapulta
+            knight: 10,     // Paladino
+            snob: 35        // Nobre
+        };
+        
+        // Encontrar unidade mais lenta presente
+        let unidadeMaisLenta = null;
+        let velocidadeMaisLenta = 0;
+        
+        Object.entries(troops).forEach(([unidade, quantidade]) => {
+            if (quantidade > 0 && velocidades[unidade]) {
+                if (velocidades[unidade] > velocidadeMaisLenta) {
+                    velocidadeMaisLenta = velocidades[unidade];
+                    unidadeMaisLenta = unidade;
+                }
+            }
+        });
+        
+        if (!unidadeMaisLenta) {
+            console.warn('[Farm] Nenhuma unidade encontrada, usando padrão');
+            return 3600; // 1 hora como fallback
+        }
+        
+        // ✅ CÁLCULO CORRETO: Tempo = distância × velocidade (em segundos)
+        // velocidadeMaisLenta está em minutos/campo, converter para segundos/campo
+        const velocidadeSegundosPorCampo = velocidadeMaisLenta * 60;
+        
+        // Tempo total em segundos
+        const tempoSegundos = dist * velocidadeSegundosPorCampo;
+        
+        console.log(`[Farm] Cálculo: ${dist} campos × ${velocidadeMaisLenta} min/campo (${unidadeMaisLenta}) = ${Math.round(tempoSegundos/60)} minutos`);
+        
+        // Garantir limites razoáveis (5 minutos a 4 horas)
+        return Math.max(300, Math.min(tempoSegundos, 14400));
+        
     } catch (error) {
-      console.error('[Farm] Erro no cálculo de tempo:', error);
-      return 300; // 5 minutos como fallback
+        console.error('[Farm] Erro no cálculo de tempo:', error);
+        return 3600; // 1 hora como fallback
     }
-  }
+}
 
   // ✅ CALCULA TEMPO DE RETORNO DAS TROPAS
   function calculateReturnTime(origem, destino, troops) {
