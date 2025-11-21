@@ -20,7 +20,200 @@
   } = window.TWS_Backend;
 
   let panelOpen = false;
-  let updateInterval = null; // ✅ Controlar o interval
+  let updateInterval = null;
+
+  // ✅ NOVO: Calcular estatísticas em tempo real
+  function calculateStats() {
+    const list = getList();
+    const now = Date.now();
+
+    const stats = {
+      total: list.length,
+      concluidos: list.filter(a => a.done).length,
+      pendentes: list.filter(a => !a.done).length,
+      sucesso: list.filter(a => a.done && a.success).length,
+      erros: list.filter(a => a.done && !a.success).length,
+      proximos: []
+    };
+
+    // Encontrar próximos 3 a executar
+    const proximosExec = list
+      .filter(a => !a.done && !a.locked)
+      .map(a => {
+        const t = parseDateTimeToMs(a.datetime);
+        return { ...a, timeToExec: t - now };
+      })
+      .filter(a => a.timeToExec > 0)
+      .sort((a, b) => a.timeToExec - b.timeToExec)
+      .slice(0, 3);
+
+    stats.proximos = proximosExec;
+
+    return stats;
+  }
+
+  // ✅ NOVO: Renderizar Dashboard
+  function renderDashboard() {
+    const dashDiv = document.getElementById('tws-dashboard');
+    if (!dashDiv) return;
+
+    const stats = calculateStats();
+
+    // Card de resumo estatístico
+    let html = `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 15px;">
+        <!-- Total -->
+        <div style="
+          background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+          color: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        ">
+          <div style="font-size: 11px; opacity: 0.9;">TOTAL</div>
+          <div style="font-size: 28px; font-weight: bold;">${stats.total}</div>
+          <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">agendamentos</div>
+        </div>
+
+        <!-- Pendentes -->
+        <div style="
+          background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+          color: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        ">
+          <div style="font-size: 11px; opacity: 0.9;">⏳ PENDENTES</div>
+          <div style="font-size: 28px; font-weight: bold;">${stats.pendentes}</div>
+          <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">aguardando</div>
+        </div>
+
+        <!-- Sucesso -->
+        <div style="
+          background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+          color: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        ">
+          <div style="font-size: 11px; opacity: 0.9;">✅ SUCESSO</div>
+          <div style="font-size: 28px; font-weight: bold;">${stats.sucesso}</div>
+          <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">concluídos</div>
+        </div>
+
+        <!-- Erros -->
+        <div style="
+          background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+          color: white;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        ">
+          <div style="font-size: 11px; opacity: 0.9;">❌ ERROS</div>
+          <div style="font-size: 28px; font-weight: bold;">${stats.erros}</div>
+          <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">falhados</div>
+        </div>
+      </div>
+    `;
+
+    // Próximos agendamentos
+    if (stats.proximos.length > 0) {
+      html += `
+        <div style="
+          background: white;
+          border: 2px solid #8B4513;
+          border-radius: 8px;
+          padding: 12px;
+          margin-bottom: 15px;
+        ">
+          <div style="
+            font-weight: bold;
+            color: #8B4513;
+            margin-bottom: 10px;
+            font-size: 14px;
+          ">🚀 PRÓXIMOS A EXECUTAR</div>
+          
+          <div style="display: grid; gap: 8px;">
+      `;
+
+      stats.proximos.forEach((agend, idx) => {
+        const seconds = Math.ceil(agend.timeToExec / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const timeStr = minutes > 0 
+          ? `${minutes}:${secs.toString().padStart(2, '0')}` 
+          : `${secs}s`;
+
+        html += `
+          <div style="
+            background: #FFF9C4;
+            border-left: 4px solid #FFC107;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          ">
+            <span>
+              <strong>#${idx + 1}</strong>
+              ${agend.origem} → ${agend.alvo}
+            </span>
+            <span style="
+              background: #FF9800;
+              color: white;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-weight: bold;
+            ">
+              ${timeStr}
+            </span>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+      `;
+    } else if (stats.total === 0) {
+      html += `
+        <div style="
+          background: #E3F2FD;
+          border: 2px dashed #2196F3;
+          border-radius: 8px;
+          padding: 20px;
+          text-align: center;
+          color: #1976D2;
+          font-size: 14px;
+        ">
+          📭 Nenhum agendamento cadastrado<br>
+          <small>Use os botões acima para adicionar</small>
+        </div>
+      `;
+    } else if (stats.pendentes === 0) {
+      html += `
+        <div style="
+          background: #E8F5E9;
+          border: 2px dashed #4CAF50;
+          border-radius: 8px;
+          padding: 20px;
+          text-align: center;
+          color: #2E7D32;
+          font-size: 14px;
+        ">
+          ✅ Todos os agendamentos foram processados!<br>
+          <small>Nada programado para executar</small>
+        </div>
+      `;
+    }
+
+    dashDiv.innerHTML = html;
+  }
 
   // === Renderiza tabela de agendamentos ===
   function renderTable() {
@@ -31,7 +224,7 @@
     tbody.innerHTML = '';
 
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Nenhum agendamento</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
       return;
     }
 
@@ -90,6 +283,9 @@
       `;
       tbody.appendChild(tr);
     });
+
+    // Renderizar dashboard também
+    renderDashboard();
   }
 
   // === View detalhes de um agendamento executado ===
@@ -171,7 +367,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === MODAL: Adiciona agendamento manual (chama o módulo externo) ===
+  // === MODAL: Adiciona agendamento manual ===
   function addManual() {
     if (!window.TWS_Modal) {
       alert(
@@ -198,47 +394,28 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     if (!window.TWS_BBCodeModal) {
       alert(
         '❌ ERRO: Módulo do BBCode Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
-        '   <script src="tw-scheduler-backend.js"></script>\n' +
-        '   <script src="tw-scheduler-frontend.js"></script>\n' +
-        '   <script src="tw-scheduler-modal.js"></script>\n' +
-        '   <script src="tw-scheduler-bbcode-modal.js"></script> ⚠️ FALTANDO\n\n' +
-        '💡 Carregue o modal de BBCode e recarregue a página.'
+        '📋 Certifique-se de que você carregou:\n' +
+        '   <script src="tw-scheduler-bbcode-modal.js"></script>'
       );
-      console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado. Verifique se tw-scheduler-bbcode-modal.js foi carregado.');
+      console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado.');
       return;
     }
     window.TWS_BBCodeModal.show();
   }
 
-  // === Carregar aldeias ===
-  async function loadVillages() {
-    const statusDiv = document.getElementById('tws-status');
-    if (statusDiv) statusDiv.innerHTML = '⏳ Carregando aldeias...';
-
-    await loadVillageTxt();
-    const { myVillages } = _internal;
-
-    if (statusDiv) {
-      statusDiv.innerHTML = `✅ ${myVillages.length} aldeia(s) carregada(s)`;
+  // === Testar envio imediato ===
+  function testSend() {
+    if (!window.TWS_TestModal) {
+      alert(
+        '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
+        '📋 Certifique-se de que você carregou:\n' +
+        '   <script src="tw-scheduler-test-modal.js"></script>'
+      );
+      console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
+      return;
     }
-    alert(`Carregadas ${myVillages.length} aldeias próprias.`);
+    window.TWS_TestModal.show();
   }
-
-// === Testar envio imediato ===
-function testSend() {
-  if (!window.TWS_TestModal) {
-    alert(
-      '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
-      '📋 Certifique-se de que você carregou:\n' +
-      '   <script src="tw-scheduler-test-modal.js"></script>\n\n' +
-      '💡 Recarregue a página após adicionar o arquivo.'
-    );
-    console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
-    return;
-  }
-  window.TWS_TestModal.show();
-}
 
   // === Exportar lista ===
   function exportList() {
@@ -367,11 +544,12 @@ function testSend() {
           <button onclick="TWS_Panel.exportList()" style="padding: 6px 12px; background: #607D8B; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 Exportar</button>
           <button onclick="TWS_Panel.importList()" style="padding: 6px 12px; background: #795548; color: white; border: none; border-radius: 4px; cursor: pointer;">📂 Importar</button>
         </div>
-        <div id="tws-status" style="padding: 8px; background: #E8D4A8; border: 1px solid #8B4513; border-radius: 4px; font-size: 12px; margin-bottom: 10px;">
-          Pronto. Use os botões acima.
-        </div>
       </div>
 
+      <!-- ✅ NOVO: Dashboard -->
+      <div id="tws-dashboard" style="margin-bottom: 20px;"></div>
+
+      <!-- Tabela de detalhes -->
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; background: white; font-size: 12px;">
           <thead>
@@ -401,15 +579,13 @@ function testSend() {
     startScheduler();
     renderTable();
 
-    // ✅ CORREÇÃO: Limpar interval anterior antes de criar novo
-    if (updateInterval) {
-      clearInterval(updateInterval);
-    }
+    // ✅ Limpar interval anterior
+    if (updateInterval) clearInterval(updateInterval);
     
-    // Atualizar tabela a cada segundo
+    // Atualizar a cada segundo
     updateInterval = setInterval(renderTable, 1000);
 
-    // ✅ CORREÇÃO: Remover listeners antigos antes de adicionar novo
+    // ✅ Remover listeners antigos
     window.removeEventListener('tws-schedule-updated', renderTable);
     window.addEventListener('tws-schedule-updated', renderTable);
   }
@@ -433,72 +609,25 @@ function testSend() {
 
   // === Inicializar ===
   createUI();
-  console.log('[TW Scheduler Frontend] Carregado com sucesso! (versão modular)');
+  console.log('[TW Scheduler Frontend] ✅ Carregado com Dashboard! (v2.0)');
   
-// Verificar se os modais estão carregados
-setTimeout(() => {
-  if (!window.TWS_Modal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
-  }
-  
-  if (!window.TWS_BBCodeModal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
-  }
-  
-  if (!window.TWS_TestModal) {
-    console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
-  } else {
-    console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
-  }
-}, 100);
+  setTimeout(() => {
+    if (!window.TWS_Modal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
+    }
+    
+    if (!window.TWS_BBCodeModal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
+    }
+    
+    if (!window.TWS_TestModal) {
+      console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
+    } else {
+      console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
+    }
+  }, 100);
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
