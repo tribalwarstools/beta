@@ -10,8 +10,165 @@
     getList,
     setList,
     importarDeBBCode,
-    parseDateTimeToMs
+    parseDateTimeToMs,
+    generateUniqueId
   } = window.TWS_Backend;
+
+  // ✅ VALIDADOR MELHORADO DE COORDENADAS
+  function parseCoordValidate(s) {
+    if (!s) return null;
+    
+    const t = s.trim();
+    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    
+    if (!match) return null;
+    
+    const x = parseInt(match[1], 10);
+    const y = parseInt(match[2], 10);
+    
+    if (x < 0 || x > 499 || y < 0 || y > 499) {
+      return null;
+    }
+    
+    return `${x}|${y}`;
+  }
+
+  // ✅ EXTRATOR ROBUSTO DE COORDENADAS
+  function extractCoordinatesFromLine(text) {
+    if (!text) return [];
+    
+    const coordPattern = /\b(\d{1,4})\|(\d{1,4})\b/g;
+    const coords = [];
+    let match;
+    
+    while ((match = coordPattern.exec(text)) !== null) {
+      const x = parseInt(match[1], 10);
+      const y = parseInt(match[2], 10);
+      
+      if (x >= 0 && x <= 499 && y >= 0 && y <= 499) {
+        coords.push(`${x}|${y}`);
+      }
+    }
+    
+    return coords;
+  }
+
+  // ✅ VALIDADOR DE DATA/HORA
+  function validateDateTimeFormat(dateString) {
+    const pattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/;
+    const match = dateString.match(pattern);
+    
+    if (!match) return false;
+    
+    const [, day, month, year, hour, minute, second] = match.map(x => parseInt(x, 10));
+    
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    if (hour < 0 || hour > 23) return false;
+    if (minute < 0 || minute > 59) return false;
+    if (second < 0 || second > 59) return false;
+    
+    try {
+      const date = new Date(year, month - 1, day, hour, minute, second);
+      return date.getFullYear() === year && 
+             date.getMonth() === month - 1 && 
+             date.getDate() === day;
+    } catch {
+      return false;
+    }
+  }
+
+  // ✅ PARSER BBCODE MELHORADO
+  function parseBBCodeRobust(bbcode) {
+    if (!bbcode || typeof bbcode !== 'string') {
+      return [];
+    }
+    
+    const agendamentos = [];
+    const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
+    
+    for (const linha of linhas) {
+      try {
+        // 1️⃣ Extrair coordenadas
+        const coords = extractCoordinatesFromLine(linha);
+        
+        if (coords.length < 2) {
+          console.warn(`[BBCode] ⚠️ Linha pulada (coordenadas insuficientes): ${linha.substring(0, 50)}`);
+          continue;
+        }
+        
+        const origem = coords[0];
+        const destino = coords[1];
+        
+        // 2️⃣ Extrair data/hora
+        const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
+        const dateMatch = linha.match(datePattern);
+        
+        if (!dateMatch) {
+          console.warn(`[BBCode] ⚠️ Linha pulada (data/hora inválida): ${linha.substring(0, 50)}`);
+          continue;
+        }
+        
+        const dataHora = `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')}/${dateMatch[3]} ${dateMatch[4].padStart(2, '0')}:${dateMatch[5].padStart(2, '0')}:${dateMatch[6].padStart(2, '0')}`;
+        
+        if (!validateDateTimeFormat(dataHora)) {
+          console.warn(`[BBCode] ⚠️ Data/hora fora dos limites: ${dataHora}`);
+          continue;
+        }
+        
+        // 3️⃣ Extrair URL e parâmetros
+        const urlMatch = linha.match(/\[url=(.*?)\]/i);
+        const params = {};
+        
+        if (urlMatch) {
+          const url = urlMatch[1];
+          const queryString = url.split('?')[1];
+          
+          if (queryString) {
+            queryString.split('&').forEach(param => {
+              const [key, value] = param.split('=');
+              if (key && value) {
+                try {
+                  params[decodeURIComponent(key)] = decodeURIComponent(value);
+                } catch (e) {
+                  // Ignorar erro de decodificação
+                }
+              }
+            });
+          }
+        }
+        
+        // 4️⃣ Construir configuração
+        const cfg = {
+          _id: generateUniqueId(),
+          origem,
+          origemId: params.village || null,
+          alvo: destino,
+          datetime: dataHora,
+          done: false,
+          locked: false
+        };
+        
+        // 5️⃣ Adicionar tropas
+        const troopTypes = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+        
+        troopTypes.forEach(unit => {
+          const key = `att_${unit}`;
+          const value = params[key] ? parseInt(params[key], 10) : 0;
+          cfg[unit] = isNaN(value) ? 0 : value;
+        });
+        
+        agendamentos.push(cfg);
+        console.log(`[BBCode] ✅ Parseado: ${origem} → ${destino} em ${dataHora}`);
+        
+      } catch (error) {
+        console.error(`[BBCode] ❌ Erro ao processar: ${error.message}`);
+        continue;
+      }
+    }
+    
+    return agendamentos;
+  }
 
   // === Preview dos agendamentos importados ===
   function renderPreview(agendamentos) {
@@ -52,12 +209,21 @@
         statusColor = '#FFF9C4';
       }
 
+      // Validar coordenadas
+      const origemValida = parseCoordValidate(cfg.origem) !== null;
+      const destValida = parseCoordValidate(cfg.alvo) !== null;
+      
+      if (!origemValida || !destValida) {
+        status = '❌ Coord Inválida';
+        statusColor = '#FFEBEE';
+      }
+
       html += `
         <tr style="background: ${statusColor};">
           <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '?'}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '?'}</td>
-          <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '?'}</td>
+          <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '❌'}</td>
+          <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '❌'}</td>
+          <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '❌'}</td>
           <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
         </tr>
       `;
@@ -72,17 +238,16 @@
     const list = getList();
     
     if (replaceAll) {
-      // Substituir todos os agendamentos
       setList(agendamentos);
       console.log('[BBCode Modal] ✅ Lista substituída completamente');
     } else {
-      // ✅ PROTEÇÃO: Verificar duplicatas antes de adicionar
+      // ✅ PROTEÇÃO: Verificar duplicatas
       const existingKeys = new Set(
-        list.map(a => `${a.origemId}_${a.alvo}_${a.datetime}`)
+        list.map(a => `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`)
       );
       
       const novos = agendamentos.filter(a => {
-        const key = `${a.origemId}_${a.alvo}_${a.datetime}`;
+        const key = `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
         return !existingKeys.has(key);
       });
       
@@ -99,17 +264,14 @@
       return { novos: novos.length, duplicados };
     }
 
-    // Disparar evento de atualização
     window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
   }
 
   // === Cria e exibe o modal ===
   function showModal() {
-    // Remove modal existente se houver
     const existing = document.getElementById('tws-bbcode-modal');
     if (existing) existing.remove();
 
-    // Criar overlay
     const overlay = document.createElement('div');
     overlay.id = 'tws-bbcode-modal';
     overlay.style.cssText = `
@@ -126,7 +288,6 @@
       animation: fadeIn 0.2s ease;
     `;
 
-    // Criar modal
     const modal = document.createElement('div');
     modal.style.cssText = `
       background: #F4E4C1;
@@ -254,12 +415,9 @@
         <strong>📝 Como usar:</strong><br>
         1️⃣ Cole o BBCode no campo abaixo<br>
         2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
-        3️⃣ Escolha <strong>"Adicionar"</strong> (mantém agendamentos existentes) ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Formatos aceitos:</strong><br>
-        <div class="bbcode-format-examples">
-[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=...]<br>
-[*]544|436 → 529|431 em 16/11/2024 14:30:00 [url=...]
-        </div>
+        3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
+        <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
+        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
       </div>
 
       <textarea 
@@ -290,10 +448,8 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Estado
     let parsedAgendamentos = [];
 
-    // Event listeners
     const inputTextarea = document.getElementById('bbcode-input');
     const previewDiv = document.getElementById('bbcode-preview');
     const previewContent = document.getElementById('bbcode-preview-content');
@@ -304,11 +460,9 @@
     const btnReplace = document.getElementById('bbcode-btn-replace');
     const btnCancel = document.getElementById('bbcode-btn-cancel');
 
-    // Cancelar
     btnCancel.onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
-    // Analisar BBCode
     btnParse.onclick = () => {
       const bbcode = inputTextarea.value.trim();
       
@@ -318,14 +472,13 @@
       }
 
       try {
-        parsedAgendamentos = importarDeBBCode(bbcode);
+        parsedAgendamentos = parseBBCodeRobust(bbcode);
         
         if (parsedAgendamentos.length === 0) {
-          alert('⚠️ Nenhum agendamento válido encontrado no BBCode.\n\nVerifique o formato:\n[*]X|Y → XX|YY em DD/MM/YYYY HH:MM:SS [url=...]');
+          alert('⚠️ Nenhum agendamento válido encontrado.\n\nVerifique o formato:\n[*]X|Y → XX|YY em DD/MM/YYYY HH:MM:SS [url=...]');
           return;
         }
 
-        // Calcular estatísticas
         const now = Date.now();
         const validDates = parsedAgendamentos.filter(a => {
           const t = parseDateTimeToMs(a.datetime);
@@ -340,7 +493,6 @@
           return isNaN(t);
         }).length;
 
-        // Mostrar estatísticas
         statsDiv.innerHTML = `
           <div class="bbcode-stat-item">
             <span>📦 Total:</span>
@@ -364,18 +516,16 @@
           ` : ''}
         `;
 
-        // Renderizar preview
         previewContent.innerHTML = renderPreview(parsedAgendamentos);
         previewDiv.style.display = 'block';
 
         console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos');
       } catch (error) {
-        console.error('[BBCode Modal] Erro ao analisar:', error);
+        console.error('[BBCode Modal] Erro:', error);
         alert('❌ Erro ao analisar BBCode:\n' + error.message);
       }
     };
 
-    // Adicionar à lista
     btnImport.onclick = () => {
       if (parsedAgendamentos.length === 0) {
         alert('❌ Analise o BBCode primeiro!');
@@ -384,22 +534,21 @@
 
       const existingList = getList();
       const msg = existingList.length > 0 
-        ? `Adicionar ${parsedAgendamentos.length} agendamentos à lista existente?\n\nTotal após importação: ${existingList.length + parsedAgendamentos.length}`
+        ? `Adicionar ${parsedAgendamentos.length} agendamentos?\n\nTotal após: ${existingList.length + parsedAgendamentos.length}`
         : `Importar ${parsedAgendamentos.length} agendamentos?`;
 
       if (confirm(msg)) {
         const result = handleImport(parsedAgendamentos, false);
         
         if (result.duplicados > 0) {
-          alert(`✅ ${result.novos} agendamento(s) importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
+          alert(`✅ ${result.novos} importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
         } else {
-          alert(`✅ ${result.novos} agendamento(s) importado(s) com sucesso!`);
+          alert(`✅ ${result.novos} agendamento(s) importado(s)!`);
         }
         overlay.remove();
       }
     };
 
-    // Substituir tudo
     btnReplace.onclick = () => {
       if (parsedAgendamentos.length === 0) {
         alert('❌ Analise o BBCode primeiro!');
@@ -408,24 +557,22 @@
 
       const existingList = getList();
       const msg = existingList.length > 0
-        ? `⚠️ ATENÇÃO!\n\nIsso vai REMOVER os ${existingList.length} agendamento(s) existente(s) e substituir por ${parsedAgendamentos.length} novo(s).\n\nContinuar?`
+        ? `⚠️ Remover ${existingList.length} e substituir por ${parsedAgendamentos.length}?\n\nContinuar?`
         : `Importar ${parsedAgendamentos.length} agendamentos?`;
 
       if (confirm(msg)) {
         handleImport(parsedAgendamentos, true);
-        alert(`✅ Lista substituída! ${parsedAgendamentos.length} agendamento(s) importado(s).`);
+        alert(`✅ ${parsedAgendamentos.length} agendamento(s) importado(s)!`);
         overlay.remove();
       }
     };
 
-    // Auto-focus no textarea
     setTimeout(() => inputTextarea.focus(), 100);
   }
 
-  // === Expor API global ===
   window.TWS_BBCodeModal = {
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] Módulo carregado com sucesso! (v2.2)');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas!');
 })();
