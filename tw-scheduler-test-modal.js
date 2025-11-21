@@ -207,25 +207,28 @@
   }
 
   // ✅ Renderiza confirmação final (TAB 3)
-  function renderConfirmTab(cfg, datetime) {
-    const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
+  function renderConfirmTab(cfg, datetime, envioType) {
+    const isImediato = envioType === 'imediato';
+    const isAgendado = envioType === 'agendado';
     
     return `
       <div style="display: grid; gap: 15px;">
         <!-- Aviso destacado -->
         <div style="
-          background: #FFE5E5;
-          border: 3px solid #F44336;
+          background: ${isImediato ? '#FFE5E5' : '#E8F5E9'};
+          border: 3px solid ${isImediato ? '#F44336' : '#4CAF50'};
           border-radius: 8px;
           padding: 15px;
           text-align: center;
         ">
-          <div style="font-size: 28px; margin-bottom: 8px;">⚠️</div>
-          <div style="font-weight: bold; color: #D32F2F; font-size: 16px;">ATENÇÃO!</div>
-          <div style="color: #C62828; font-size: 14px; margin-top: 8px;">
-            ${envioType === 'imediato' 
+          <div style="font-size: 28px; margin-bottom: 8px;">${isImediato ? '⚠️' : '⏰'}</div>
+          <div style="font-weight: bold; color: ${isImediato ? '#D32F2F' : '#2E7D32'}; font-size: 16px;">
+            ${isImediato ? 'ATENÇÃO - ENVIO IMEDIATO!' : 'AGENDAMENTO CONFIRMADO'}
+          </div>
+          <div style="color: ${isImediato ? '#C62828' : '#1B5E20'}; font-size: 14px; margin-top: 8px;">
+            ${isImediato 
               ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
-              : `O ataque será enviado em: <strong>${datetime}</strong>`}
+              : `O ataque ficará agendado para: <strong>${datetime}</strong>`}
           </div>
         </div>
 
@@ -258,7 +261,9 @@
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
             <input type="checkbox" id="confirm-checkbox" style="width: 20px; height: 20px; cursor: pointer;">
             <span style="font-weight: bold; color: #E65100;">
-              Tenho certeza que quero enviar este ataque
+              ${isImediato 
+                ? 'Tenho certeza que quero enviar este ataque AGORA' 
+                : 'Tenho certeza que quero agendar este ataque para a data/hora especificada'}
             </span>
           </label>
         </div>
@@ -267,41 +272,53 @@
   }
 
   // ✅ Executa o ataque
-  async function executeTest(cfg, datetime, statusDiv, overlay) {
+  async function executeTest(cfg, datetime, statusDiv, overlay, isImediato) {
     try {
-      statusDiv.innerHTML = '🔥 <strong>Executando teste...</strong>';
-      statusDiv.style.background = '#FFF9C4';
-      statusDiv.style.borderColor = '#FFC107';
+      if (isImediato) {
+        statusDiv.innerHTML = '🔥 <strong>Executando envio imediato...</strong>';
+        statusDiv.style.background = '#FFF9C4';
+        statusDiv.style.borderColor = '#FFC107';
 
-      const success = await executeAttack(cfg);
-      
-      if (success) {
-        statusDiv.innerHTML = '✅ <strong>Ataque enviado com sucesso!</strong><br><small>Verifique a praça de reunião</small>';
+        const success = await executeAttack(cfg);
+        
+        if (success) {
+          statusDiv.innerHTML = '✅ <strong>Ataque enviado com sucesso!</strong><br><small>Verifique a praça de reunião</small>';
+          statusDiv.style.background = '#E8F5E9';
+          statusDiv.style.borderColor = '#4CAF50';
+          
+          const list = getList();
+          const idx = list.findIndex(a => 
+            a.origem === cfg.origem && 
+            a.alvo === cfg.alvo
+          );
+          
+          if (idx !== -1) {
+            list[idx].done = true;
+            list[idx].success = true;
+            list[idx].executedAt = new Date().toISOString();
+            setList(list);
+          }
+          
+          setTimeout(() => {
+            overlay.remove();
+            window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
+          }, 2000);
+          
+        } else {
+          statusDiv.innerHTML = '⚠️ <strong>Teste concluído</strong><br><small>Não foi possível confirmar o envio. Verifique manualmente.</small>';
+          statusDiv.style.background = '#FFF3E0';
+          statusDiv.style.borderColor = '#FF9800';
+        }
+      } else {
+        // ✅ AGENDAMENTO - apenas salva as alterações
+        statusDiv.innerHTML = '✅ <strong>Agendamento atualizado com sucesso!</strong><br><small>O ataque será enviado automaticamente no horário agendado.</small>';
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
-        
-        const list = getList();
-        const idx = list.findIndex(a => 
-          a.origem === cfg.origem && 
-          a.alvo === cfg.alvo
-        );
-        
-        if (idx !== -1) {
-          list[idx].done = true;
-          list[idx].success = true;
-          list[idx].executedAt = new Date().toISOString();
-          setList(list);
-        }
         
         setTimeout(() => {
           overlay.remove();
           window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
         }, 2000);
-        
-      } else {
-        statusDiv.innerHTML = '⚠️ <strong>Teste concluído</strong><br><small>Não foi possível confirmar o envio. Verifique manualmente.</small>';
-        statusDiv.style.background = '#FFF3E0';
-        statusDiv.style.borderColor = '#FF9800';
       }
       
     } catch (error) {
@@ -425,6 +442,7 @@
         .btn-next { background: #2196F3; color: white; }
         .btn-prev { background: #9C27B0; color: white; }
         .btn-send { background: #F44336; color: white; }
+        .btn-schedule { background: #4CAF50; color: white; }
         #test-status {
           padding: 12px;
           border: 2px solid #2196F3;
@@ -456,7 +474,8 @@
         <button class="btn btn-cancel" onclick="document.getElementById('tws-test-modal').remove()">❌ Cancelar</button>
         <button class="btn btn-prev" id="btn-prev" onclick="TWS_TestModal._prevTab()" style="display: none;">⬅️ Voltar</button>
         <button class="btn btn-next" id="btn-next" onclick="TWS_TestModal._nextTab()">Próximo ➡️</button>
-        <button class="btn btn-send" id="btn-send" onclick="TWS_TestModal._executeFinal()" style="display: none;">🚀 Enviar Agora</button>
+        <button class="btn btn-send" id="btn-send-imediato" onclick="TWS_TestModal._executeFinal(true)" style="display: none;">🚀 Enviar Agora</button>
+        <button class="btn btn-schedule" id="btn-send-agendado" onclick="TWS_TestModal._executeFinal(false)" style="display: none;">💾 Salvar Agendamento</button>
       </div>
     `;
 
@@ -467,6 +486,7 @@
     let currentTab = 0;
     let selectedAgenda = pendentes[0];
     let currentDatetime = selectedAgenda.datetime;
+    let currentEnvioType = 'imediato';
 
     // Renderizar TAB 1 (Seleção)
     document.getElementById('tab-0').innerHTML = renderAgendamentosList();
@@ -500,14 +520,13 @@
         // Atualizar botões
         document.getElementById('btn-prev').style.display = tab === 0 ? 'none' : 'block';
         document.getElementById('btn-next').style.display = tab === 2 ? 'none' : 'block';
-        document.getElementById('btn-send').style.display = tab === 2 ? 'block' : 'none';
         
         // Se tab 2, renderizar confirmação
         if (tab === 2) {
           // Capturar dados editados
-          const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
+          currentEnvioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
           
-          if (envioType === 'agendado') {
+          if (currentEnvioType === 'agendado') {
             currentDatetime = document.getElementById('edit-datetime')?.value || selectedAgenda.datetime;
           } else {
             currentDatetime = formatDateTime(new Date());
@@ -519,7 +538,14 @@
             selectedAgenda[u] = parseInt(val, 10);
           });
 
-          document.getElementById('tab-2').innerHTML = renderConfirmTab(selectedAgenda, currentDatetime);
+          // Mostrar botão correto
+          document.getElementById('btn-send-imediato').style.display = currentEnvioType === 'imediato' ? 'block' : 'none';
+          document.getElementById('btn-send-agendado').style.display = currentEnvioType === 'agendado' ? 'block' : 'none';
+
+          document.getElementById('tab-2').innerHTML = renderConfirmTab(selectedAgenda, currentDatetime, currentEnvioType);
+        } else {
+          document.getElementById('btn-send-imediato').style.display = 'none';
+          document.getElementById('btn-send-agendado').style.display = 'none';
         }
 
         // Listener para tipo de envio
@@ -541,17 +567,17 @@
         if (currentTab > 0) TWS_TestModal._switchTab(currentTab - 1);
       },
 
-      _executeFinal() {
+      _executeFinal(isImediato) {
         const confirmed = document.getElementById('confirm-checkbox')?.checked;
         if (!confirmed) {
-          alert('⚠️ Marque o checkbox de confirmação antes de enviar!');
+          alert('⚠️ Marque o checkbox de confirmação antes de continuar!');
           return;
         }
 
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
-        // ✅ CORREÇÃO: Atualizar data e tropas no agendamento original
+        // ✅ Atualizar data e tropas no agendamento original
         const list = getList();
         const idx = list.findIndex(a => 
           a.origem === selectedAgenda.origem && 
@@ -564,33 +590,32 @@
             list[idx][u] = selectedAgenda[u];
           });
 
-          // ✅ CORREÇÃO: Sempre atualizar a data, independente do tipo de envio
-          const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value;
-          
-          if (envioType === 'agendado') {
-            // Usar data customizada
-            list[idx].datetime = currentDatetime;
-          } else {
-            // Usar data atual para envio imediato
+          // Atualizar data baseada no tipo de envio
+          if (isImediato) {
+            // Para envio imediato, usar data atual
             list[idx].datetime = formatDateTime(new Date());
+          } else {
+            // Para agendamento, usar data customizada
+            list[idx].datetime = currentDatetime;
           }
           
           console.log('[Test Modal] ✅ Agendamento atualizado:', {
-            de: selectedAgenda.datetime,
-            para: list[idx].datetime,
+            tipo: isImediato ? 'ENVIO IMEDIATO' : 'AGENDAMENTO',
+            data: list[idx].datetime,
             tropas: TROOP_LIST.map(u => ({ [u]: list[idx][u] }))
           });
 
           setList(list);
           
-          // ✅ ATUALIZAR também o selectedAgenda para refletir as mudanças
+          // Atualizar também o selectedAgenda para refletir as mudanças
           selectedAgenda.datetime = list[idx].datetime;
         }
 
         // Preparar config final
         const finalCfg = { ...selectedAgenda };
         
-        executeTest(finalCfg, currentDatetime, statusDiv, overlay);
+        // Executar com o tipo correto
+        executeTest(finalCfg, currentDatetime, statusDiv, overlay, isImediato);
       }
     };
 
