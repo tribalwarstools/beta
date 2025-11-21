@@ -14,7 +14,8 @@ scripts: [
     { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
     { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' },
     { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal' },
-    { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal' }  // ✨ NOVO
+    { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal' },  // ✨ NOVO
+    { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente' }  // ✨ NOVO
 ],
         timeout: 15000,
         retries: 2
