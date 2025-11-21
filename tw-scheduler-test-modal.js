@@ -189,8 +189,8 @@
             <small style="color: #666; display: block; margin-top: 8px;">
               Atalhos: 
               <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">+1min</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">+5min</a>
+              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3;">+1min</a> | 
+              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3;">+5min</a>
             </small>
           </div>
         </div>
@@ -551,28 +551,40 @@
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
-        // ✅ NOVO: Atualizar data no agendamento original ANTES de executar
+        // ✅ CORREÇÃO: Atualizar data e tropas no agendamento original
         const list = getList();
         const idx = list.findIndex(a => 
           a.origem === selectedAgenda.origem && 
-          a.alvo === selectedAgenda.alvo &&
-          a.datetime === selectedAgenda.datetime
+          a.alvo === selectedAgenda.alvo
         );
 
         if (idx !== -1) {
-          // Atualizar tropas (caso tenha sido editado)
+          // Atualizar tropas
           TROOP_LIST.forEach(u => {
             list[idx][u] = selectedAgenda[u];
           });
 
-          // ✅ Substituir data apenas se foi customizada
+          // ✅ CORREÇÃO: Sempre atualizar a data, independente do tipo de envio
           const envioType = document.querySelector('input[name="envio-tipo"]:checked')?.value;
+          
           if (envioType === 'agendado') {
+            // Usar data customizada
             list[idx].datetime = currentDatetime;
-            console.log('[Test Modal] ✅ Data atualizada de:', selectedAgenda.datetime, 'para:', currentDatetime);
+          } else {
+            // Usar data atual para envio imediato
+            list[idx].datetime = formatDateTime(new Date());
           }
+          
+          console.log('[Test Modal] ✅ Agendamento atualizado:', {
+            de: selectedAgenda.datetime,
+            para: list[idx].datetime,
+            tropas: TROOP_LIST.map(u => ({ [u]: list[idx][u] }))
+          });
 
           setList(list);
+          
+          // ✅ ATUALIZAR também o selectedAgenda para refletir as mudanças
+          selectedAgenda.datetime = list[idx].datetime;
         }
 
         // Preparar config final
