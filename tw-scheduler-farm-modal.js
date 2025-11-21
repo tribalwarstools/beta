@@ -1,6 +1,79 @@
 (function () {
   'use strict';
 
+  // === SISTEMA DE CÁLCULO DO PAINEL DE ATAQUES ===
+  const velocidadesUnidades = {
+      spear: 18,      // Lanceiro
+      sword: 22,      // Espadachim
+      axe: 18,        // Machado
+      archer: 18,     // Arqueiro
+      spy: 9,         // Espião
+      light: 10,      // Cavalaria Leve
+      marcher: 10,    // Arqueiro a Cavalo
+      heavy: 11,      // Cavalaria Pesada
+      ram: 30,        // Ariete
+      catapult: 30,   // Catapulta
+      knight: 10,     // Paladino
+      snob: 35        // Nobre
+  };
+
+  const unidadesPorVelocidade = [
+      'snob', 'catapult', 'ram', 'sword', 'spear', 'archer', 'axe',
+      'heavy', 'light', 'marcher', 'knight', 'spy'
+  ];
+
+  function getUnidadeMaisLenta(tropas) {
+      for (const unidade of unidadesPorVelocidade) {
+          if (tropas[unidade] > 0) {
+              return unidade;
+          }
+      }
+      return null;
+  }
+
+  function calcularDistancia(coord1, coord2) {
+      const [x1, y1] = coord1.split('|').map(Number);
+      const [x2, y2] = coord2.split('|').map(Number);
+      const deltaX = Math.abs(x1 - x2);
+      const deltaY = Math.abs(y1 - y2);
+      return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
+  // ✅ CALCULA TEMPO DE VIAGEM USANDO O SISTEMA DO PAINEL
+  function calculateTravelTime(origem, destino, troops) {
+      try {
+          const distancia = calcularDistancia(origem, destino);
+          const unidadeMaisLenta = getUnidadeMaisLenta(troops);
+          
+          if (!unidadeMaisLenta) {
+              console.warn('[Farm] Nenhuma unidade encontrada, usando padrão');
+              return 3600; // 1 hora como fallback
+          }
+          
+          const velocidadeBase = velocidadesUnidades[unidadeMaisLenta];
+          
+          // Tempo em minutos = distância × velocidade (minutos/campo)
+          const tempoMinutos = distancia * velocidadeBase;
+          // Converter para segundos
+          const tempoSegundos = tempoMinutos * 60;
+          
+          console.log(`[Farm] Cálculo: ${distancia.toFixed(2)} campos × ${velocidadeBase} min/campo (${unidadeMaisLenta}) = ${tempoMinutos.toFixed(1)} min (${tempoSegundos} segundos)`);
+          
+          return Math.max(300, Math.min(tempoSegundos, 14400)); // 5min a 4horas
+          
+      } catch (error) {
+          console.error('[Farm] Erro no cálculo de tempo:', error);
+          return 3600; // 1 hora como fallback
+      }
+  }
+
+  // ✅ CALCULA TEMPO DE RETORNO DAS TROPAS
+  function calculateReturnTime(origem, destino, troops) {
+      return calculateTravelTime(destino, origem, troops);
+  }
+
+  // === SISTEMA DO FARM INTELIGENTE ===
+  
   if (!window.TWS_Backend) {
     console.error('[TW Farm Inteligente] Backend não carregado!');
     return;
@@ -14,11 +87,10 @@
     TROOP_LIST
   } = window.TWS_Backend;
 
-  // ✅ Formata data para DD/MM/YYYY HH:MM:SS (CORRIGIDA)
+  // ✅ Formata data para DD/MM/YYYY HH:MM:SS
   function formatDateTime(date) {
     if (!(date instanceof Date) || isNaN(date.getTime())) {
       console.error('[Farm] Data inválida recebida:', date);
-      // Retorna data atual + 1 minuto como fallback
       const fallback = new Date(Date.now() + 60000);
       const pad = (n) => n.toString().padStart(2, '0');
       return `${pad(fallback.getDate())}/${pad(fallback.getMonth() + 1)}/${fallback.getFullYear()} ${pad(fallback.getHours())}:${pad(fallback.getMinutes())}:${pad(fallback.getSeconds())}`;
@@ -26,82 +98,6 @@
     
     const pad = (n) => n.toString().padStart(2, '0');
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  }
-
-  // ✅ CALCULA TEMPO DE VIAGEM COM BASE NAS TROPAS REAIS (CORRIGIDA)
-  // ✅ CALCULA TEMPO DE VIAGEM COM BASE NAS TROPAS REAIS (CORRIGIDA)
-function calculateTravelTime(origem, destino, troops) {
-    try {
-        const coord1 = parseCoord(origem);
-        const coord2 = parseCoord(destino);
-        
-        if (!coord1 || !coord2) {
-            console.error('[Farm] Coordenadas inválidas:', { origem, destino });
-            return 3600; // 1 hora como fallback
-        }
-        
-        // Calcular distância euclidiana
-        const deltaX = Math.abs(coord1.x - coord2.x);
-        const deltaY = Math.abs(coord1.y - coord2.y);
-        const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        
-        console.log(`[Farm] Distância calculada: ${dist} campos entre ${origem} e ${destino}`);
-        
-        // Velocidades das unidades (minutos por campo) - VALORES REAIS DO TW
-        const velocidades = {
-            spear: 18,      // Lanceiro
-            sword: 22,      // Espadachim  
-            axe: 18,        // Machado
-            archer: 18,     // Arqueiro
-            spy: 9,         // Espião
-            light: 10,      // Cavalaria Leve
-            marcher: 10,    // Arqueiro a Cavalo
-            heavy: 11,      // Cavalaria Pesada
-            ram: 30,        // Ariete
-            catapult: 30,   // Catapulta
-            knight: 10,     // Paladino
-            snob: 35        // Nobre
-        };
-        
-        // Encontrar unidade mais lenta presente
-        let unidadeMaisLenta = null;
-        let velocidadeMaisLenta = 0;
-        
-        Object.entries(troops).forEach(([unidade, quantidade]) => {
-            if (quantidade > 0 && velocidades[unidade]) {
-                if (velocidades[unidade] > velocidadeMaisLenta) {
-                    velocidadeMaisLenta = velocidades[unidade];
-                    unidadeMaisLenta = unidade;
-                }
-            }
-        });
-        
-        if (!unidadeMaisLenta) {
-            console.warn('[Farm] Nenhuma unidade encontrada, usando padrão');
-            return 3600; // 1 hora como fallback
-        }
-        
-        // ✅ CÁLCULO CORRETO: Tempo = distância × velocidade (em segundos)
-        // velocidadeMaisLenta está em minutos/campo, converter para segundos/campo
-        const velocidadeSegundosPorCampo = velocidadeMaisLenta * 60;
-        
-        // Tempo total em segundos
-        const tempoSegundos = dist * velocidadeSegundosPorCampo;
-        
-        console.log(`[Farm] Cálculo: ${dist} campos × ${velocidadeMaisLenta} min/campo (${unidadeMaisLenta}) = ${Math.round(tempoSegundos/60)} minutos`);
-        
-        // Garantir limites razoáveis (5 minutos a 4 horas)
-        return Math.max(300, Math.min(tempoSegundos, 14400));
-        
-    } catch (error) {
-        console.error('[Farm] Erro no cálculo de tempo:', error);
-        return 3600; // 1 hora como fallback
-    }
-}
-
-  // ✅ CALCULA TEMPO DE RETORNO DAS TROPAS
-  function calculateReturnTime(origem, destino, troops) {
-    return calculateTravelTime(destino, origem, troops); // Retorno usa mesma lógica mas direção inversa
   }
 
   // ✅ Gerar ID único
@@ -118,7 +114,7 @@ function calculateTravelTime(origem, destino, troops) {
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-  // ✅ CONVERTER agendamento normal em Farm Inteligente (CORRIGIDA)
+  // ✅ CONVERTER agendamento normal em Farm Inteligente
   function convertToFarm(agendamentoIndex, intervalo = 5) {
     const lista = getList();
     
@@ -147,7 +143,7 @@ function calculateTravelTime(origem, destino, troops) {
         agendamento.executedAt = null;
         agendamento.error = null;
         
-        // ✅ ATUALIZAR data para futuro próximo (CORRIGIDO)
+        // ✅ ATUALIZAR data para futuro próximo
         const now = new Date();
         const newDate = new Date(now.getTime() + 60000); // 1 minuto no futuro
         agendamento.datetime = formatDateTime(newDate);
@@ -188,7 +184,7 @@ function calculateTravelTime(origem, destino, troops) {
     return true;
   }
 
-  // ✅ MONITORAR execução de agendamentos para Farms (CORRIGIDA)
+  // ✅ MONITORAR execução de agendamentos para Farms (COM CÁLCULO CORRETO)
   function monitorAgendamentosParaFarm() {
     const lista = getList();
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
@@ -207,7 +203,7 @@ function calculateTravelTime(origem, destino, troops) {
         }
         farm.stats.lastRun = new Date().toISOString();
         
-        // ✅ CALCULAR PRÓXIMO ATAQUE CONSIDERANDO RETORNO DAS TROPAS (CORRIGIDO)
+        // ✅ CALCULAR PRÓXIMO ATAQUE COM SISTEMA CORRETO
         const now = new Date();
         let nextRunTime;
         
@@ -217,10 +213,8 @@ function calculateTravelTime(origem, destino, troops) {
             const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
             const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
             
-            // Tempo total do ciclo = volta + intervalo
-            const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-            
             // Próximo ataque = agora + tempo de retorno + intervalo
+            const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
             nextRunTime = new Date(now.getTime() + (returnTime * 1000) + intervaloMs);
             
             console.log(`[Farm] Ciclo calculado - Ida: ${Math.round(travelTimeToTarget/60)}min, Volta: ${Math.round(returnTime/60)}min, Intervalo: ${farm.intervalo}min`);
@@ -356,6 +350,12 @@ function calculateTravelTime(origem, destino, troops) {
         }
       }
       
+      // Calcular distância para exibição
+      const distancia = calcularDistancia(farm.origem, farm.alvo);
+      const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
+      const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
+      const tempoEstimado = distancia * velocidade;
+      
       html += `
         <div style="
           background: white;
@@ -375,6 +375,9 @@ function calculateTravelTime(origem, destino, troops) {
               <div style="color: #888; font-size: 11px; margin-top: 2px;">
                 📋 ${baseStatus} | ⏰ Ciclo: ${farm.intervalo} min
                 ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
+              </div>
+              <div style="color: #666; font-size: 10px; margin-top: 2px;">
+                📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo | ⏱️ ~${Math.round(tempoEstimado)}min
               </div>
             </div>
             <div style="
@@ -433,12 +436,11 @@ function calculateTravelTime(origem, destino, troops) {
 
   // ✅ INICIAR monitor periódico
   function startFarmMonitor() {
-    // Verificar agendamentos para farms a cada 10 segundos
     setInterval(monitorAgendamentosParaFarm, 10000);
     console.log('[Farm Inteligente] ✅ Monitor de agendamentos ativo!');
   }
 
-  // === MODAL PRINCIPAL ===
+  // === MODAL PRINCIPAL DO FARM ===
   function showFarmModal() {
     const existing = document.getElementById('tws-farm-modal');
     if (existing) existing.remove();
@@ -485,17 +487,17 @@ function calculateTravelTime(origem, destino, troops) {
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático que recalcula retorno das tropas para novos ataques
+          Sistema automático com cálculo real de distância e velocidade
         </div>
       </div>
 
       <!-- Conteúdo -->
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
         <div style="background: #FFF3CD; border: 1px solid #FFEEBA; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #856404;">
-          <strong>🔄 SISTEMA CORRIGIDO</strong><br>
-          • Cálculo de datas corrigido<br>
-          • Fallback para datas inválidas<br>
-          • Melhor tratamento de erros
+          <strong>🎯 SISTEMA DE CÁLCULO INTEGRADO</strong><br>
+          • Usa algoritmo real do Tribal Wars para tempos<br>
+          • Considera unidade mais lenta: snob(35) > catapult(30) > ram(30) > sword(22) > spear(18)<br>
+          • Calcula automaticamente retorno das tropas
         </div>
 
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -552,6 +554,7 @@ function calculateTravelTime(origem, destino, troops) {
         }
       },
 
+      // ✅ FUNÇÃO PRINCIPAL: Converter Agendamento em Farm
       _convertAgendamento() {
         const lista = getList();
         const pendentes = lista.filter(a => !a.done);
@@ -565,8 +568,14 @@ function calculateTravelTime(origem, destino, troops) {
         pendentes.forEach((agend, idx) => {
           const listaIdx = lista.findIndex(a => a === agend);
           const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
+          const distancia = calcularDistancia(agend.origem, agend.alvo);
+          const unidadeMaisLenta = getUnidadeMaisLenta(agend);
+          const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
+          const tempoEstimado = Math.round(distancia * velocidade);
+          
           mensagem += `[${idx + 1}] ${agend.origem} → ${agend.alvo}\n`;
-          mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n\n`;
+          mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n`;
+          mensagem += `   📏 ${distancia.toFixed(1)} campos | ⏱️ ~${tempoEstimado}min (${unidadeMaisLenta})\n\n`;
         });
         
         mensagem += 'Digite o número do agendamento:';
@@ -580,17 +589,24 @@ function calculateTravelTime(origem, destino, troops) {
           const agendamentoEscolhido = pendentes[idxEscolhido];
           const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
           
-          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):', '5');
+          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):\n\nRecomendado: tempo_volta + margem de segurança', '5');
           if (intervalo === null) return;
           
           const intervaloNum = parseInt(intervalo) || 5;
           
           if (convertToFarm(listaIdx, intervaloNum)) {
-            alert(`✅ AGENDAMENTO CONVERTIDO!\n\nO sistema agora calculará automaticamente o retorno das tropas.`);
+            // Calcular tempo estimado para feedback
+            const distancia = calcularDistancia(agendamentoEscolhido.origem, agendamentoEscolhido.alvo);
+            const tropas = {};
+            TROOP_LIST.forEach(u => { tropas[u] = agendamentoEscolhido[u] || 0; });
+            const tempoIda = calculateTravelTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
+            const tempoVolta = calculateReturnTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
+            
+            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n📏 Distância: ${distancia.toFixed(1)} campos\n⏱️ Tempos calculados: ${Math.round(tempoIda/60)}min (ida) / ${Math.round(tempoVolta/60)}min (volta)\n🔄 Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema calculará automaticamente o retorno das tropas!`);
             document.getElementById('farm-list-container').innerHTML = renderFarmList();
           }
         } else {
-          alert('❌ Número inválido!');
+          alert('❌ Número inválido! Selecione um número da lista.');
         }
       }
     };
@@ -605,7 +621,7 @@ function calculateTravelTime(origem, destino, troops) {
     
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema corrigido!');
+    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema de cálculo integrado!');
   }
 
   if (document.readyState === 'loading') {
