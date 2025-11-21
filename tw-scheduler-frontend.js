@@ -616,7 +616,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     addManual,
     importBBCode,
     testSend,
-    //Farm,
+    Farm,
     clearCompleted,
     clearPending,
     clearAll,
@@ -660,6 +660,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     
   }, 100);
 })();
+
 
 
 
