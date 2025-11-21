@@ -45,13 +45,14 @@
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-  // ✅ CONVERTER agendamento normal em Farm Inteligente
-  function convertToFarm(agendamentoIndex, intervalo = 5) {
+// ✅ CONVERTER agendamento normal em Farm Inteligente
+// ✅ FUNÇÃO CORRIGIDA: Converte agendamento normal em Farm Inteligente
+function convertToFarm(agendamentoIndex, intervalo = 5) {
     const lista = getList();
     
     if (agendamentoIndex < 0 || agendamentoIndex >= lista.length) {
-      alert('❌ Agendamento não encontrado!');
-      return false;
+        alert('❌ Agendamento não encontrado!');
+        return false;
     }
     
     const agendamento = lista[agendamentoIndex];
@@ -60,29 +61,50 @@
     const farms = getFarmList();
     const jaExiste = farms.find(f => f.agendamentoBaseId === agendamentoIndex);
     if (jaExiste) {
-      alert('❌ Este agendamento já é um Farm Inteligente!');
-      return false;
+        alert('❌ Este agendamento já é um Farm Inteligente!');
+        return false;
+    }
+    
+    // ✅ CORREÇÃO: REINICIAR status se já foi executado
+    if (agendamento.done) {
+        console.log(`[Farm] Reiniciando agendamento marcado como "já processado": ${agendamento.origem} → ${agendamento.alvo}`);
+        
+        // Reiniciar status para permitir novo ciclo
+        agendamento.done = false;
+        agendamento.success = false;
+        agendamento.executedAt = null;
+        agendamento.error = null;
+        
+        // ✅ ATUALIZAR data para futuro próximo
+        const now = new Date();
+        const newDate = new Date(now.getTime() + 30000); // 30 segundos no futuro
+        agendamento.datetime = formatDateTime(newDate);
+        
+        console.log(`[Farm] Novo horário definido: ${agendamento.datetime}`);
+        
+        // Salvar alterações
+        setList(lista);
     }
     
     // Extrair tropas do agendamento
     const troops = {};
     TROOP_LIST.forEach(u => {
-      troops[u] = agendamento[u] || 0;
+        troops[u] = agendamento[u] || 0;
     });
     
     // Criar farm baseado no agendamento
     const farm = {
-      id: generateId(),
-      agendamentoBaseId: agendamentoIndex, // Referência ao agendamento original
-      origem: agendamento.origem,
-      alvo: agendamento.alvo,
-      troops: troops,
-      intervalo: intervalo,
-      paused: false,
-      active: true,
-      stats: { totalRuns: 0, successRuns: 0 },
-      nextRun: agendamento.datetime, // Usar a data do agendamento original
-      created: new Date().toISOString()
+        id: generateId(),
+        agendamentoBaseId: agendamentoIndex,
+        origem: agendamento.origem,
+        alvo: agendamento.alvo,
+        troops: troops,
+        intervalo: intervalo,
+        paused: false,
+        active: true,
+        stats: { totalRuns: 0, successRuns: 0 },
+        nextRun: agendamento.datetime,
+        created: new Date().toISOString()
     };
     
     // Adicionar à lista de farms
@@ -91,7 +113,7 @@
     
     console.log(`[Farm] Agendamento convertido: ${farm.origem} → ${farm.alvo}`);
     return true;
-  }
+}
 
   // ✅ MONITORAR execução de agendamentos para Farms
   function monitorAgendamentosParaFarm() {
