@@ -185,105 +185,93 @@
   }
 
   // ✅ MONITORAR execução de agendamentos para Farms (COM CÁLCULO CORRETO)
-  function monitorAgendamentosParaFarm() {
+
+  // ✅ CORREÇÃO NA LÓGICA DE REAGENDAMENTO
+function monitorAgendamentosParaFarm() {
     const lista = getList();
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
     
     farms.forEach(farm => {
-      // Verificar se o agendamento base foi executado
       const agendamentoBase = lista[farm.agendamentoBaseId];
       
-      if (agendamentoBase && agendamentoBase.done) {
-        console.log(`[Farm] Agendamento processado: ${farm.origem} → ${farm.alvo} | Sucesso: ${agendamentoBase.success}`);
+      if (agendamentoBase && agendamentoBase.done && agendamentoBase.success) {
+        console.log(`[Farm] Agendamento executado: ${farm.origem} → ${farm.alvo}`);
         
-        // Atualizar estatísticas do farm
+        // Atualizar estatísticas
         farm.stats.totalRuns++;
-        if (agendamentoBase.success) {
-          farm.stats.successRuns++;
-        }
+        farm.stats.successRuns++;
         farm.stats.lastRun = new Date().toISOString();
         
-        // ✅ CALCULAR PRÓXIMO ATAQUE COM SISTEMA CORRETO
         const now = new Date();
         let nextRunTime;
         
         try {
-          if (agendamentoBase.success) {
-            // ✅ SUCESSO: Calcular baseado no tempo de retorno + intervalo
-            const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
-            const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
-            
-            // Próximo ataque = agora + tempo de retorno + intervalo
-            const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-            nextRunTime = new Date(now.getTime() + (returnTime * 1000) + intervaloMs);
-            
-            console.log(`[Farm] Ciclo calculado - Ida: ${Math.round(travelTimeToTarget/60)}min, Volta: ${Math.round(returnTime/60)}min, Intervalo: ${farm.intervalo}min`);
-            
-            farm.lastReturnTime = returnTime;
-          } else {
-            // ✅ FALHA: Reagendar mais rapidamente (apenas intervalo)
-            const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-            nextRunTime = new Date(now.getTime() + intervaloMs);
-            
-            console.log(`[Farm] Falha detectada - Reagendando em ${farm.intervalo}min`);
-          }
+          // ✅ CORREÇÃO: SÓ AGRENDAR APÓS O RETORNO COMPLETO
+          const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+          const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
           
-          // ✅ GARANTIR que a data é válida
-          if (isNaN(nextRunTime.getTime())) {
-            console.error('[Farm] Data inválida gerada, usando fallback');
-            nextRunTime = new Date(now.getTime() + 300000); // 5 minutos
-          }
+          // ✅ AGORA: Próximo ataque = horário de RETORNO + intervalo
+          const tempoTotalCiclo = (travelTimeToTarget + returnTime) * 1000; // ida + volta em ms
+          const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
           
-          // Recriar o agendamento para próximo ciclo
-          const novoAgendamento = {
-            ...agendamentoBase,
-            datetime: formatDateTime(nextRunTime),
-            done: false,
-            success: false,
-            executedAt: null,
-            error: null
-          };
+          // Usar o horário de chegada REAL como base
+          const chegadaReal = agendamentoBase.executedAt ? 
+            new Date(agendamentoBase.executedAt) : 
+            new Date(now.getTime() - travelTimeToTarget * 1000);
           
-          // Substituir na lista
-          lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
-          setList(lista);
+          // Próximo ataque = chegada + tempo_volta + intervalo
+          nextRunTime = new Date(chegadaReal.getTime() + (returnTime * 1000) + intervaloMs);
           
-          // Atualizar farm com nova data
-          farm.nextRun = novoAgendamento.datetime;
+          console.log(`[Farm] Cálculo corrigido:`);
+          console.log(`  - Chegada real: ${chegadaReal.toLocaleTimeString()}`);
+          console.log(`  - Retorno: ${Math.round(returnTime/60)}min → ${new Date(chegadaReal.getTime() + returnTime * 1000).toLocaleTimeString()}`);
+          console.log(`  - Próximo ataque: ${nextRunTime.toLocaleTimeString()}`);
           
-          // Salvar farm atualizado
-          const updatedFarms = getFarmList();
-          const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
-          if (farmIdx !== -1) {
-            updatedFarms[farmIdx] = farm;
-            setFarmList(updatedFarms);
-          }
-          
-          console.log(`[Farm] Novo ciclo agendado: ${novoAgendamento.datetime}`);
+          farm.lastReturnTime = returnTime;
           
         } catch (error) {
-          console.error('[Farm] Erro ao processar ciclo:', error);
-          // Fallback: reagendar em 5 minutos
-          const fallbackTime = new Date(now.getTime() + 300000);
-          const novoAgendamento = {
-            ...agendamentoBase,
-            datetime: formatDateTime(fallbackTime),
-            done: false,
-            success: false,
-            executedAt: null,
-            error: null
-          };
-          
-          lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
-          setList(lista);
+          console.error('[Farm] Erro no cálculo:', error);
+          // Fallback: agendar para 2 horas no futuro
+          nextRunTime = new Date(now.getTime() + 7200000);
         }
         
-        // Disparar eventos de atualização
+        // ✅ GARANTIR que não agenda antes do retorno
+        const retornoEstimado = new Date(now.getTime() + (calculateReturnTime(farm.origem, farm.alvo, farm.troops) * 1000));
+        if (nextRunTime < retornoEstimado) {
+          console.warn(`[Farm] Correção: próximo ataque estava antes do retorno, ajustando...`);
+          nextRunTime = new Date(retornoEstimado.getTime() + (farm.intervalo || 5) * 60000);
+        }
+        
+        // Recriar agendamento
+        const novoAgendamento = {
+          ...agendamentoBase,
+          datetime: formatDateTime(nextRunTime),
+          done: false,
+          success: false,
+          executedAt: null,
+          error: null
+        };
+        
+        lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
+        setList(lista);
+        
+        farm.nextRun = novoAgendamento.datetime;
+        
+        // Atualizar farm
+        const updatedFarms = getFarmList();
+        const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
+        if (farmIdx !== -1) {
+          updatedFarms[farmIdx] = farm;
+          setFarmList(updatedFarms);
+        }
+        
+        console.log(`[Farm] Novo ciclo CORRIGIDO: ${novoAgendamento.datetime}`);
+        
         window.dispatchEvent(new CustomEvent('tws-farm-updated'));
         window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
       }
     });
-  }
+}
 
   // ✅ RENDERIZAR lista de farms ativos
   function renderFarmList() {
