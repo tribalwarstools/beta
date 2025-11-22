@@ -223,13 +223,19 @@
         ">
           <div style="font-size: 28px; margin-bottom: 8px;">${isImediato ? '⚠️' : '⏰'}</div>
           <div style="font-weight: bold; color: ${isImediato ? '#D32F2F' : '#2E7D32'}; font-size: 16px;">
-            ${isImediato ? 'ATENÇÃO - ENVIO IMEDIATO!' : 'AGENDAMENTO CONFIRMADO'}
+            ${isImediato ? 'ATENÇÃO - ENVIO IMEDIATO!' : 'NOVO AGENDAMENTO CRIADO!'}
           </div>
           <div style="color: ${isImediato ? '#C62828' : '#1B5E20'}; font-size: 14px; margin-top: 8px;">
             ${isImediato 
               ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
-              : `O ataque ficará agendado para: <strong>${datetime}</strong>`}
+              : `Novo agendamento criado para: <strong>${datetime}</strong>`}
           </div>
+          ${!isImediato ? `
+            <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
+              ✅ <strong>Agendamento original preservado</strong><br>
+              <small>Foi criado um NOVO agendamento com suas alterações</small>
+            </div>
+          ` : ''}
         </div>
 
         <!-- Info do ataque -->
@@ -263,7 +269,7 @@
             <span style="font-weight: bold; color: #E65100;">
               ${isImediato 
                 ? 'Tenho certeza que quero enviar este ataque AGORA' 
-                : 'Tenho certeza que quero agendar este ataque para a data/hora especificada'}
+                : 'Tenho certeza que quero CRIAR um NOVO agendamento'}
             </span>
           </label>
         </div>
@@ -271,7 +277,7 @@
     `;
   }
 
-  // ✅ Executa o ataque
+  // ✅ Executa o ataque ou cria novo agendamento
   async function executeTest(cfg, datetime, statusDiv, overlay, isImediato) {
     try {
       if (isImediato) {
@@ -286,10 +292,12 @@
           statusDiv.style.background = '#E8F5E9';
           statusDiv.style.borderColor = '#4CAF50';
           
+          // ✅ Para envio imediato, marca o original como feito
           const list = getList();
           const idx = list.findIndex(a => 
             a.origem === cfg.origem && 
-            a.alvo === cfg.alvo
+            a.alvo === cfg.alvo &&
+            !a.done // Apenas se ainda não foi executado
           );
           
           if (idx !== -1) {
@@ -310,8 +318,8 @@
           statusDiv.style.borderColor = '#FF9800';
         }
       } else {
-        // ✅ AGENDAMENTO - apenas salva as alterações
-        statusDiv.innerHTML = '✅ <strong>Agendamento atualizado com sucesso!</strong><br><small>O ataque será enviado automaticamente no horário agendado.</small>';
+        // ✅ AGENDAMENTO - CRIA NOVO agendamento
+        statusDiv.innerHTML = '✅ <strong>Novo agendamento criado com sucesso!</strong><br><small>O agendamento original foi preservado.</small>';
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
         
@@ -475,7 +483,7 @@
         <button class="btn btn-prev" id="btn-prev" onclick="TWS_TestModal._prevTab()" style="display: none;">⬅️ Voltar</button>
         <button class="btn btn-next" id="btn-next" onclick="TWS_TestModal._nextTab()">Próximo ➡️</button>
         <button class="btn btn-send" id="btn-send-imediato" onclick="TWS_TestModal._executeFinal(true)" style="display: none;">🚀 Enviar Agora</button>
-        <button class="btn btn-schedule" id="btn-send-agendado" onclick="TWS_TestModal._executeFinal(false)" style="display: none;">💾 Salvar Agendamento</button>
+        <button class="btn btn-schedule" id="btn-send-agendado" onclick="TWS_TestModal._executeFinal(false)" style="display: none;">💾 Criar Novo Agendamento</button>
       </div>
     `;
 
@@ -494,7 +502,7 @@
     // ✅ CORREÇÃO CRÍTICA: Reatribuir funções SEMPRE que o modal abrir
     const modalFunctions = {
       _selectAgenda(idx) {
-        selectedAgenda = pendentes[idx];
+        selectedAgenda = { ...pendentes[idx] }; // ✅ Cria cópia para não modificar o original
         currentDatetime = selectedAgenda.datetime;
         
         // Renderizar TAB 2
@@ -503,7 +511,7 @@
         // Ir para TAB 2
         TWS_TestModal._switchTab(1);
         
-        console.log('[Test Modal] Agendamento selecionado:', selectedAgenda);
+        console.log('[Test Modal] Agendamento selecionado (cópia):', selectedAgenda);
       },
 
       _switchTab(tab) {
@@ -577,39 +585,38 @@
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
-        // ✅ Atualizar data e tropas no agendamento original
+        // ✅ NOVO COMPORTAMENTO: CRIAR NOVO AGENDAMENTO
         const list = getList();
-        const idx = list.findIndex(a => 
-          a.origem === selectedAgenda.origem && 
-          a.alvo === selectedAgenda.alvo
-        );
+        
+        if (isImediato) {
+          // ✅ ENVIO IMEDIATO: Marca original como feito
+          const idx = list.findIndex(a => 
+            a.origem === selectedAgenda.origem && 
+            a.alvo === selectedAgenda.alvo &&
+            !a.done // Apenas se ainda não foi executado
+          );
 
-        if (idx !== -1) {
-          // Atualizar tropas
-          TROOP_LIST.forEach(u => {
-            list[idx][u] = selectedAgenda[u];
-          });
-
-          // Atualizar data baseada no tipo de envio
-          if (isImediato) {
-            // Para envio imediato, usar data atual
-            list[idx].datetime = formatDateTime(new Date());
-          } else {
-            // Para agendamento, usar data customizada
-            list[idx].datetime = currentDatetime;
+          if (idx !== -1) {
+            list[idx].done = true;
+            list[idx].success = true;
+            list[idx].executedAt = new Date().toISOString();
           }
-          
-          console.log('[Test Modal] ✅ Agendamento atualizado:', {
-            tipo: isImediato ? 'ENVIO IMEDIATO' : 'AGENDAMENTO',
-            data: list[idx].datetime,
-            tropas: TROOP_LIST.map(u => ({ [u]: list[idx][u] }))
-          });
+        } else {
+          // ✅ AGENDAMENTO: CRIA NOVO agendamento
+          const novoAgendamento = {
+            ...selectedAgenda,
+            datetime: currentDatetime,
+            done: false,
+            success: false,
+            executedAt: null,
+            error: null
+          };
 
-          setList(list);
-          
-          // Atualizar também o selectedAgenda para refletir as mudanças
-          selectedAgenda.datetime = list[idx].datetime;
+          list.push(novoAgendamento);
+          console.log('[Test Modal] ✅ NOVO agendamento criado:', novoAgendamento);
         }
+
+        setList(list);
 
         // Preparar config final
         const finalCfg = { ...selectedAgenda };
@@ -640,7 +647,7 @@
     // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
     window.TWS_TestModal.show = showModal;
     
-    console.log('[TW Scheduler Test Modal] ✅ Carregado com interface de abas!');
+    console.log('[TW Scheduler Test Modal] ✅ Carregado - CRIA NOVOS AGENDAMENTOS!');
     console.log('[TW Scheduler Test Modal] ✅ Função show disponível:', typeof window.TWS_TestModal.show);
   }
 
