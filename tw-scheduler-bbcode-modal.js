@@ -573,7 +573,9 @@
         <div style="margin-bottom: 12px;">
           <label style="display: flex; align-items: center; gap: 6px;">
             <input type="checkbox" id="tws-incrementarSegundos">
-            ⏱️ Incrementar 5s por ataque
+            ⏱️ Incrementar 
+            <input type="number" id="tws-incrementoValor" value="5" min="1" max="60" style="width: 50px; margin: 0 6px; padding: 2px;"> 
+            segundos por ataque
           </label>
           <small style="color: #7f8c8d; font-size: 10px;">Evita ataques simultâneos</small>
         </div>
@@ -776,6 +778,7 @@
           if (config.horaChegada) document.getElementById('tws-horaChegada').value = config.horaChegada;
           if (config.horaLancamento) document.getElementById('tws-horaLancamento').value = config.horaLancamento;
           if (config.incrementarSegundos !== undefined) document.getElementById('tws-incrementarSegundos').checked = config.incrementarSegundos;
+          if (config.incrementoValor) document.getElementById('tws-incrementoValor').value = config.incrementoValor;
           if (config.tropas) {
             for (const [unidade, quantidade] of Object.entries(config.tropas)) {
               const input = document.getElementById(`tws-${unidade}`);
@@ -955,10 +958,11 @@
 
         // Incrementar segundos
         if (incrementarSegundos) {
+          const incrementoValor = parseInt(document.getElementById('tws-incrementoValor').value) || 5;
           let segundoIncremento = 0;
           combinacoes.forEach((comb, index) => {
             if (index > 0) {
-              segundoIncremento += 5;
+              segundoIncremento += incrementoValor;
               const lancamentoDate = CalculosUtilitarios.parseDataHora(comb.horaLancamento);
               const chegadaDate = CalculosUtilitarios.parseDataHora(comb.horaChegada);
               lancamentoDate.setSeconds(lancamentoDate.getSeconds() + segundoIncremento);
@@ -1014,6 +1018,7 @@
         horaChegada: document.getElementById('tws-horaChegada').value,
         horaLancamento: document.getElementById('tws-horaLancamento').value,
         incrementarSegundos: document.getElementById('tws-incrementarSegundos').checked,
+        incrementoValor: document.getElementById('tws-incrementoValor').value,
         tropas: getTropas()
       };
       try {
