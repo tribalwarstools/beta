@@ -332,6 +332,10 @@
         case 'distancia':
           combinacoes.sort((a, b) => a.distancia - b.distancia);
           break;
+        case 'digitacao':
+        default:
+          // Mantém a ordem original (digitação)
+          break;
       }
 
       // Aplica incremento de segundos
@@ -346,8 +350,12 @@
             chegadaDate.setSeconds(chegadaDate.getSeconds() + segundoIncremento);
             comb.horaLancamento = formatarDataHora(lancamentoDate);
             comb.horaChegada = formatarDataHora(chegadaDate);
+            comb.timestampLancamento = lancamentoDate.getTime();
+            comb.timestampChegada = chegadaDate.getTime();
           }
         });
+        
+        console.log(`⏱️ Incremento aplicado: ${segundoIncremento} segundo(s) no total`);
       }
 
       // Gera BBCode
@@ -364,7 +372,8 @@
       return {
         bbcode,
         combinacoes: combinacoes.length,
-        unidadeMaisLenta
+        unidadeMaisLenta,
+        incrementoAplicado: incrementarSegundos
       };
 
     } catch (error) {
@@ -659,6 +668,36 @@
           width: 60px;
           padding: 4px;
         }
+        .config-group {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        .config-item {
+          display: flex;
+          flex-direction: column;
+        }
+        .checkbox-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 8px 0;
+        }
+        .checkbox-item input[type="checkbox"] {
+          margin: 0;
+        }
+        .checkbox-item label {
+          font-weight: 600;
+          color: #2c3e50;
+          font-size: 13px;
+        }
+        .checkbox-desc {
+          font-size: 11px;
+          color: #7f8c8d;
+          margin-top: 2px;
+          margin-left: 24px;
+        }
       </style>
 
       <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar/Gerar BBCode</h2>
@@ -724,26 +763,41 @@
           </div>
         </div>
 
-        <div style="margin-bottom: 10px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div>
-              <label style="font-weight:600; color:#2c3e50;">🎯 Tipo de Cálculo:</label>
-              <select id="generate-tipoCalculo" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
-                <option value="chegada">Por Hora de Chegada</option>
-                <option value="lancamento">Por Hora de Lançamento</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-weight:600; color:#2c3e50;">📈 Sinal (%):</label>
-              <input id="generate-bonusSinal" type="number" value="0" min="0" max="100" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
-            </div>
+        <div class="config-group">
+          <div class="config-item">
+            <label style="font-weight:600; color:#2c3e50;">🎯 Tipo de Cálculo:</label>
+            <select id="generate-tipoCalculo" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
+              <option value="chegada">Por Hora de Chegada</option>
+              <option value="lancamento">Por Hora de Lançamento</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label style="font-weight:600; color:#2c3e50;">📈 Sinal (%):</label>
+            <input id="generate-bonusSinal" type="number" value="0" min="0" max="100" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
           </div>
         </div>
 
-        <div style="margin-bottom: 10px;">
-          <label style="font-weight:600; color:#2c3e50;" id="generate-hora-label">⏰ Hora de Chegada:</label>
-          <input id="generate-horaBase" type="text" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;" placeholder="15/11/2025 18:30:00">
+        <div class="config-group">
+          <div class="config-item">
+            <label style="font-weight:600; color:#2c3e50;">🔀 Ordenação:</label>
+            <select id="generate-tipoOrdenacao" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
+              <option value="digitacao">Por Ordem de Digitação</option>
+              <option value="lancamento">Por Horário de Lançamento</option>
+              <option value="chegada">Por Horário de Chegada</option>
+              <option value="distancia">Por Distância</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label style="font-weight:600; color:#2c3e50;" id="generate-hora-label">⏰ Hora Base:</label>
+            <input id="generate-horaBase" type="text" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;" placeholder="15/11/2025 18:30:00">
+          </div>
         </div>
+
+        <div class="checkbox-item">
+          <input type="checkbox" id="generate-incrementarSegundos">
+          <label for="generate-incrementarSegundos">⏱️ Incrementar 5s por ataque</label>
+        </div>
+        <div class="checkbox-desc">Evita que muitos ataques saiam no mesmo momento</div>
 
         <div style="margin-bottom: 10px;">
           <label style="font-weight:600; color:#2c3e50;">⚔️ Tropas:</label>
@@ -829,8 +883,10 @@
     tipoCalculoSelect.addEventListener('change', function() {
       if (this.value === 'chegada') {
         horaLabel.textContent = '⏰ Hora de Chegada:';
+        horaLabel.innerHTML = '⏰ Hora de Chegada:';
       } else {
         horaLabel.textContent = '🚀 Hora de Lançamento:';
+        horaLabel.innerHTML = '🚀 Hora de Lançamento:';
       }
     });
 
@@ -1031,6 +1087,8 @@
         const horaBase = document.getElementById('generate-horaBase').value.trim();
         const bonusSinal = parseInt(document.getElementById('generate-bonusSinal').value) || 0;
         const tipoCalculo = document.getElementById('generate-tipoCalculo').value;
+        const tipoOrdenacao = document.getElementById('generate-tipoOrdenacao').value;
+        const incrementarSegundos = document.getElementById('generate-incrementarSegundos').checked;
 
         if (!destinosRaw) {
           mostrarMensagem('❌ Informe pelo menos um destino!', '#e74c3c');
@@ -1076,13 +1134,14 @@
           horaBase,
           tropas,
           bonusSinal,
-          tipoOrdenacao: 'digitacao',
-          incrementarSegundos: false
+          tipoOrdenacao,
+          incrementarSegundos
         });
 
         generatedBBCode = result.bbcode;
         generateOutput.value = generatedBBCode;
-        generateStats.innerHTML = `
+        
+        let statsHTML = `
           <div class="bbcode-stat-item">
             <span>📦 Ataques Gerados:</span>
             <span style="color: #2196F3;">${result.combinacoes}</span>
@@ -1092,10 +1151,25 @@
             <span style="color: #4CAF50;">${result.unidadeMaisLenta}</span>
           </div>
         `;
+        
+        if (result.incrementoAplicado) {
+          statsHTML += `
+            <div class="bbcode-stat-item">
+              <span>⏱️ Incremento Aplicado:</span>
+              <span style="color: #FF9800;">5s por ataque</span>
+            </div>
+          `;
+        }
+        
+        generateStats.innerHTML = statsHTML;
         generatePreview.style.display = 'block';
         generatePreview.scrollIntoView({ behavior: 'smooth' });
 
-        mostrarMensagem(`✅ ${result.combinacoes} ataque(s) gerado(s)!`, '#27ae60');
+        let mensagem = `✅ ${result.combinacoes} ataque(s) gerado(s)!`;
+        if (result.incrementoAplicado) {
+          mensagem += ' (com incremento de segundos)';
+        }
+        mostrarMensagem(mensagem, '#27ae60');
 
       } catch (error) {
         console.error('Erro ao gerar BBCode:', error);
