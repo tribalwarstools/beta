@@ -729,10 +729,10 @@ if (typeof window !== 'undefined') {
             console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
           
-          // ✅ PROTEÇÃO 9: Debounce entre ataques (200ms)
+          // ✅ PROTEÇÃO 9: Debounce entre ataques (100ms)
           if (i < ataques.length - 1) {
             console.log(`[TWScheduler] ⏳ Aguardando 200ms antes do próximo...`);
-            await sleep(200);
+            await sleep(100);
           }
         }
       }
@@ -831,4 +831,5 @@ if (typeof window !== 'undefined') {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
