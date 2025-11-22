@@ -625,8 +625,8 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Funções expostas
-    window.TWS_FarmInteligente = {
+    // Funções expostas DENTRO do modal
+    const farmFunctions = {
       _toggleFarm(id) {
         const farms = getFarmList();
         const farm = farms.find(f => f.id === id);
@@ -765,7 +765,10 @@
         const results = convertPorFiltro(filtro, intervalo);
 
         // Remover modal
-        document.querySelector('div > h3:contains("🔍 Converter por Filtro")')?.parentElement?.remove();
+        const filtroModal = document.querySelector('div > h3');
+        if (filtroModal && filtroModal.textContent.includes('Converter por Filtro')) {
+          filtroModal.parentElement.remove();
+        }
 
         alert(`✅ CONVERSÃO POR FILTRO CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos com sucesso\n• ❌ ${results.errors} erros\n\nFiltros aplicados:\n• Origem: ${origem || 'Qualquer'}\n• Alvo: ${alvo || 'Qualquer'}\n• Com tropas: ${temTropas ? 'Sim' : 'Não'}`);
         document.getElementById('farm-list-container').innerHTML = renderFarmList();
@@ -805,12 +808,25 @@
       }
     };
 
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    // ✅ CORREÇÃO CRÍTICA: Manter as funções disponíveis globalmente
+    Object.assign(window.TWS_FarmInteligente, farmFunctions);
+
+    overlay.onclick = (e) => { 
+      if (e.target === overlay) {
+        // ✅ IMPORTANTE: Não remover as funções globais ao fechar o modal
+        overlay.remove(); 
+      }
+    };
   }
 
   // === INICIALIZAÇÃO ===
   function init() {
-    window.TWS_FarmInteligente = window.TWS_FarmInteligente || {};
+    // ✅ CORREÇÃO: Garantir que TWS_FarmInteligente existe e tem a função show
+    if (!window.TWS_FarmInteligente) {
+      window.TWS_FarmInteligente = {};
+    }
+    
+    // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
     window.TWS_FarmInteligente.show = showFarmModal;
     
     // Expor funções de conversão em massa globalmente
@@ -822,6 +838,7 @@
     startFarmMonitor();
     
     console.log('[TW Farm Inteligente] ✅ Carregado - Sistema com CONVERSÃO EM MASSA!');
+    console.log('[TW Farm Inteligente] ✅ Função show disponível:', typeof window.TWS_FarmInteligente.show);
   }
 
   if (document.readyState === 'loading') {
