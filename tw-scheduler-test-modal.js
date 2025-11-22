@@ -491,8 +491,8 @@
     // Renderizar TAB 1 (Seleção)
     document.getElementById('tab-0').innerHTML = renderAgendamentosList();
 
-    // Funções expostas globalmente
-    window.TWS_TestModal = {
+    // ✅ CORREÇÃO CRÍTICA: Reatribuir funções SEMPRE que o modal abrir
+    const modalFunctions = {
       _selectAgenda(idx) {
         selectedAgenda = pendentes[idx];
         currentDatetime = selectedAgenda.datetime;
@@ -619,12 +619,35 @@
       }
     };
 
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    // ✅ CORREÇÃO: Usar Object.assign para adicionar funções sem sobrescrever
+    Object.assign(window.TWS_TestModal, modalFunctions);
+
+    // ✅ CORREÇÃO: Fechar seguro - só remove elementos DOM
+    overlay.onclick = (e) => { 
+      if (e.target === overlay) {
+        overlay.remove(); // ⚠️ Só remove DOM, não as funções
+      }
+    };
   }
 
-  // === Expor API global ===
-  window.TWS_TestModal = window.TWS_TestModal || {};
-  window.TWS_TestModal.show = showModal;
+  // === INICIALIZAÇÃO CORRIGIDA ===
+  function init() {
+    // ✅ CORREÇÃO: Garantir que TWS_TestModal existe
+    if (!window.TWS_TestModal) {
+      window.TWS_TestModal = {};
+    }
+    
+    // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
+    window.TWS_TestModal.show = showModal;
+    
+    console.log('[TW Scheduler Test Modal] ✅ Carregado com interface de abas!');
+    console.log('[TW Scheduler Test Modal] ✅ Função show disponível:', typeof window.TWS_TestModal.show);
+  }
 
-  console.log('[TW Scheduler Test Modal] ✅ Carregado com interface de abas!');
+  // Inicializar
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
