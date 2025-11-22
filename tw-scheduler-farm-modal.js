@@ -1,634 +1,535 @@
-(function () {
-  'use strict';
+// === SISTEMA APRIMORADO DE CONVERSÃO DE AGENDAMENTOS ===
 
-  // === SISTEMA DE CÁLCULO DO PAINEL DE ATAQUES ===
-  const velocidadesUnidades = {
-      spear: 18,      // Lanceiro
-      sword: 22,      // Espadachim
-      axe: 18,        // Machado
-      archer: 18,     // Arqueiro
-      spy: 9,         // Espião
-      light: 10,      // Cavalaria Leve
-      marcher: 10,    // Arqueiro a Cavalo
-      heavy: 11,      // Cavalaria Pesada
-      ram: 30,        // Ariete
-      catapult: 30,   // Catapulta
-      knight: 10,     // Paladino
-      snob: 35        // Nobre
-  };
+/**
+ * MELHORIAS IMPLEMENTADAS:
+ * 1. Conversão individual simplificada com modal visual
+ * 2. Conversão em massa com seleção por checkbox
+ * 3. Pré-visualização de agendamentos
+ * 4. Filtros por origem/destino
+ * 5. Configurações padrão reutilizáveis
+ */
 
-  const unidadesPorVelocidade = [
-      'snob', 'catapult', 'ram', 'sword', 'spear', 'archer', 'axe',
-      'heavy', 'light', 'marcher', 'knight', 'spy'
-  ];
+// ✅ NOVO: Configurações padrão de conversão
+const FARM_CONFIG = {
+  defaultInterval: 5,
+  presets: {
+    'rápido': { interval: 3, label: '⚡ Rápido (3 min)' },
+    'normal': { interval: 5, label: '⏰ Normal (5 min)' },
+    'seguro': { interval: 10, label: '🛡️ Seguro (10 min)' },
+    'lento': { interval: 15, label: '🐢 Lento (15 min)' }
+  },
+  savedIntervals: JSON.parse(localStorage.getItem('tws_farm_intervals') || '{}')
+};
 
-  function getUnidadeMaisLenta(tropas) {
-      for (const unidade of unidadesPorVelocidade) {
-          if (tropas[unidade] > 0) {
-              return unidade;
-          }
-      }
-      return null;
-  }
+// ✅ Salvar intervalo preferido
+function saveFarmInterval(chave, intervalo) {
+  FARM_CONFIG.savedIntervals[chave] = intervalo;
+  localStorage.setItem('tws_farm_intervals', JSON.stringify(FARM_CONFIG.savedIntervals));
+}
 
-  function calcularDistancia(coord1, coord2) {
-      const [x1, y1] = coord1.split('|').map(Number);
-      const [x2, y2] = coord2.split('|').map(Number);
-      const deltaX = Math.abs(x1 - x2);
-      const deltaY = Math.abs(y1 - y2);
-      return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-  }
+// ✅ NOVO: Modal de seleção individual com pré-visualização
+function showConvertSingleModal() {
+  const lista = getList();
+  const pendentes = lista.filter(a => !a.done);
 
-  // ✅ CALCULA TEMPO DE VIAGEM USANDO O SISTEMA DO PAINEL
-  function calculateTravelTime(origem, destino, troops) {
-      try {
-          const distancia = calcularDistancia(origem, destino);
-          const unidadeMaisLenta = getUnidadeMaisLenta(troops);
-          
-          if (!unidadeMaisLenta) {
-              console.warn('[Farm] Nenhuma unidade encontrada, usando padrão');
-              return 3600; // 1 hora como fallback
-          }
-          
-          const velocidadeBase = velocidadesUnidades[unidadeMaisLenta];
-          
-          // Tempo em minutos = distância × velocidade (minutos/campo)
-          const tempoMinutos = distancia * velocidadeBase;
-          // Converter para segundos
-          const tempoSegundos = tempoMinutos * 60;
-          
-          console.log(`[Farm] Cálculo: ${distancia.toFixed(2)} campos × ${velocidadeBase} min/campo (${unidadeMaisLenta}) = ${tempoMinutos.toFixed(1)} min (${tempoSegundos} segundos)`);
-          
-          return Math.max(300, Math.min(tempoSegundos, 14400)); // 5min a 4horas
-          
-      } catch (error) {
-          console.error('[Farm] Erro no cálculo de tempo:', error);
-          return 3600; // 1 hora como fallback
-      }
-  }
-
-  // ✅ CALCULA TEMPO DE RETORNO DAS TROPAS
-  function calculateReturnTime(origem, destino, troops) {
-      return calculateTravelTime(destino, origem, troops);
-  }
-
-  // === SISTEMA DO FARM INTELIGENTE ===
-  
-  if (!window.TWS_Backend) {
-    console.error('[TW Farm Inteligente] Backend não carregado!');
+  if (pendentes.length === 0) {
+    alert('❌ Nenhum agendamento pendente!');
     return;
   }
 
-  const {
-    parseCoord,
-    parseDateTimeToMs,
-    getList,
-    setList,
-    TROOP_LIST
-  } = window.TWS_Backend;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  `;
 
-  // ✅ Formata data para DD/MM/YYYY HH:MM:SS
-  function formatDateTime(date) {
-    if (!(date instanceof Date) || isNaN(date.getTime())) {
-      console.error('[Farm] Data inválida recebida:', date);
-      const fallback = new Date(Date.now() + 60000);
-      const pad = (n) => n.toString().padStart(2, '0');
-      return `${pad(fallback.getDate())}/${pad(fallback.getMonth() + 1)}/${fallback.getFullYear()} ${pad(fallback.getHours())}:${pad(fallback.getMinutes())}:${pad(fallback.getSeconds())}`;
-    }
-    
-    const pad = (n) => n.toString().padStart(2, '0');
-    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  }
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 0;
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+  `;
 
-  // ✅ Gerar ID único
-  function generateId() {
-    return 'farm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  }
+  let selectedIdx = null;
+  let selectedPreset = 'normal';
 
-  // ✅ Armazenamento para farms inteligentes
-  function getFarmList() {
-    return JSON.parse(localStorage.getItem('tws_farm_inteligente') || '[]');
-  }
+  const renderPreview = (idx) => {
+    if (idx === null) return '';
+    const agend = pendentes[idx];
+    const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
+    const distancia = calcularDistancia(agend.origem, agend.alvo);
+    const unidadeMaisLenta = getUnidadeMaisLenta(agend);
+    const velocidade = velocidadesUnidades[unidadeMaisLenta] || 0;
+    const tempoIda = Math.round(distancia * velocidade);
+    const tempoVolta = tempoIda;
+    const tempoTotal = tempoIda + tempoVolta;
 
-  function setFarmList(list) {
-    localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
-  }
+    return `
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <div style="font-weight: bold; color: #333; margin-bottom: 10px; font-size: 14px;">
+          📋 PRÉ-VISUALIZAÇÃO
+        </div>
+        <div style="background: white; padding: 12px; border-left: 4px solid #4CAF50; border-radius: 4px;">
+          <div style="color: #8B4513; font-weight: bold; margin-bottom: 8px;">
+            ${agend.origem} → ${agend.alvo}
+          </div>
+          <div style="color: #666; font-size: 12px; line-height: 1.6;">
+            <div>📅 <strong>Data:</strong> ${agend.datetime}</div>
+            <div>🪖 <strong>Tropas:</strong> ${tropas || 'Nenhuma'}</div>
+            <div>📏 <strong>Distância:</strong> ${distancia.toFixed(1)} campos</div>
+            <div>🐌 <strong>Unidade lenta:</strong> ${unidadeMaisLenta} (${velocidade}min/campo)</div>
+            <div style="margin-top: 8px; padding: 8px; background: #e8f5e9; border-radius: 4px;">
+              ⏱️ <strong>Ciclo:</strong> ${tempoIda}min (ida) + ${tempoVolta}min (volta) = <strong>${tempoTotal}min</strong> total
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
 
-  // ✅ CONVERTER agendamento normal em Farm Inteligente
-  function convertToFarm(agendamentoIndex, intervalo = 5) {
-    const lista = getList();
-    
-    if (agendamentoIndex < 0 || agendamentoIndex >= lista.length) {
-        alert('❌ Agendamento não encontrado!');
-        return false;
-    }
-    
-    const agendamento = lista[agendamentoIndex];
-    
-    // Verificar se já é um farm
-    const farms = getFarmList();
-    const jaExiste = farms.find(f => f.agendamentoBaseId === agendamentoIndex);
-    if (jaExiste) {
-        alert('❌ Este agendamento já é um Farm Inteligente!');
-        return false;
-    }
-    
-    // ✅ CORREÇÃO: REINICIAR status se já foi executado
-    if (agendamento.done) {
-        console.log(`[Farm] Reiniciando agendamento marcado como "já processado": ${agendamento.origem} → ${agendamento.alvo}`);
-        
-        // Reiniciar status para permitir novo ciclo
-        agendamento.done = false;
-        agendamento.success = false;
-        agendamento.executedAt = null;
-        agendamento.error = null;
-        
-        // ✅ ATUALIZAR data para futuro próximo
-        const now = new Date();
-        const newDate = new Date(now.getTime() + 60000); // 1 minuto no futuro
-        agendamento.datetime = formatDateTime(newDate);
-        
-        console.log(`[Farm] Novo horário definido: ${agendamento.datetime}`);
-        
-        // Salvar alterações
-        setList(lista);
-    }
-    
-    // Extrair tropas do agendamento
-    const troops = {};
-    TROOP_LIST.forEach(u => {
-        troops[u] = agendamento[u] || 0;
-    });
-    
-    // Criar farm baseado no agendamento
-    const farm = {
-        id: generateId(),
-        agendamentoBaseId: agendamentoIndex,
-        origem: agendamento.origem,
-        alvo: agendamento.alvo,
-        troops: troops,
-        intervalo: parseInt(intervalo) || 5,
-        paused: false,
-        active: true,
-        stats: { totalRuns: 0, successRuns: 0, lastRun: null },
-        nextRun: agendamento.datetime,
-        created: new Date().toISOString(),
-        lastReturnTime: null
-    };
-    
-    // Adicionar à lista de farms
-    farms.push(farm);
-    setFarmList(farms);
-    
-    console.log(`[Farm] Agendamento convertido: ${farm.origem} → ${farm.alvo}`);
-    return true;
-  }
-
-  // ✅ MONITORAR execução de agendamentos para Farms (CÁLCULO CORRETO IDA+VOLTA)
-  function monitorAgendamentosParaFarm() {
-    const lista = getList();
-    const farms = getFarmList().filter(f => !f.paused && f.active !== false);
-    
-    farms.forEach(farm => {
-      const agendamentoBase = lista[farm.agendamentoBaseId];
-      
-      if (agendamentoBase && agendamentoBase.done && agendamentoBase.success) {
-        console.log(`[Farm] Agendamento executado: ${farm.origem} → ${farm.alvo}`);
-        
-        // Atualizar estatísticas
-        farm.stats.totalRuns++;
-        farm.stats.successRuns++;
-        farm.stats.lastRun = new Date().toISOString();
-        
-        const now = new Date();
-        let nextRunTime;
-        
-        try {
-          // ✅ CORREÇÃO: CALCULAR PRÓXIMO ATAQUE BASEADO NA CHEGADA + VOLTA
-          const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
-          const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
-          
-          // ✅ CORREÇÃO CRÍTICA: Usar horário de CHEGADA como base, não o horário atual
-          let baseTime;
-          
-          if (agendamentoBase.executedAt) {
-            // Se temos horário de execução real, usar ele + tempo de ida para chegar na chegada
-            baseTime = new Date(agendamentoBase.executedAt);
-          } else {
-            // Calcular chegada estimada baseada no tempo de ida
-            const tempoIdaMs = travelTimeToTarget * 1000;
-            baseTime = new Date(now.getTime() + tempoIdaMs);
-          }
-          
-          // ✅ PRÓXIMO ATAQUE = CHEGADA + VOLTA + INTERVALO
-          const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-          nextRunTime = new Date(baseTime.getTime() + (returnTime * 1000) + intervaloMs);
-          
-          console.log(`[Farm] Cálculo CORRIGIDO (IDA+VOLTA):`);
-          console.log(`  - Tempo ida: ${Math.round(travelTimeToTarget/60)}min`);
-          console.log(`  - Tempo volta: ${Math.round(returnTime/60)}min`);
-          console.log(`  - Chegada base: ${baseTime.toLocaleTimeString()}`);
-          console.log(`  - Retorno: ${new Date(baseTime.getTime() + returnTime * 1000).toLocaleTimeString()}`);
-          console.log(`  - Próximo ataque: ${nextRunTime.toLocaleTimeString()}`);
-          console.log(`  - Tempo total ciclo: ${Math.round((travelTimeToTarget + returnTime)/60)}min`);
-          
-          farm.lastReturnTime = returnTime;
-          
-        } catch (error) {
-          console.error('[Farm] Erro no cálculo:', error);
-          // Fallback: agendar para 2 horas no futuro
-          nextRunTime = new Date(now.getTime() + 7200000);
-        }
-        
-        // ✅ GARANTIR que não agenda antes do retorno
-        const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
-        const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
-        const retornoEstimado = new Date(now.getTime() + (travelTimeToTarget * 1000) + (returnTime * 1000));
-        
-        if (nextRunTime < retornoEstimado) {
-          console.warn(`[Farm] Correção: próximo ataque estava antes do retorno, ajustando...`);
-          nextRunTime = new Date(retornoEstimado.getTime() + (farm.intervalo || 5) * 60000);
-        }
-        
-        // Recriar agendamento
-        const novoAgendamento = {
-          ...agendamentoBase,
-          datetime: formatDateTime(nextRunTime),
-          done: false,
-          success: false,
-          executedAt: null,
-          error: null
-        };
-        
-        lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
-        setList(lista);
-        
-        farm.nextRun = novoAgendamento.datetime;
-        
-        // Atualizar farm
-        const updatedFarms = getFarmList();
-        const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
-        if (farmIdx !== -1) {
-          updatedFarms[farmIdx] = farm;
-          setFarmList(updatedFarms);
-        }
-        
-        console.log(`[Farm] Novo ciclo CORRIGIDO: ${novoAgendamento.datetime}`);
-        
-        window.dispatchEvent(new CustomEvent('tws-farm-updated'));
-        window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-      }
-    });
-  }
-
-  // ✅ RENDERIZAR lista de farms ativos
-  function renderFarmList() {
-    const farms = getFarmList().filter(f => f.active !== false);
-    const listaAgendamentos = getList();
-    
-    if (farms.length === 0) {
+  const renderList = () => {
+    return pendentes.map((agend, idx) => {
+      const isSelected = selectedIdx === idx;
+      const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).slice(0, 3).join(', ');
       return `
-        <div style="text-align: center; padding: 40px; color: #999;">
-          <div style="font-size: 48px; margin-bottom: 10px;">🌾</div>
-          <div style="font-size: 16px; font-weight: bold;">Nenhum farm inteligente ativo</div>
-          <small>Use "Converter Agendamento" para transformar agendamentos normais em farms automáticos</small>
+        <div
+          onclick="this.parentElement.dispatchEvent(new CustomEvent('select-item', {detail: {idx: ${idx}}}))"
+          style="
+            padding: 12px;
+            margin: 8px 0;
+            background: ${isSelected ? '#E8F5E8' : '#fff'};
+            border: 2px solid ${isSelected ? '#4CAF50' : '#ddd'};
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+          "
+          onmouseover="this.style.background='#f9f9f9'"
+          onmouseout="this.style.background='${isSelected ? '#E8F5E8' : '#fff'}'"
+        >
+          <div style="font-weight: bold; color: #8B4513; margin-bottom: 4px;">
+            ${agend.origem} → ${agend.alvo}
+          </div>
+          <div style="font-size: 12px; color: #666;">
+            📅 ${agend.datetime} | 🪖 ${tropas || 'N/A'}
+          </div>
         </div>
       `;
+    }).join('');
+  };
+
+  const updateUI = () => {
+    listContainer.innerHTML = renderList();
+    previewContainer.innerHTML = renderPreview(selectedIdx);
+  };
+
+  const listContainer = document.createElement('div');
+  const previewContainer = document.createElement('div');
+
+  modal.innerHTML = `
+    <div style="background: #4CAF50; padding: 18px; border-bottom: 2px solid #388E3C; color: white;">
+      <div style="font-size: 18px; font-weight: bold;">🔄 Converter Agendamento</div>
+      <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Selecione um agendamento para converter em Farm Inteligente</div>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; padding: 15px; display: flex; gap: 15px;">
+      <!-- Lista -->
+      <div style="flex: 0 0 45%; border-right: 1px solid #ddd; padding-right: 15px;">
+        <div style="font-size: 12px; font-weight: bold; color: #666; margin-bottom: 10px;">
+          AGENDAMENTOS DISPONÍVEIS (${pendentes.length})
+        </div>
+        <div id="list-container"></div>
+      </div>
+
+      <!-- Pré-visualização e Opções -->
+      <div style="flex: 1; overflow-y: auto;">
+        <div id="preview-container"></div>
+
+        <!-- Opções de Intervalo -->
+        <div style="margin-top: 15px;">
+          <div style="font-size: 12px; font-weight: bold; color: #666; margin-bottom: 8px;">
+            ⏰ INTERVALO ENTRE CICLOS
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${Object.entries(FARM_CONFIG.presets).map(([key, preset]) => `
+              <button onclick="document.body.dispatchEvent(new CustomEvent('select-preset', {detail: {preset: '${key}'}}))"
+                style="
+                  padding: 8px;
+                  border: 2px solid ${selectedPreset === key ? '#4CAF50' : '#ddd'};
+                  background: ${selectedPreset === key ? '#E8F5E8' : '#fff'};
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 11px;
+                  text-align: left;
+                  transition: all 0.2s;
+                "
+              >
+                ${preset.label}
+              </button>
+            `).join('')}
+            <input id="custom-interval" type="number" min="1" max="60" value="5"
+              style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+              placeholder="Ou digite um valor personalizado"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding: 15px; border-top: 1px solid #ddd; display: flex; gap: 10px; justify-content: flex-end;">
+      <button onclick="this.closest('div').parentElement.parentElement.remove()"
+        style="padding: 10px 20px; border: none; background: #9E9E9E; color: white; border-radius: 4px; cursor: pointer;">
+        ❌ Cancelar
+      </button>
+      <button onclick="document.body.dispatchEvent(new CustomEvent('confirm-convert'))"
+        style="padding: 10px 20px; border: none; background: #4CAF50; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;"
+        ${selectedIdx === null ? 'disabled' : ''}
+      >
+        ✅ Converter
+      </button>
+    </div>
+  `;
+
+  // Atualizar referencias dos containers
+  const listContainerDiv = modal.querySelector('#list-container');
+  const previewContainerDiv = modal.querySelector('#preview-container');
+  const customIntervalInput = modal.querySelector('#custom-interval');
+
+  // Event listeners
+  listContainerDiv.parentElement.addEventListener('select-item', (e) => {
+    selectedIdx = e.detail.idx;
+    updateUI();
+  });
+
+  document.body.addEventListener('select-preset', (e) => {
+    selectedPreset = e.detail.preset;
+    customIntervalInput.value = FARM_CONFIG.presets[selectedPreset].interval;
+  });
+
+  document.body.addEventListener('confirm-convert', () => {
+    if (selectedIdx === null) return;
+    const agendamentoEscolhido = pendentes[selectedIdx];
+    const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
+    const intervaloNum = parseInt(customIntervalInput.value) || 5;
+
+    if (convertToFarm(listaIdx, intervaloNum)) {
+      saveFarmInterval(`${agendamentoEscolhido.origem}-${agendamentoEscolhido.alvo}`, intervaloNum);
+      alert(`✅ FARM CRIADO!\n\n${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\nCiclos a cada ${intervaloNum} minutos`);
+      overlay.remove();
+      document.body.dispatchEvent(new CustomEvent('tws-farm-updated'));
+    }
+  }, { once: true });
+
+  // Render inicial
+  updateUI();
+  listContainerDiv.innerHTML = renderList();
+  previewContainerDiv.innerHTML = renderPreview(selectedIdx);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+// ✅ NOVO: Modal de conversão em massa
+function showConvertBatchModal() {
+  const lista = getList();
+  const pendentes = lista.filter(a => !a.done);
+
+  if (pendentes.length === 0) {
+    alert('❌ Nenhum agendamento pendente!');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  `;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 0;
+    width: 90%;
+    max-width: 700px;
+    max-height: 85vh;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+  `;
+
+  const selected = new Set();
+  let filterOrigem = '';
+  let filterDestino = '';
+  let selectedPreset = 'normal';
+
+  const renderCheckboxList = () => {
+    let filtered = pendentes;
+
+    if (filterOrigem) filtered = filtered.filter(a => a.origem.includes(filterOrigem));
+    if (filterDestino) filtered = filtered.filter(a => a.alvo.includes(filterDestino));
+
+    return filtered.map((agend, realIdx) => {
+      const actualIdx = pendentes.indexOf(agend);
+      const isChecked = selected.has(actualIdx);
+      const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).slice(0, 2).join(', ');
+      const distancia = calcularDistancia(agend.origem, agend.alvo).toFixed(1);
+
+      return `
+        <label style="
+          display: flex;
+          align-items: center;
+          padding: 12px;
+          margin: 6px 0;
+          background: ${isChecked ? '#E8F5E8' : '#fff'};
+          border: 2px solid ${isChecked ? '#4CAF50' : '#ddd'};
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s;
+        " onmouseover="this.style.background='#f9f9f9'" onmouseout="this.style.background='${isChecked ? '#E8F5E8' : '#fff'}'">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} 
+            onchange="this.closest('label').dispatchEvent(new CustomEvent('toggle-item', {detail: {idx: ${actualIdx}}}));"
+            style="margin-right: 12px; cursor: pointer; width: 18px; height: 18px;"
+          />
+          <div style="flex: 1;">
+            <div style="font-weight: bold; color: #8B4513;">
+              ${agend.origem} → ${agend.alvo}
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 3px;">
+              📅 ${agend.datetime} | 📏 ${distancia} campos | 🪖 ${tropas || 'N/A'}
+            </div>
+          </div>
+        </label>
+      `;
+    }).join('');
+  };
+
+  const listContainer = document.createElement('div');
+  listContainer.style.cssText = 'flex: 1; overflow-y: auto; padding: 15px;';
+
+  modal.innerHTML = `
+    <div style="background: #4CAF50; padding: 18px; border-bottom: 2px solid #388E3C; color: white;">
+      <div style="font-size: 18px; font-weight: bold;">📦 Converter em Massa</div>
+      <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Selecione múltiplos agendamentos para converter de uma vez</div>
+    </div>
+
+    <!-- Filtros -->
+    <div style="padding: 15px; background: #f5f5f5; border-bottom: 1px solid #ddd;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <input id="filter-origem" type="text" placeholder="Filtrar origem..." 
+          style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+        />
+        <input id="filter-destino" type="text" placeholder="Filtrar destino..."
+          style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+        />
+      </div>
+      <button onclick="this.dispatchEvent(new CustomEvent('select-all'))"
+        style="padding: 6px 12px; border: none; background: #2196F3; color: white; border-radius: 4px; cursor: pointer; font-size: 11px;">
+        ✅ Selecionar Todos
+      </button>
+      <button onclick="this.dispatchEvent(new CustomEvent('clear-all'))"
+        style="padding: 6px 12px; border: none; background: #FF9800; color: white; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">
+        ⬜ Limpar Seleção
+      </button>
+      <div style="font-size: 11px; color: #666; margin-top: 8px; font-weight: bold;">
+        Selecionados: <span id="selected-count">0</span>/<span id="total-count">${pendentes.length}</span>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div id="list-container"></div>
+
+    <!-- Intervalo -->
+    <div style="padding: 15px; background: #f9f9f9; border-top: 1px solid #ddd;">
+      <div style="font-size: 12px; font-weight: bold; color: #666; margin-bottom: 8px;">
+        ⏰ INTERVALO PARA TODOS
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+        ${Object.entries(FARM_CONFIG.presets).map(([key, preset]) => `
+          <button onclick="this.parentElement.dispatchEvent(new CustomEvent('select-preset', {detail: {preset: '${key}'}}))"
+            style="
+              padding: 8px;
+              border: 2px solid ${selectedPreset === key ? '#4CAF50' : '#ddd'};
+              background: ${selectedPreset === key ? '#E8F5E8' : '#fff'};
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 10px;
+              font-weight: bold;
+              transition: all 0.2s;
+            "
+          >
+            ${preset.label.split('(')[0].trim()}
+          </button>
+        `).join('')}
+      </div>
+      <input id="custom-interval" type="number" min="1" max="60" value="5"
+        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; margin-top: 8px;"
+        placeholder="Ou digite valor personalizado (minutos)"
+      />
+    </div>
+
+    <!-- Botões -->
+    <div style="padding: 15px; border-top: 1px solid #ddd; display: flex; gap: 10px; justify-content: flex-end;">
+      <button onclick="this.closest('div').parentElement.parentElement.remove()"
+        style="padding: 10px 20px; border: none; background: #9E9E9E; color: white; border-radius: 4px; cursor: pointer;">
+        ❌ Cancelar
+      </button>
+      <button onclick="document.body.dispatchEvent(new CustomEvent('confirm-batch'))"
+        style="padding: 10px 20px; border: none; background: #4CAF50; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;"
+      >
+        ✅ Converter ${selected.size > 0 ? `(${selected.size})` : ''}
+      </button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const updateList = () => {
+    listContainer.innerHTML = renderCheckboxList();
+    document.getElementById('selected-count').textContent = selected.size;
+    modal.querySelector('button:last-of-type').textContent = 
+      `✅ Converter ${selected.size > 0 ? `(${selected.size})` : ''}`;
+  };
+
+  const filterOrigemInput = modal.querySelector('#filter-origem');
+  const filterDestinoInput = modal.querySelector('#filter-destino');
+  const customIntervalInput = modal.querySelector('#custom-interval');
+
+  modal.appendChild(listContainer);
+
+  filterOrigemInput.addEventListener('input', (e) => {
+    filterOrigem = e.target.value;
+    updateList();
+  });
+
+  filterDestinoInput.addEventListener('input', (e) => {
+    filterDestino = e.target.value;
+    updateList();
+  });
+
+  listContainer.addEventListener('toggle-item', (e) => {
+    if (selected.has(e.detail.idx)) selected.delete(e.detail.idx);
+    else selected.add(e.detail.idx);
+    updateList();
+  });
+
+  modal.querySelector('.grid').addEventListener('select-preset', (e) => {
+    selectedPreset = e.detail.preset;
+    customIntervalInput.value = FARM_CONFIG.presets[selectedPreset].interval;
+  });
+
+  const filterDiv = modal.querySelector('div:nth-child(3)');
+  filterDiv.querySelector('button:first-of-type').addEventListener('click', () => {
+    pendentes.forEach((_, idx) => selected.add(idx));
+    updateList();
+  });
+
+  filterDiv.querySelector('button:nth-of-type(2)').addEventListener('click', () => {
+    selected.clear();
+    updateList();
+  });
+
+  document.body.addEventListener('confirm-batch', () => {
+    if (selected.size === 0) {
+      alert('❌ Selecione pelo menos um agendamento!');
+      return;
     }
 
-    let html = '<div style="display: grid; gap: 10px;">';
-    
-    farms.forEach((farm) => {
-      const now = Date.now();
-      let nextRun = null;
-      
-      try {
-        nextRun = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : null;
-      } catch (e) {
-        console.error('[Farm] Erro ao parsear data:', farm.nextRun);
-      }
-      
-      const status = farm.paused ? 'pausado' : (nextRun && nextRun > now ? 'agendado' : 'ativo');
-      
-      let statusColor = '#4CAF50';
-      let statusText = '🟢 Ativo';
-      
-      if (farm.paused) {
-        statusColor = '#FF9800';
-        statusText = '⏸️ Pausado';
-      } else if (nextRun && nextRun > now) {
-        statusColor = '#2196F3';
-        statusText = '⏰ Agendado';
-      }
+    const intervaloNum = parseInt(customIntervalInput.value) || 5;
+    let successCount = 0;
+    let failCount = 0;
 
-      const stats = farm.stats || { totalRuns: 0, successRuns: 0 };
-      
-      // Verificar status do agendamento base
-      const agendamentoBase = listaAgendamentos[farm.agendamentoBaseId];
-      const baseStatus = agendamentoBase ? 
-        (agendamentoBase.done ? 
-          (agendamentoBase.success ? '✅ Concluído' : '❌ Falhou') : 
-          '⏳ Pendente') : 
-        '❓ Agendamento não encontrado';
-      
-      // Calcular tempo até próximo ataque
-      let tempoRestante = '';
-      if (nextRun && nextRun > now) {
-        const diffMs = nextRun - now;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const remainingMins = diffMins % 60;
-        
-        if (diffHours > 0) {
-          tempoRestante = `${diffHours}h ${remainingMins}m`;
-        } else {
-          tempoRestante = `${diffMins}m`;
-        }
+    selected.forEach(idx => {
+      const listaIdx = lista.indexOf(pendentes[idx]);
+      if (convertToFarm(listaIdx, intervaloNum)) {
+        successCount++;
+        const agend = pendentes[idx];
+        saveFarmInterval(`${agend.origem}-${agend.alvo}`, intervaloNum);
+      } else {
+        failCount++;
       }
-      
-      // Calcular distância para exibição
-      const distancia = calcularDistancia(farm.origem, farm.alvo);
-      const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
-      const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
-      const tempoIda = distancia * velocidade;
-      const tempoVolta = tempoIda; // mesmo tempo
-      const tempoTotalCiclo = tempoIda + tempoVolta;
-      
-      html += `
-        <div style="
-          background: white;
-          border: 3px solid ${statusColor};
-          border-radius: 8px;
-          padding: 15px;
-          transition: all 0.3s;
-        " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-            <div style="flex: 1;">
-              <div style="font-weight: bold; color: #8B4513; font-size: 16px;">
-                ${farm.origem} → ${farm.alvo}
-              </div>
-              <div style="color: #666; font-size: 12px; margin-top: 4px;">
-                🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}
-              </div>
-              <div style="color: #888; font-size: 11px; margin-top: 2px;">
-                📋 ${baseStatus} | ⏰ Ciclo: ${farm.intervalo} min
-                ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
-              </div>
-              <div style="color: #666; font-size: 10px; margin-top: 2px;">
-                📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo 
-              </div>
-              <div style="color: #888; font-size: 10px; margin-top: 1px;">
-                ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
-              </div>
-            </div>
-            <div style="
-              background: ${statusColor};
-              color: white;
-              padding: 6px 12px;
-              border-radius: 20px;
-              font-size: 12px;
-              font-weight: bold;
-            ">
-              ${statusText}
-            </div>
-          </div>
-          
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; color: #666;">
-            <div>
-              <strong>Próximo envio:</strong><br>
-              ${farm.nextRun || 'Calculando...'}
-              ${tempoRestante ? `<br><small>⏱️ ${tempoRestante}</small>` : ''}
-            </div>
-            <div>
-              <strong>Estatísticas:</strong><br>
-              ${stats.totalRuns} ciclos (${stats.successRuns} sucessos)
-              ${stats.lastRun ? `<br><small>Último: ${new Date(stats.lastRun).toLocaleTimeString()}</small>` : ''}
-            </div>
-          </div>
-          
-          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-            <button onclick="TWS_FarmInteligente._toggleFarm('${farm.id}')" style="
-              padding: 6px 12px;
-              border: none;
-              border-radius: 4px;
-              background: ${farm.paused ? '#4CAF50' : '#FF9800'};
-              color: white;
-              font-size: 11px;
-              cursor: pointer;
-            ">${farm.paused ? '▶️ Retomar' : '⏸️ Pausar'}</button>
-            
-            <button onclick="TWS_FarmInteligente._deleteFarm('${farm.id}')" style="
-              padding: 6px 12px;
-              border: none;
-              border-radius: 4px;
-              background: #F44336;
-              color: white;
-              font-size: 11px;
-              cursor: pointer;
-            ">🗑️ Excluir Farm</button>
-          </div>
-        </div>
-      `;
     });
 
-    html += '</div>';
-    return html;
-  }
+    alert(`✅ CONVERSÃO CONCLUÍDA!\n\n✅ ${successCount} farms criados\n${failCount > 0 ? `⚠️ ${failCount} falharam` : ''}\n\nCiclos configurados para ${intervaloNum} minutos`);
+    overlay.remove();
+    document.body.dispatchEvent(new CustomEvent('tws-farm-updated'));
+  }, { once: true });
 
-  // ✅ INICIAR monitor periódico
-  function startFarmMonitor() {
-    setInterval(monitorAgendamentosParaFarm, 10000);
-    console.log('[Farm Inteligente] ✅ Monitor de agendamentos ativo!');
-  }
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
-  // === MODAL PRINCIPAL DO FARM ===
-  function showFarmModal() {
-    const existing = document.getElementById('tws-farm-modal');
-    if (existing) existing.remove();
+  updateList();
+}
 
-    const overlay = document.createElement('div');
-    overlay.id = 'tws-farm-modal';
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.8);
-      z-index: 999999;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      animation: fadeIn 0.2s ease;
-    `;
+// ✅ Atualizar os botões no modal principal
+function updateFarmModalButtons() {
+  const btnConvert = document.querySelector('.btn-convert');
+  if (!btnConvert) return;
 
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      background: linear-gradient(135deg, #E8F5E8 0%, #C8E6C9 100%);
-      border: 3px solid #4CAF50;
-      border-radius: 12px;
-      padding: 0;
-      width: 90%;
-      max-width: 800px;
-      max-height: 90vh;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      animation: slideIn 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    `;
-
-    modal.innerHTML = `
-      <style>
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideIn { from { transform: scale(0.9) translateY(-20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-      </style>
-
-      <!-- Cabeçalho -->
-      <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
-        <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
-        <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com cálculo CORRETO de ida + volta
-        </div>
-      </div>
-
-      <!-- Conteúdo -->
-      <div style="flex: 1; overflow-y: auto; padding: 20px;">
-        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
-          <strong>✅ CÁLCULO CORRIGIDO - IDA + VOLTA</strong><br>
-          • Agora calcula: Chegada + Tempo de Volta + Intervalo<br>
-          • Garante que tropas retornem antes do próximo ataque<br>
-          • Evita sobreposição de ciclos
-        </div>
-
-        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-          <button class="btn-convert" onclick="TWS_FarmInteligente._convertAgendamento()" style="
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            background: #9C27B0;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-          ">🔄 Converter Agendamento</button>
-          
-          <button class="btn-cancel" onclick="document.getElementById('tws-farm-modal').remove()" style="
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            background: #9E9E9E;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-          ">❌ Fechar</button>
-        </div>
-
-        <div id="farm-list-container">
-          ${renderFarmList()}
-        </div>
-      </div>
-    `;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    // Funções expostas
-    window.TWS_FarmInteligente = {
-      _toggleFarm(id) {
-        const farms = getFarmList();
-        const farm = farms.find(f => f.id === id);
-        if (farm) {
-          farm.paused = !farm.paused;
-          setFarmList(farms);
-          document.getElementById('farm-list-container').innerHTML = renderFarmList();
-        }
-      },
-
-      _deleteFarm(id) {
-        if (confirm('Tem certeza que deseja excluir este farm inteligente?\n\nO agendamento original será mantido.')) {
-          const farms = getFarmList();
-          const updatedFarms = farms.filter(f => f.id !== id);
-          setFarmList(updatedFarms);
-          document.getElementById('farm-list-container').innerHTML = renderFarmList();
-        }
-      },
-
-      // ✅ FUNÇÃO PRINCIPAL: Converter Agendamento em Farm
-      _convertAgendamento() {
-        const lista = getList();
-        const pendentes = lista.filter(a => !a.done);
-        
-        if (pendentes.length === 0) {
-          alert('❌ Nenhum agendamento pendente encontrado!\n\nCrie um agendamento normal primeiro usando:\n• ➕ Adicionar Agendamento\n• 📋 Importar BBCode\n• 📂 Importar JSON');
-          return;
-        }
-        
-        let mensagem = '📋 SELECIONE UM AGENDAMENTO PARA CONVERTER EM FARM:\n\n';
-        pendentes.forEach((agend, idx) => {
-          const listaIdx = lista.findIndex(a => a === agend);
-          const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
-          const distancia = calcularDistancia(agend.origem, agend.alvo);
-          const unidadeMaisLenta = getUnidadeMaisLenta(agend);
-          const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
-          const tempoIda = Math.round(distancia * velocidade);
-          const tempoVolta = tempoIda;
-          const tempoTotal = tempoIda + tempoVolta;
-          
-          mensagem += `[${idx + 1}] ${agend.origem} → ${agend.alvo}\n`;
-          mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n`;
-          mensagem += `   📏 ${distancia.toFixed(1)} campos | ⏱️ ${tempoIda}min (ida) + ${tempoVolta}min (volta) = ${tempoTotal}min total\n\n`;
-        });
-        
-        mensagem += 'Digite o número do agendamento:';
-        
-        const escolha = prompt(mensagem);
-        if (escolha === null) return;
-        
-        const idxEscolhido = parseInt(escolha) - 1;
-        
-        if (idxEscolhido >= 0 && idxEscolhido < pendentes.length) {
-          const agendamentoEscolhido = pendentes[idxEscolhido];
-          const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
-          
-          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):\n\nRecomendado: tempo_volta + margem de segurança', '5');
-          if (intervalo === null) return;
-          
-          const intervaloNum = parseInt(intervalo) || 5;
-          
-          if (convertToFarm(listaIdx, intervaloNum)) {
-            const distancia = calcularDistancia(agendamentoEscolhido.origem, agendamentoEscolhido.alvo);
-            const tropas = {};
-            TROOP_LIST.forEach(u => { tropas[u] = agendamentoEscolhido[u] || 0; });
-            const tempoIda = calculateTravelTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
-            const tempoVolta = calculateReturnTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
-            
-            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n📏 Distância: ${distancia.toFixed(1)} campos\n⏱️ Tempos calculados: ${Math.round(tempoIda/60)}min (ida) + ${Math.round(tempoVolta/60)}min (volta)\n🔄 Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema agora calculará CORRETAMENTE o retorno das tropas!`);
-            document.getElementById('farm-list-container').innerHTML = renderFarmList();
-          }
-        } else {
-          alert('❌ Número inválido! Selecione um número da lista.');
-        }
-      }
-    };
-
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  }
-
-  // === INICIALIZAÇÃO ===
-  function init() {
-    window.TWS_FarmInteligente = window.TWS_FarmInteligente || {};
-    window.TWS_FarmInteligente.show = showFarmModal;
+  btnConvert.parentElement.innerHTML = `
+    <button onclick="TWS_FarmInteligente._convertAgendamentoUnico()" style="
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      background: #9C27B0;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      flex: 1;
+    ">🔄 Converter Um</button>
     
-    startFarmMonitor();
+    <button onclick="TWS_FarmInteligente._convertAgendamentoBatch()" style="
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      background: #FF6B00;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      flex: 1;
+    ">📦 Converter em Massa</button>
     
-    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema CORRIGIDO com cálculo IDA+VOLTA!');
-  }
+    <button onclick="document.getElementById('tws-farm-modal').remove()" style="
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      background: #9E9E9E;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      flex: 1;
+    ">❌ Fechar</button>
+  `;
+}
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+// ✅ Expor funções globais
+window.TWS_FarmInteligente = window.TWS_FarmInteligente || {};
+window.TWS_FarmInteligente._convertAgendamentoUnico = showConvertSingleModal;
+window.TWS_FarmInteligente._convertAgendamentoBatch = showConvertBatchModal;
