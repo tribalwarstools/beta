@@ -15,39 +15,32 @@
   } = window.TWS_Backend;
 
   // ============================================
-  // ⚙️ MÓDULO DE CÁLCULOS E UTILITÁRIOS
+  // ⚙️ MÓDULO DE CÁLCULOS (COMPARTILHADO)
   // ============================================
   const CalculosUtilitarios = {
-    // Velocidades das unidades (segundos por quadrado)
     velocidadesUnidades: {
       spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
       light: 10, marcher: 10, heavy: 11, ram: 30, catapult: 30,
       knight: 10, snob: 35
     },
 
-    // Ordem de velocidade (mais lento → mais rápido)
     unidadesPorVelocidade: [
       'snob', 'catapult', 'ram', 'sword', 'spear', 'archer', 'axe',
       'heavy', 'light', 'marcher', 'knight', 'spy'
     ],
 
-    // Encontra a unidade mais lenta com quantidade > 0
     getUnidadeMaisLenta(tropas) {
       for (const unidade of this.unidadesPorVelocidade) {
-        if (tropas[unidade] > 0) {
-          return unidade;
-        }
+        if (tropas[unidade] > 0) return unidade;
       }
       return null;
     },
 
-    // Valida coordenada no formato X|Y
     validarCoordenada(coord) {
       const coordSanitizada = coord.replace(/\s+/g, '');
       return /^\d{1,4}\|\d{1,4}$/.test(coordSanitizada);
     },
 
-    // Sanitiza e valida coordenada
     sanitizarCoordenada(coord) {
       const coordSanitizada = coord.replace(/\s+/g, '');
       if (!this.validarCoordenada(coordSanitizada)) {
@@ -60,12 +53,10 @@
       return coordSanitizada;
     },
 
-    // Valida formato DD/MM/YYYY HH:MM:SS
     validarDataHora(dataHoraStr) {
       return /^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2}$/.test(dataHoraStr);
     },
 
-    // Parse de data/hora para objeto Date
     parseDataHora(dataHoraStr) {
       if (!this.validarDataHora(dataHoraStr)) {
         throw new Error(`Formato de data inválido: ${dataHoraStr}`);
@@ -80,7 +71,6 @@
       return date;
     },
 
-    // Formata Date para string DD/MM/YYYY HH:MM:SS
     formatarDataHora(date) {
       const dia = String(date.getDate()).padStart(2, '0');
       const mes = String(date.getMonth() + 1).padStart(2, '0');
@@ -91,7 +81,6 @@
       return `${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`;
     },
 
-    // Calcula distância entre coordenadas
     calcularDistancia(coord1, coord2) {
       const [x1, y1] = coord1.split('|').map(Number);
       const [x2, y2] = coord2.split('|').map(Number);
@@ -100,7 +89,6 @@
       return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     },
 
-    // Calcula tempo de viagem em ms
     calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal = 0) {
       const distancia = this.calcularDistancia(origem, destino);
       const velocidadeBase = this.velocidadesUnidades[unidadeMaisLenta];
@@ -109,7 +97,6 @@
       return tempoMinutos * 60000;
     },
 
-    // Calcula horário de lançamento baseado na chegada
     calcularHorarioLancamento(origem, destino, horaChegada, tropas, bonusSinal = 0) {
       const unidadeMaisLenta = this.getUnidadeMaisLenta(tropas);
       const tempoViagem = this.calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal);
@@ -118,7 +105,6 @@
       return this.formatarDataHora(lancamentoDate);
     },
 
-    // Calcula horário de chegada baseado no lançamento
     calcularHorarioChegada(origem, destino, horaLancamento, tropas, bonusSinal = 0) {
       const unidadeMaisLenta = this.getUnidadeMaisLenta(tropas);
       const tempoViagem = this.calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal);
@@ -328,7 +314,40 @@
     window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
   }
 
-  // === Cria e exibe o modal ===
+  // Carrega village.txt
+  let villageMap = {};
+
+  fetch('/map/village.txt')
+    .then(res => res.text())
+    .then(text => {
+      const lines = text.trim().split('\n');
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length >= 6) {
+          const x = parts[2], y = parts[3], id = parts[0];
+          villageMap[`${x}|${y}`] = id;
+        }
+      }
+      console.log(`[TW Scheduler] Aldeias carregadas: ${Object.keys(villageMap).length}`);
+    })
+    .catch(err => console.error('[TW Scheduler] Erro ao carregar villages:', err));
+
+  const unitImages = {
+    spear: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_spear.webp',
+    sword: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_sword.webp',
+    axe: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_axe.webp',
+    archer: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_archer.webp',
+    spy: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_spy.webp',
+    light: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_light.webp',
+    marcher: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_marcher.webp',
+    heavy: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_heavy.webp',
+    ram: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_ram.webp',
+    catapult: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_catapult.webp',
+    knight: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_knight.webp',
+    snob: 'https://dsbr.innogamescdn.com/asset/4aba6bcf/graphic/unit/unit_snob.webp'
+  };
+
+  // === Cria modal com abas ===
   function showModal() {
     const existing = document.getElementById('tws-bbcode-modal');
     if (existing) existing.remove();
@@ -356,7 +375,7 @@
       border-radius: 8px;
       padding: 20px;
       width: 90%;
-      max-width: 800px;
+      max-width: 900px;
       max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
@@ -365,127 +384,321 @@
 
     modal.innerHTML = `
       <style>
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-50px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .bbcode-textarea {
-          width: 100%;
-          min-height: 150px;
-          padding: 12px;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          font-family: monospace;
-          font-size: 13px;
-          resize: vertical;
-          box-sizing: border-box;
-          background: white;
-        }
-        .bbcode-textarea:focus {
-          outline: none;
-          border-color: #654321;
-          box-shadow: 0 0 5px rgba(139, 69, 19, 0.3);
-        }
-        .bbcode-btn-group {
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .tws-tabs {
           display: flex;
-          gap: 10px;
-          margin-top: 15px;
-          flex-wrap: wrap;
+          gap: 5px;
+          margin-bottom: 15px;
+          border-bottom: 2px solid #8B4513;
         }
-        .bbcode-btn {
-          flex: 1;
-          min-width: 100px;
-          padding: 10px;
+        .tws-tab-btn {
+          padding: 8px 15px;
+          background: #DEB887;
           border: none;
-          border-radius: 4px;
-          font-size: 14px;
-          font-weight: bold;
           cursor: pointer;
+          font-weight: bold;
+          color: #333;
+          border-radius: 4px 4px 0 0;
           transition: all 0.2s;
         }
-        .bbcode-btn:hover:not(:disabled) {
+        .tws-tab-btn.active {
+          background: #8B4513;
+          color: white;
+        }
+        .tws-tab-btn:hover:not(.active) {
+          background: #CD853F;
+        }
+        .tws-tab-content {
+          display: none;
+        }
+        .tws-tab-content.active {
+          display: block;
+        }
+        
+        .bbcode-textarea, .tws-input {
+          width: 100%;
+          padding: 8px;
+          border: 2px solid #8B4513;
+          border-radius: 4px;
+          font-size: 12px;
+          background: white;
+          color: #333;
+          box-sizing: border-box;
+        }
+        .bbcode-textarea { min-height: 120px; font-family: monospace; resize: vertical; }
+        .tws-input { margin-bottom: 8px; }
+        
+        .tws-btn-group {
+          display: flex;
+          gap: 8px;
+          margin: 12px 0;
+          flex-wrap: wrap;
+        }
+        .tws-btn {
+          flex: 1;
+          min-width: 80px;
+          padding: 8px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: bold;
+          transition: all 0.2s;
+        }
+        .tws-btn:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .bbcode-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
+        .tws-btn-primary { background: #27ae60; color: white; }
+        .tws-btn-secondary { background: #2196F3; color: white; }
+        .tws-btn-danger { background: #e74c3c; color: white; }
+        .tws-btn-warning { background: #FF9800; color: white; }
+        .tws-btn-neutral { background: #95a5a6; color: white; }
+        
+        .tws-tropas-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin: 12px 0;
         }
-        .bbcode-btn-parse { background: #2196F3; color: white; }
-        .bbcode-btn-import { background: #4CAF50; color: white; }
-        .bbcode-btn-replace { background: #FF9800; color: white; }
-        .bbcode-btn-cancel { background: #9E9E9E; color: white; }
-        .bbcode-btn-copiar { background: #2980b9; color: white; }
-        .bbcode-info {
+        .tws-tropa-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .tws-tropa-item img {
+          width: 20px; height: 20px; flex-shrink: 0;
+        }
+        .tws-tropa-item label {
+          min-width: 70px; font-size: 11px;
+        }
+        .tws-tropa-item input {
+          width: 60px; padding: 4px; font-size: 11px;
+        }
+        
+        .tws-info {
           background: #E3F2FD;
           border: 1px solid #2196F3;
           border-radius: 4px;
-          padding: 12px;
-          margin-bottom: 15px;
-          font-size: 13px;
-          line-height: 1.6;
+          padding: 10px;
+          margin-bottom: 12px;
+          font-size: 12px;
+          line-height: 1.5;
         }
-        .bbcode-preview {
+        .tws-preview {
           background: white;
           border: 2px solid #8B4513;
           border-radius: 4px;
-          padding: 15px;
-          margin-top: 15px;
-          display: none;
+          padding: 12px;
+          max-height: 350px;
+          overflow-y: auto;
         }
-        .bbcode-stats {
-          display: flex;
-          gap: 20px;
-          margin-bottom: 15px;
-          padding: 10px;
-          background: #FFF9C4;
-          border-radius: 4px;
-          font-weight: bold;
-          flex-wrap: wrap;
+        .tws-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
         }
-        .bbcode-stat-item {
-          display: flex;
-          align-items: center;
-          gap: 5px;
+        .tws-table thead {
+          background: #8B4513;
+          color: white;
+          position: sticky;
+          top: 0;
         }
+        .tws-table th, .tws-table td {
+          padding: 6px;
+          border: 1px solid #ddd;
+          text-align: left;
+        }
+        .tws-table th { font-weight: bold; }
       </style>
 
-      <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
-
-      <div class="bbcode-info">
-        <strong>📝 Como usar:</strong><br>
-        1️⃣ Cole o BBCode no campo abaixo<br>
-        2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
-        3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
-        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin: 0; color: #8B4513;">🎯 Coordenador de Ataques</h2>
+        <button id="tws-fechar" style="background: #e74c3c; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer;">✕</button>
       </div>
 
-      <textarea 
-        id="bbcode-input" 
-        class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui..."
-      ></textarea>
-
-      <div class="bbcode-btn-group">
-        <button id="bbcode-btn-parse" class="bbcode-btn bbcode-btn-parse">🔍 Analisar BBCode</button>
-        <button id="bbcode-btn-cancel" class="bbcode-btn bbcode-btn-cancel">❌ Cancelar</button>
+      <div class="tws-tabs">
+        <button class="tws-tab-btn active" data-tab="plano">📋 Plano de Envio</button>
+        <button class="tws-tab-btn" data-tab="bbcode">🔄 Importar BBCode</button>
       </div>
 
-      <div id="bbcode-preview" class="bbcode-preview">
-        <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 Preview dos Agendamentos</h3>
-        
-        <div id="bbcode-stats" class="bbcode-stats"></div>
-        <div id="bbcode-preview-content"></div>
+      <!-- ABA 1: PLANO DE ENVIO -->
+      <div id="plano" class="tws-tab-content active">
+        <div class="tws-info">
+          <strong>📝 Como usar:</strong><br>
+          1️⃣ Defina destino(s) e origem(ns)<br>
+          2️⃣ Configure as tropas<br>
+          3️⃣ Escolha horário (chegada ou lançamento)<br>
+          4️⃣ Clique em "Gerar BBCode"
+        </div>
 
-        <div class="bbcode-btn-group" style="margin-top: 15px;">
-          <button id="bbcode-btn-import" class="bbcode-btn bbcode-btn-import">✅ Adicionar à Lista</button>
-          <button id="bbcode-btn-replace" class="bbcode-btn bbcode-btn-replace">🔄 Substituir Tudo</button>
-          <button id="bbcode-btn-copiar" class="bbcode-btn bbcode-btn-copiar">📄 Copiar</button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div>
+            <label>🎯 Destino(s):</label>
+            <input id="tws-destinos" class="tws-input" placeholder="559|452 560|453">
+            <small style="color: #7f8c8d; font-size: 10px;">Separados por espaço</small>
+          </div>
+          <div>
+            <label>🏠 Origem(ns):</label>
+            <input id="tws-origens" class="tws-input" placeholder="542|433 544|432">
+            <small style="color: #7f8c8d; font-size: 10px;">Separados por espaço</small>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div>
+            <label>🎯 Tipo de Cálculo:</label>
+            <select id="tws-tipoCalculo" class="tws-input">
+              <option value="chegada">Por Hora de Chegada</option>
+              <option value="lancamento">Por Hora de Lançamento</option>
+            </select>
+          </div>
+          <div>
+            <label>📈 Sinal (%):</label>
+            <input id="tws-bonusSinal" type="number" class="tws-input" value="0" min="0" max="100">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label>🔀 Ordenação:</label>
+          <select id="tws-tipoOrdenacao" class="tws-input">
+            <option value="digitacao">Por Ordem de Digitação</option>
+            <option value="lancamento">Por Horário de Lançamento</option>
+            <option value="chegada">Por Horário de Chegada</option>
+            <option value="distancia">Por Distância</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="tws-incrementarSegundos">
+            ⏱️ Incrementar 5s por ataque
+          </label>
+          <small style="color: #7f8c8d; font-size: 10px;">Evita ataques simultâneos</small>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px;">
+          <div id="tws-campoHoraChegada">
+            <label>⏰ Hora de Chegada:</label>
+            <input id="tws-horaChegada" class="tws-input" placeholder="15/11/2025 18:30:00">
+          </div>
+          <div id="tws-campoHoraLancamento" style="display: none;">
+            <label>🚀 Hora de Lançamento:</label>
+            <input id="tws-horaLancamento" class="tws-input" placeholder="15/11/2025 17:45:00">
+          </div>
+        </div>
+
+        <label style="font-weight: bold; display: block; margin-bottom: 8px;">⚔️ Tropas:</label>
+        <div class="tws-tropas-grid">
+          <div class="tws-tropa-item">
+            <img src="${unitImages.spear}" onerror="this.style.display='none'">
+            <label>Lança:</label>
+            <input type="number" id="tws-spear" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.sword}" onerror="this.style.display='none'">
+            <label>Espada:</label>
+            <input type="number" id="tws-sword" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.axe}" onerror="this.style.display='none'">
+            <label>Machado:</label>
+            <input type="number" id="tws-axe" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.archer}" onerror="this.style.display='none'">
+            <label>Arqueiro:</label>
+            <input type="number" id="tws-archer" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.spy}" onerror="this.style.display='none'">
+            <label>Espião:</label>
+            <input type="number" id="tws-spy" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.light}" onerror="this.style.display='none'">
+            <label>Cav. Leve:</label>
+            <input type="number" id="tws-light" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.marcher}" onerror="this.style.display='none'">
+            <label>Arq. Cav.:</label>
+            <input type="number" id="tws-marcher" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.heavy}" onerror="this.style.display='none'">
+            <label>Cav. Pes.:</label>
+            <input type="number" id="tws-heavy" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.ram}" onerror="this.style.display='none'">
+            <label>Ariete:</label>
+            <input type="number" id="tws-ram" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.catapult}" onerror="this.style.display='none'">
+            <label>Catapulta:</label>
+            <input type="number" id="tws-catapult" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.knight}" onerror="this.style.display='none'">
+            <label>Paladino:</label>
+            <input type="number" id="tws-knight" value="0" min="0">
+          </div>
+          <div class="tws-tropa-item">
+            <img src="${unitImages.snob}" onerror="this.style.display='none'">
+            <label>Nobre:</label>
+            <input type="number" id="tws-snob" value="0" min="0">
+          </div>
+        </div>
+
+        <div class="tws-btn-group">
+          <button id="tws-limparTropas" class="tws-btn tws-btn-neutral">🗑️ Limpar</button>
+          <button id="tws-ataque" class="tws-btn tws-btn-danger">⚔️ Ataque</button>
+          <button id="tws-defesa" class="tws-btn tws-btn-secondary">🛡️ Defesa</button>
+          <button id="tws-nobre" class="tws-btn tws-btn-warning">👑 Nobre</button>
+        </div>
+
+        <div class="tws-btn-group">
+          <button id="tws-gerar" class="tws-btn tws-btn-primary" style="flex: 2;">📋 Gerar BBCode</button>
+          <button id="tws-copiarResult" class="tws-btn tws-btn-secondary">📄 Copiar</button>
+          <button id="tws-salvarConfig" class="tws-btn tws-btn-warning">💾 Salvar</button>
+        </div>
+
+        <label style="font-weight: bold; display: block; margin-bottom: 8px;">📊 Resultado:</label>
+        <textarea id="tws-resultado" class="bbcode-textarea" style="height: 120px;"></textarea>
+      </div>
+
+      <!-- ABA 2: IMPORTAR BBCODE -->
+      <div id="bbcode" class="tws-tab-content">
+        <div class="tws-info">
+          <strong>📝 Como usar:</strong><br>
+          1️⃣ Cole o BBCode no campo abaixo<br>
+          2️⃣ Clique em "Analisar BBCode"<br>
+          3️⃣ Escolha "Adicionar" ou "Substituir Tudo"
+        </div>
+
+        <textarea 
+          id="tws-bbcode-input" 
+          class="bbcode-textarea" 
+          placeholder="Cole seu BBCode aqui..."
+        ></textarea>
+
+        <div class="tws-btn-group">
+          <button id="tws-btn-parse" class="tws-btn tws-btn-secondary">🔍 Analisar BBCode</button>
+          <button id="tws-btn-cancelar" class="tws-btn tws-btn-neutral">❌ Cancelar</button>
+        </div>
+
+        <div id="tws-preview" class="tws-preview" style="display: none;">
+          <h4 style="margin: 0 0 12px 0; color: #8B4513;">📊 Preview dos Agendamentos</h4>
+          <div id="tws-stats"></div>
+          <div id="tws-preview-content"></div>
+
+          <div class="tws-btn-group" style="margin-top: 12px;">
+            <button id="tws-btn-import" class="tws-btn tws-btn-primary">✅ Adicionar à Lista</button>
+            <button id="tws-btn-replace" class="tws-btn tws-btn-warning">🔄 Substituir Tudo</button>
+          </div>
         </div>
       </div>
     `;
@@ -493,23 +706,339 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    let parsedAgendamentos = [];
-    const inputTextarea = document.getElementById('bbcode-input');
-    const previewDiv = document.getElementById('bbcode-preview');
-    const previewContent = document.getElementById('bbcode-preview-content');
-    const statsDiv = document.getElementById('bbcode-stats');
-    
-    const btnParse = document.getElementById('bbcode-btn-parse');
-    const btnImport = document.getElementById('bbcode-btn-import');
-    const btnReplace = document.getElementById('bbcode-btn-replace');
-    const btnCancel = document.getElementById('bbcode-btn-cancel');
-    const btnCopiar = document.getElementById('bbcode-btn-copiar');
+    // === SISTEMA DE ABAS ===
+    const tabs = document.querySelectorAll('.tws-tab-btn');
+    const tabContents = document.querySelectorAll('.tws-tab-content');
 
-    btnCancel.onclick = () => overlay.remove();
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        const tabId = tab.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+
+    // === FECHAR MODAL ===
+    document.getElementById('tws-fechar').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
+    // === FUNÇÕES AUXILIARES ===
+    function getTropas() {
+      return {
+        spear: parseInt(document.getElementById('tws-spear').value) || 0,
+        sword: parseInt(document.getElementById('tws-sword').value) || 0,
+        axe: parseInt(document.getElementById('tws-axe').value) || 0,
+        archer: parseInt(document.getElementById('tws-archer').value) || 0,
+        spy: parseInt(document.getElementById('tws-spy').value) || 0,
+        light: parseInt(document.getElementById('tws-light').value) || 0,
+        marcher: parseInt(document.getElementById('tws-marcher').value) || 0,
+        heavy: parseInt(document.getElementById('tws-heavy').value) || 0,
+        ram: parseInt(document.getElementById('tws-ram').value) || 0,
+        catapult: parseInt(document.getElementById('tws-catapult').value) || 0,
+        knight: parseInt(document.getElementById('tws-knight').value) || 0,
+        snob: parseInt(document.getElementById('tws-snob').value) || 0
+      };
+    }
+
+    function mostrarMensagem(mensagem, cor) {
+      const alertDiv = document.createElement('div');
+      alertDiv.innerHTML = mensagem;
+      Object.assign(alertDiv.style, {
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        background: cor,
+        color: 'white',
+        padding: '12px 20px',
+        borderRadius: '6px',
+        fontWeight: '600',
+        zIndex: 1000000,
+        fontSize: '13px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+      });
+      document.body.appendChild(alertDiv);
+      setTimeout(() => alertDiv.remove(), 1500);
+    }
+
+    function carregarConfiguracoes() {
+      try {
+        const configSalva = localStorage.getItem('twPanelConfig');
+        if (configSalva) {
+          const config = JSON.parse(configSalva);
+          if (config.destinos) document.getElementById('tws-destinos').value = config.destinos;
+          if (config.origens) document.getElementById('tws-origens').value = config.origens;
+          if (config.tipoCalculo) document.getElementById('tws-tipoCalculo').value = config.tipoCalculo;
+          if (config.bonusSinal) document.getElementById('tws-bonusSinal').value = config.bonusSinal;
+          if (config.tipoOrdenacao) document.getElementById('tws-tipoOrdenacao').value = config.tipoOrdenacao;
+          if (config.horaChegada) document.getElementById('tws-horaChegada').value = config.horaChegada;
+          if (config.horaLancamento) document.getElementById('tws-horaLancamento').value = config.horaLancamento;
+          if (config.incrementarSegundos !== undefined) document.getElementById('tws-incrementarSegundos').checked = config.incrementarSegundos;
+          if (config.tropas) {
+            for (const [unidade, quantidade] of Object.entries(config.tropas)) {
+              const input = document.getElementById(`tws-${unidade}`);
+              if (input) input.value = quantidade;
+            }
+          }
+          document.getElementById('tws-tipoCalculo').dispatchEvent(new Event('change'));
+          console.log('✅ Configurações carregadas!');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao carregar configurações:', error);
+      }
+    }
+
+    // === ALTERNAR TIPO DE CÁLCULO ===
+    document.getElementById('tws-tipoCalculo').onchange = function() {
+      const tipo = this.value;
+      const campoChegada = document.getElementById('tws-campoHoraChegada');
+      const campoLancamento = document.getElementById('tws-campoHoraLancamento');
+      if (tipo === 'chegada') {
+        campoChegada.style.display = 'block';
+        campoLancamento.style.display = 'none';
+      } else {
+        campoChegada.style.display = 'none';
+        campoLancamento.style.display = 'block';
+      }
+    };
+
+    // === BOTÕES DE TROPAS PRÉ-CONFIGURADAS ===
+    document.getElementById('tws-limparTropas').onclick = () => {
+      document.querySelectorAll('input[id^="tws-"][type="number"]').forEach(input => input.value = '0');
+    };
+
+    document.getElementById('tws-ataque').onclick = () => {
+      document.getElementById('tws-spy').value = '5';
+      document.getElementById('tws-light').value = '3000';
+      document.getElementById('tws-marcher').value = '6000';
+      document.getElementById('tws-ram').value = '300';
+    };
+
+    document.getElementById('tws-defesa').onclick = () => {
+      document.getElementById('tws-spear').value = '1000';
+      document.getElementById('tws-sword').value = '1000';
+    };
+
+    document.getElementById('tws-nobre').onclick = () => {
+      document.getElementById('tws-spy').value = '5';
+      document.getElementById('tws-light').value = '25';
+      document.getElementById('tws-snob').value = '1';
+    };
+
+    // === GERAR BBCODE ===
+    document.getElementById('tws-gerar').onclick = () => {
+      try {
+        const destinosRaw = document.getElementById('tws-destinos').value.trim();
+        if (!destinosRaw) {
+          mostrarMensagem('❌ Informe pelo menos um destino!', '#e74c3c');
+          return;
+        }
+
+        const destinos = destinosRaw.split(/\s+/).map(coord => {
+          try {
+            return CalculosUtilitarios.sanitizarCoordenada(coord);
+          } catch (e) {
+            return null;
+          }
+        }).filter(c => c !== null);
+
+        const origensRaw = document.getElementById('tws-origens').value.trim();
+        if (!origensRaw) {
+          mostrarMensagem('❌ Informe pelo menos uma origem!', '#e74c3c');
+          return;
+        }
+
+        const origens = origensRaw.split(/\s+/).map(coord => {
+          try {
+            return CalculosUtilitarios.sanitizarCoordenada(coord);
+          } catch (e) {
+            return null;
+          }
+        }).filter(c => c !== null);
+
+        const tipoCalculo = document.getElementById('tws-tipoCalculo').value;
+        const tipoOrdenacao = document.getElementById('tws-tipoOrdenacao').value;
+        const bonusSinal = parseInt(document.getElementById('tws-bonusSinal').value) || 0;
+        const incrementarSegundos = document.getElementById('tws-incrementarSegundos').checked;
+        const tropas = getTropas();
+
+        const unidadeMaisLenta = CalculosUtilitarios.getUnidadeMaisLenta(tropas);
+        if (!unidadeMaisLenta) {
+          mostrarMensagem('❌ Selecione pelo menos uma tropa!', '#e74c3c');
+          return;
+        }
+
+        let horaBase;
+        if (tipoCalculo === 'chegada') {
+          horaBase = document.getElementById('tws-horaChegada').value.trim();
+          if (!horaBase) {
+            mostrarMensagem('❌ Informe a hora de chegada!', '#e74c3c');
+            return;
+          }
+        } else {
+          horaBase = document.getElementById('tws-horaLancamento').value.trim();
+          if (!horaBase) {
+            mostrarMensagem('❌ Informe a hora de lançamento!', '#e74c3c');
+            return;
+          }
+        }
+
+        if (!CalculosUtilitarios.validarDataHora(horaBase)) {
+          mostrarMensagem('❌ Formato inválido! Use: DD/MM/AAAA HH:MM:SS', '#e74c3c');
+          return;
+        }
+
+        const combinacoes = [];
+        const coordenadasNaoEncontradas = [];
+
+        for (const o of origens) {
+          const vid = villageMap[o];
+          if (!vid) {
+            coordenadasNaoEncontradas.push(o);
+            continue;
+          }
+
+          for (const d of destinos) {
+            const [x, y] = d.split('|');
+
+            let horaLancamento, horaChegada;
+
+            if (tipoCalculo === 'chegada') {
+              horaLancamento = CalculosUtilitarios.calcularHorarioLancamento(o, d, horaBase, tropas, bonusSinal);
+              horaChegada = horaBase;
+            } else {
+              horaLancamento = horaBase;
+              horaChegada = CalculosUtilitarios.calcularHorarioChegada(o, d, horaBase, tropas, bonusSinal);
+            }
+
+            const distancia = CalculosUtilitarios.calcularDistancia(o, d);
+
+            combinacoes.push({
+              origem: o,
+              destino: d,
+              horaLancamento: horaLancamento,
+              horaChegada: horaChegada,
+              distancia: distancia,
+              timestampLancamento: CalculosUtilitarios.parseDataHora(horaLancamento).getTime(),
+              timestampChegada: CalculosUtilitarios.parseDataHora(horaChegada).getTime(),
+              vid: vid,
+              x: x,
+              y: y
+            });
+          }
+        }
+
+        if (coordenadasNaoEncontradas.length > 0) {
+          console.warn('⚠️ Coordenadas não encontradas:', coordenadasNaoEncontradas.join(', '));
+          mostrarMensagem(`⚠️ ${coordenadasNaoEncontradas.length} coordenada(s) não encontrada(s)`, '#f39c12');
+        }
+
+        if (combinacoes.length === 0) {
+          mostrarMensagem('❌ Nenhuma combinação válida!', '#e74c3c');
+          return;
+        }
+
+        // Ordenar
+        switch(tipoOrdenacao) {
+          case 'lancamento':
+            combinacoes.sort((a, b) => a.timestampLancamento - b.timestampLancamento);
+            break;
+          case 'chegada':
+            combinacoes.sort((a, b) => a.timestampChegada - b.timestampChegada);
+            break;
+          case 'distancia':
+            combinacoes.sort((a, b) => a.distancia - b.distancia);
+            break;
+        }
+
+        // Incrementar segundos
+        if (incrementarSegundos) {
+          let segundoIncremento = 0;
+          combinacoes.forEach((comb, index) => {
+            if (index > 0) {
+              segundoIncremento += 5;
+              const lancamentoDate = CalculosUtilitarios.parseDataHora(comb.horaLancamento);
+              const chegadaDate = CalculosUtilitarios.parseDataHora(comb.horaChegada);
+              lancamentoDate.setSeconds(lancamentoDate.getSeconds() + segundoIncremento);
+              chegadaDate.setSeconds(chegadaDate.getSeconds() + segundoIncremento);
+              comb.horaLancamento = CalculosUtilitarios.formatarDataHora(lancamentoDate);
+              comb.horaChegada = CalculosUtilitarios.formatarDataHora(chegadaDate);
+            }
+          });
+        }
+
+        let out = `[table][**]Unidade[||]Origem[||]Destino[||]Lançamento[||]Chegada[||]Enviar[/**]\n`;
+
+        combinacoes.forEach((comb) => {
+          let qs = Object.entries(tropas).map(([k,v])=>`att_${k}=${v}`).join('&');
+          const link = `https://${location.host}/game.php?village=${comb.vid}&screen=place&x=${comb.x}&y=${comb.y}&from=simulator&${qs}`;
+          out += `[*][unit]${unidadeMaisLenta}[/unit] [|] ${comb.origem} [|] ${comb.destino} [|] ${comb.horaLancamento} [|] ${comb.horaChegada} [|] [url=${link}]ENVIAR[/url]\n`;
+        });
+
+        out += `[/table]`;
+        document.getElementById('tws-resultado').value = out;
+        mostrarMensagem(`✅ ${combinacoes.length} ataque(s) gerado(s)!`, '#27ae60');
+
+      } catch (error) {
+        console.error('❌ Erro:', error);
+        mostrarMensagem(`❌ Erro: ${error.message}`, '#e74c3c');
+      }
+    };
+
+    // === COPIAR RESULTADO ===
+    document.getElementById('tws-copiarResult').onclick = () => {
+      const resultado = document.getElementById('tws-resultado');
+      if (resultado.value.trim() === '') {
+        mostrarMensagem('❌ Nenhum BBCode para copiar!', '#e74c3c');
+        return;
+      }
+      resultado.select();
+      navigator.clipboard.writeText(resultado.value).then(() => {
+        mostrarMensagem('✅ BBCode copiado!', '#27ae60');
+      }).catch(() => {
+        document.execCommand('copy');
+        mostrarMensagem('✅ BBCode copiado!', '#27ae60');
+      });
+    };
+
+    // === SALVAR CONFIGURAÇÃO ===
+    document.getElementById('tws-salvarConfig').onclick = () => {
+      const config = {
+        destinos: document.getElementById('tws-destinos').value,
+        origens: document.getElementById('tws-origens').value,
+        tipoCalculo: document.getElementById('tws-tipoCalculo').value,
+        bonusSinal: document.getElementById('tws-bonusSinal').value,
+        tipoOrdenacao: document.getElementById('tws-tipoOrdenacao').value,
+        horaChegada: document.getElementById('tws-horaChegada').value,
+        horaLancamento: document.getElementById('tws-horaLancamento').value,
+        incrementarSegundos: document.getElementById('tws-incrementarSegundos').checked,
+        tropas: getTropas()
+      };
+      try {
+        localStorage.setItem('twPanelConfig', JSON.stringify(config));
+        mostrarMensagem('✅ Configurações salvas!', '#8e44ad');
+      } catch (error) {
+        mostrarMensagem('❌ Erro ao salvar!', '#e74c3c');
+      }
+    };
+
+    // === BBCODE IMPORT ===
+    let parsedAgendamentos = [];
+    const btnParse = document.getElementById('tws-btn-parse');
+    const btnImport = document.getElementById('tws-btn-import');
+    const btnReplace = document.getElementById('tws-btn-replace');
+    const btnCancelar = document.getElementById('tws-btn-cancelar');
+    const inputBBCode = document.getElementById('tws-bbcode-input');
+    const preview = document.getElementById('tws-preview');
+    const previewContent = document.getElementById('tws-preview-content');
+    const statsDiv = document.getElementById('tws-stats');
+
+    btnCancelar.onclick = () => overlay.remove();
+
     btnParse.onclick = () => {
-      const bbcode = inputTextarea.value.trim();
+      const bbcode = inputBBCode.value.trim();
       if (!bbcode) {
         alert('❌ Cole o BBCode primeiro!');
         return;
@@ -517,7 +1046,7 @@
 
       try {
         parsedAgendamentos = parseBBCodeRobust(bbcode);
-        
+
         if (parsedAgendamentos.length === 0) {
           alert('⚠️ Nenhum agendamento válido encontrado.');
           return;
@@ -528,44 +1057,17 @@
           const t = parseDateTimeToMs(a.datetime);
           return !isNaN(t) && t > now;
         }).length;
-        const pastDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return !isNaN(t) && t <= now;
-        }).length;
-        const invalidDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return isNaN(t);
-        }).length;
 
         statsDiv.innerHTML = `
-          <div class="bbcode-stat-item">
-            <span>📦 Total:</span>
-            <span style="color: #2196F3;">${parsedAgendamentos.length}</span>
+          <div style="display: flex; gap: 20px; margin-bottom: 10px;">
+            <div>📦 Total: <strong>${parsedAgendamentos.length}</strong></div>
+            <div>✅ Válidos: <strong style="color: #4CAF50;">${validDates}</strong></div>
           </div>
-          <div class="bbcode-stat-item">
-            <span>✅ Válidos:</span>
-            <span style="color: #4CAF50;">${validDates}</span>
-          </div>
-          ${pastDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⏰ Passados:</span>
-              <span style="color: #F44336;">${pastDates}</span>
-            </div>
-          ` : ''}
-          ${invalidDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⚠️ Inválidos:</span>
-              <span style="color: #FF9800;">${invalidDates}</span>
-            </div>
-          ` : ''}
         `;
 
         previewContent.innerHTML = renderPreview(parsedAgendamentos);
-        previewDiv.style.display = 'block';
-
-        console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos');
+        preview.style.display = 'block';
       } catch (error) {
-        console.error('[BBCode Modal] Erro:', error);
         alert('❌ Erro ao analisar BBCode:\n' + error.message);
       }
     };
@@ -576,19 +1078,9 @@
         return;
       }
 
-      const existingList = getList();
-      const msg = existingList.length > 0 
-        ? `Adicionar ${parsedAgendamentos.length} agendamentos?`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
-
-      if (confirm(msg)) {
+      if (confirm(`Adicionar ${parsedAgendamentos.length} agendamentos?`)) {
         const result = handleImport(parsedAgendamentos, false);
-        
-        if (result.duplicados > 0) {
-          alert(`✅ ${result.novos} importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
-        } else {
-          alert(`✅ ${result.novos} agendamento(s) importado(s)!`);
-        }
+        alert(`✅ ${result.novos} importado(s)!`);
         overlay.remove();
       }
     };
@@ -599,619 +1091,21 @@
         return;
       }
 
-      const existingList = getList();
-      const msg = existingList.length > 0
-        ? `⚠️ Remover ${existingList.length} e substituir por ${parsedAgendamentos.length}?`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
-
-      if (confirm(msg)) {
+      if (confirm(`Substituir tudo por ${parsedAgendamentos.length} agendamentos?`)) {
         handleImport(parsedAgendamentos, true);
-        alert(`✅ ${parsedAgendamentos.length} agendamento(s) importado(s)!`);
+        alert(`✅ ${parsedAgendamentos.length} importado(s)!`);
         overlay.remove();
       }
     };
 
-    btnCopiar.onclick = () => {
-      const html = previewContent.innerHTML;
-      if (!html) {
-        alert('❌ Nenhuma prévia para copiar!');
-        return;
-      }
-      navigator.clipboard.writeText(html).then(() => {
-        alert('✅ Preview copiado!');
-      }).catch(() => {
-        alert('⚠️ Não foi possível copiar');
-      });
-    };
-
-    setTimeout(() => inputTextarea.focus(), 100);
+    carregarConfiguracoes();
+    setTimeout(() => document.getElementById('tws-destinos').focus(), 100);
   }
 
-  // ============================================
-  // 🌐 INTEGRAÇÃO COM OBJETO GLOBAL
-  // ============================================
   window.TWS_BBCodeModal = {
     show: showModal,
     CalculosUtilitarios: CalculosUtilitarios
   };
 
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto!');
-  console.log('[TW Scheduler] 🧮 Módulo de Cálculos disponível em window.TWS_BBCodeModal.CalculosUtilitarios');
-})();(function () {
-  'use strict';
-
-  if (!window.TWS_Backend) {
-    console.error('[TW Scheduler BBCode Modal] Backend não carregado!');
-    return;
-  }
-
-  const {
-    getList,
-    setList,
-    importarDeBBCode,
-    parseDateTimeToMs,
-    generateUniqueId
-  } = window.TWS_Backend;
-
-  // ✅ VALIDADOR MELHORADO DE COORDENADAS
-  function parseCoordValidate(s) {
-    if (!s) return null;
-    
-    const t = s.trim();
-    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    
-    if (!match) return null;
-    
-    const x = parseInt(match[1], 10);
-    const y = parseInt(match[2], 10);
-    
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
-      return null;
-    }
-    
-    return `${x}|${y}`;
-  }
-
-  // ✅ EXTRATOR ROBUSTO DE COORDENADAS
-  function extractCoordinatesFromLine(text) {
-    if (!text) return [];
-    
-    const coordPattern = /\b(\d{1,4})\|(\d{1,4})\b/g;
-    const coords = [];
-    let match;
-    
-    while ((match = coordPattern.exec(text)) !== null) {
-      const x = parseInt(match[1], 10);
-      const y = parseInt(match[2], 10);
-      
-      if (x >= 0 && x <= 499 && y >= 0 && y <= 499) {
-        coords.push(`${x}|${y}`);
-      }
-    }
-    
-    return coords;
-  }
-
-  // ✅ VALIDADOR DE DATA/HORA
-  function validateDateTimeFormat(dateString) {
-    const pattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/;
-    const match = dateString.match(pattern);
-    
-    if (!match) return false;
-    
-    const [, day, month, year, hour, minute, second] = match.map(x => parseInt(x, 10));
-    
-    if (month < 1 || month > 12) return false;
-    if (day < 1 || day > 31) return false;
-    if (hour < 0 || hour > 23) return false;
-    if (minute < 0 || minute > 59) return false;
-    if (second < 0 || second > 59) return false;
-    
-    try {
-      const date = new Date(year, month - 1, day, hour, minute, second);
-      return date.getFullYear() === year && 
-             date.getMonth() === month - 1 && 
-             date.getDate() === day;
-    } catch {
-      return false;
-    }
-  }
-
-  // ✅ PARSER BBCODE MELHORADO
-  function parseBBCodeRobust(bbcode) {
-    if (!bbcode || typeof bbcode !== 'string') {
-      return [];
-    }
-    
-    const agendamentos = [];
-    const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
-    
-    for (const linha of linhas) {
-      try {
-        // 1️⃣ Extrair coordenadas
-        const coords = extractCoordinatesFromLine(linha);
-        
-        if (coords.length < 2) {
-          console.warn(`[BBCode] ⚠️ Linha pulada (coordenadas insuficientes): ${linha.substring(0, 50)}`);
-          continue;
-        }
-        
-        const origem = coords[0];
-        const destino = coords[1];
-        
-        // 2️⃣ Extrair data/hora
-        const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
-        const dateMatch = linha.match(datePattern);
-        
-        if (!dateMatch) {
-          console.warn(`[BBCode] ⚠️ Linha pulada (data/hora inválida): ${linha.substring(0, 50)}`);
-          continue;
-        }
-        
-        const dataHora = `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')}/${dateMatch[3]} ${dateMatch[4].padStart(2, '0')}:${dateMatch[5].padStart(2, '0')}:${dateMatch[6].padStart(2, '0')}`;
-        
-        if (!validateDateTimeFormat(dataHora)) {
-          console.warn(`[BBCode] ⚠️ Data/hora fora dos limites: ${dataHora}`);
-          continue;
-        }
-        
-        // 3️⃣ Extrair URL e parâmetros
-        const urlMatch = linha.match(/\[url=(.*?)\]/i);
-        const params = {};
-        
-        if (urlMatch) {
-          const url = urlMatch[1];
-          const queryString = url.split('?')[1];
-          
-          if (queryString) {
-            queryString.split('&').forEach(param => {
-              const [key, value] = param.split('=');
-              if (key && value) {
-                try {
-                  params[decodeURIComponent(key)] = decodeURIComponent(value);
-                } catch (e) {
-                  // Ignorar erro de decodificação
-                }
-              }
-            });
-          }
-        }
-        
-        // 4️⃣ Construir configuração
-        const cfg = {
-          _id: generateUniqueId(),
-          origem,
-          origemId: params.village || null,
-          alvo: destino,
-          datetime: dataHora,
-          done: false,
-          locked: false
-        };
-        
-        // 5️⃣ Adicionar tropas
-        const troopTypes = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-        
-        troopTypes.forEach(unit => {
-          const key = `att_${unit}`;
-          const value = params[key] ? parseInt(params[key], 10) : 0;
-          cfg[unit] = isNaN(value) ? 0 : value;
-        });
-        
-        agendamentos.push(cfg);
-        console.log(`[BBCode] ✅ Parseado: ${origem} → ${destino} em ${dataHora}`);
-        
-      } catch (error) {
-        console.error(`[BBCode] ❌ Erro ao processar: ${error.message}`);
-        continue;
-      }
-    }
-    
-    return agendamentos;
-  }
-
-  // === Preview dos agendamentos importados ===
-  function renderPreview(agendamentos) {
-    if (agendamentos.length === 0) {
-      return '<p style="text-align:center;color:#888;padding:20px;">Nenhum agendamento detectado no BBCode</p>';
-    }
-
-    const now = Date.now();
-    let html = '<div style="max-height: 400px; overflow-y: auto;">';
-    html += '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
-    html += `
-      <thead style="position: sticky; top: 0; background: #8B4513; color: white;">
-        <tr>
-          <th style="padding:8px; border:1px solid #654321;">#</th>
-          <th style="padding:8px; border:1px solid #654321;">Origem</th>
-          <th style="padding:8px; border:1px solid #654321;">Destino</th>
-          <th style="padding:8px; border:1px solid #654321;">Data/Hora</th>
-          <th style="padding:8px; border:1px solid #654321;">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-    `;
-
-    agendamentos.forEach((cfg, idx) => {
-      const t = parseDateTimeToMs(cfg.datetime);
-      const diff = t - now;
-      let status = '✅ OK';
-      let statusColor = '#E8F5E9';
-
-      if (isNaN(t)) {
-        status = '⚠️ Data Inválida';
-        statusColor = '#FFF3E0';
-      } else if (diff < 0) {
-        status = '⏰ Horário Passado';
-        statusColor = '#FFEBEE';
-      } else if (diff < 60000) {
-        status = '🔥 < 1 minuto';
-        statusColor = '#FFF9C4';
-      }
-
-      // Validar coordenadas
-      const origemValida = parseCoordValidate(cfg.origem) !== null;
-      const destValida = parseCoordValidate(cfg.alvo) !== null;
-      
-      if (!origemValida || !destValida) {
-        status = '❌ Coord Inválida';
-        statusColor = '#FFEBEE';
-      }
-
-      html += `
-        <tr style="background: ${statusColor};">
-          <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
-        </tr>
-      `;
-    });
-
-    html += '</tbody></table></div>';
-    return html;
-  }
-
-  // === Processa a importação ===
-  function handleImport(agendamentos, replaceAll) {
-    const list = getList();
-    
-    if (replaceAll) {
-      setList(agendamentos);
-      console.log('[BBCode Modal] ✅ Lista substituída completamente');
-    } else {
-      // ✅ PROTEÇÃO: Verificar duplicatas
-      const existingKeys = new Set(
-        list.map(a => `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`)
-      );
-      
-      const novos = agendamentos.filter(a => {
-        const key = `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
-        return !existingKeys.has(key);
-      });
-      
-      const duplicados = agendamentos.length - novos.length;
-      
-      list.push(...novos);
-      setList(list);
-      
-      console.log(`[BBCode Modal] ✅ ${novos.length} agendamentos adicionados`);
-      if (duplicados > 0) {
-        console.warn(`[BBCode Modal] ⚠️ ${duplicados} duplicados ignorados`);
-      }
-      
-      return { novos: novos.length, duplicados };
-    }
-
-    window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-  }
-
-  // === Cria e exibe o modal ===
-  function showModal() {
-    const existing = document.getElementById('tws-bbcode-modal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'tws-bbcode-modal';
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 999999;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      animation: fadeIn 0.2s ease;
-    `;
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      background: #F4E4C1;
-      border: 3px solid #8B4513;
-      border-radius: 8px;
-      padding: 20px;
-      width: 90%;
-      max-width: 800px;
-      max-height: 85vh;
-      overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-      animation: slideIn 0.3s ease;
-    `;
-
-    modal.innerHTML = `
-      <style>
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-50px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .bbcode-textarea {
-          width: 100%;
-          min-height: 150px;
-          padding: 12px;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          font-family: monospace;
-          font-size: 13px;
-          resize: vertical;
-          box-sizing: border-box;
-          background: white;
-        }
-        .bbcode-textarea:focus {
-          outline: none;
-          border-color: #654321;
-          box-shadow: 0 0 5px rgba(139, 69, 19, 0.3);
-        }
-        .bbcode-btn-group {
-          display: flex;
-          gap: 10px;
-          margin-top: 15px;
-        }
-        .bbcode-btn {
-          flex: 1;
-          padding: 10px;
-          border: none;
-          border-radius: 4px;
-          font-size: 14px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .bbcode-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        }
-        .bbcode-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-        .bbcode-btn-parse {
-          background: #2196F3;
-          color: white;
-        }
-        .bbcode-btn-import {
-          background: #4CAF50;
-          color: white;
-        }
-        .bbcode-btn-replace {
-          background: #FF9800;
-          color: white;
-        }
-        .bbcode-btn-cancel {
-          background: #9E9E9E;
-          color: white;
-        }
-        .bbcode-info {
-          background: #E3F2FD;
-          border: 1px solid #2196F3;
-          border-radius: 4px;
-          padding: 12px;
-          margin-bottom: 15px;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-        .bbcode-preview {
-          background: white;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          padding: 15px;
-          margin-top: 15px;
-          display: none;
-        }
-        .bbcode-stats {
-          display: flex;
-          gap: 20px;
-          margin-bottom: 15px;
-          padding: 10px;
-          background: #FFF9C4;
-          border-radius: 4px;
-          font-weight: bold;
-        }
-        .bbcode-stat-item {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .bbcode-format-examples {
-          background: #F5F5F5;
-          border-left: 4px solid #2196F3;
-          padding: 8px 12px;
-          margin-top: 8px;
-          font-size: 12px;
-          font-family: monospace;
-        }
-      </style>
-
-      <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
-
-      <div class="bbcode-info">
-        <strong>📝 Como usar:</strong><br>
-        1️⃣ Cole o BBCode no campo abaixo<br>
-        2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
-        3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
-        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
-      </div>
-
-      <textarea 
-        id="bbcode-input" 
-        class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]544|436 → 529|431 em 16/11/2024 14:35:00 [url=https://...]"
-      ></textarea>
-
-      <div class="bbcode-btn-group">
-        <button id="bbcode-btn-parse" class="bbcode-btn bbcode-btn-parse">🔍 Analisar BBCode</button>
-        <button id="bbcode-btn-cancel" class="bbcode-btn bbcode-btn-cancel">❌ Cancelar</button>
-      </div>
-
-      <div id="bbcode-preview" class="bbcode-preview">
-        <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 Preview dos Agendamentos</h3>
-        
-        <div id="bbcode-stats" class="bbcode-stats"></div>
-        
-        <div id="bbcode-preview-content"></div>
-
-        <div class="bbcode-btn-group" style="margin-top: 15px;">
-          <button id="bbcode-btn-import" class="bbcode-btn bbcode-btn-import">✅ Adicionar à Lista</button>
-          <button id="bbcode-btn-replace" class="bbcode-btn bbcode-btn-replace">🔄 Substituir Tudo</button>
-        </div>
-      </div>
-    `;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    let parsedAgendamentos = [];
-
-    const inputTextarea = document.getElementById('bbcode-input');
-    const previewDiv = document.getElementById('bbcode-preview');
-    const previewContent = document.getElementById('bbcode-preview-content');
-    const statsDiv = document.getElementById('bbcode-stats');
-    
-    const btnParse = document.getElementById('bbcode-btn-parse');
-    const btnImport = document.getElementById('bbcode-btn-import');
-    const btnReplace = document.getElementById('bbcode-btn-replace');
-    const btnCancel = document.getElementById('bbcode-btn-cancel');
-
-    btnCancel.onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-
-    btnParse.onclick = () => {
-      const bbcode = inputTextarea.value.trim();
-      
-      if (!bbcode) {
-        alert('❌ Cole o BBCode primeiro!');
-        return;
-      }
-
-      try {
-        parsedAgendamentos = parseBBCodeRobust(bbcode);
-        
-        if (parsedAgendamentos.length === 0) {
-          alert('⚠️ Nenhum agendamento válido encontrado.\n\nVerifique o formato:\n[*]X|Y → XX|YY em DD/MM/YYYY HH:MM:SS [url=...]');
-          return;
-        }
-
-        const now = Date.now();
-        const validDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return !isNaN(t) && t > now;
-        }).length;
-        const pastDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return !isNaN(t) && t <= now;
-        }).length;
-        const invalidDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return isNaN(t);
-        }).length;
-
-        statsDiv.innerHTML = `
-          <div class="bbcode-stat-item">
-            <span>📦 Total:</span>
-            <span style="color: #2196F3;">${parsedAgendamentos.length}</span>
-          </div>
-          <div class="bbcode-stat-item">
-            <span>✅ Válidos:</span>
-            <span style="color: #4CAF50;">${validDates}</span>
-          </div>
-          ${pastDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⏰ Passados:</span>
-              <span style="color: #F44336;">${pastDates}</span>
-            </div>
-          ` : ''}
-          ${invalidDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⚠️ Inválidos:</span>
-              <span style="color: #FF9800;">${invalidDates}</span>
-            </div>
-          ` : ''}
-        `;
-
-        previewContent.innerHTML = renderPreview(parsedAgendamentos);
-        previewDiv.style.display = 'block';
-
-        console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos');
-      } catch (error) {
-        console.error('[BBCode Modal] Erro:', error);
-        alert('❌ Erro ao analisar BBCode:\n' + error.message);
-      }
-    };
-
-    btnImport.onclick = () => {
-      if (parsedAgendamentos.length === 0) {
-        alert('❌ Analise o BBCode primeiro!');
-        return;
-      }
-
-      const existingList = getList();
-      const msg = existingList.length > 0 
-        ? `Adicionar ${parsedAgendamentos.length} agendamentos?\n\nTotal após: ${existingList.length + parsedAgendamentos.length}`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
-
-      if (confirm(msg)) {
-        const result = handleImport(parsedAgendamentos, false);
-        
-        if (result.duplicados > 0) {
-          alert(`✅ ${result.novos} importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
-        } else {
-          alert(`✅ ${result.novos} agendamento(s) importado(s)!`);
-        }
-        overlay.remove();
-      }
-    };
-
-    btnReplace.onclick = () => {
-      if (parsedAgendamentos.length === 0) {
-        alert('❌ Analise o BBCode primeiro!');
-        return;
-      }
-
-      const existingList = getList();
-      const msg = existingList.length > 0
-        ? `⚠️ Remover ${existingList.length} e substituir por ${parsedAgendamentos.length}?\n\nContinuar?`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
-
-      if (confirm(msg)) {
-        handleImport(parsedAgendamentos, true);
-        alert(`✅ ${parsedAgendamentos.length} agendamento(s) importado(s)!`);
-        overlay.remove();
-      }
-    };
-
-    setTimeout(() => inputTextarea.focus(), 100);
-  }
-
-  window.TWS_BBCodeModal = {
-    show: showModal
-  };
-
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas!');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com planoEnvio integrado!');
 })();
