@@ -114,12 +114,12 @@
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-  // ✅ CONVERTER agendamento normal em Farm Inteligente
+  // ✅ CONVERTER agendamento normal em Farm Inteligente (SEM INPUT)
   function convertToFarm(agendamentoIndex, intervalo = 5) {
     const lista = getList();
     
     if (agendamentoIndex < 0 || agendamentoIndex >= lista.length) {
-        alert('❌ Agendamento não encontrado!');
+        console.error('❌ Agendamento não encontrado!');
         return false;
     }
     
@@ -129,7 +129,7 @@
     const farms = getFarmList();
     const jaExiste = farms.find(f => f.agendamentoBaseId === agendamentoIndex);
     if (jaExiste) {
-        alert('❌ Este agendamento já é um Farm Inteligente!');
+        console.warn('❌ Este agendamento já é um Farm Inteligente!');
         return false;
     }
     
@@ -182,6 +182,90 @@
     
     console.log(`[Farm] Agendamento convertido: ${farm.origem} → ${farm.alvo}`);
     return true;
+  }
+
+  // ✅ CONVERTER EM MASSA - NOVA FUNÇÃO
+  function convertAgendamentosEmMassa(agendamentosIds, intervalo = 5) {
+    const results = {
+      success: 0,
+      errors: 0,
+      details: []
+    };
+
+    agendamentosIds.forEach(agendamentoId => {
+      try {
+        const success = convertToFarm(agendamentoId, intervalo);
+        if (success) {
+          results.success++;
+          results.details.push({
+            id: agendamentoId,
+            status: 'success',
+            message: 'Convertido com sucesso'
+          });
+        } else {
+          results.errors++;
+          results.details.push({
+            id: agendamentoId,
+            status: 'error',
+            message: 'Falha na conversão'
+          });
+        }
+      } catch (error) {
+        results.errors++;
+        results.details.push({
+          id: agendamentoId,
+          status: 'error',
+          message: `Erro: ${error.message}`
+        });
+      }
+    });
+
+    return results;
+  }
+
+  // ✅ CONVERTER TODOS OS AGENDAMENTOS PENDENTES
+  function convertTodosPendentes(intervalo = 5) {
+    const lista = getList();
+    const agendamentosPendentes = lista
+      .map((agendamento, index) => ({ agendamento, index }))
+      .filter(({ agendamento }) => !agendamento.done);
+
+    const agendamentosIds = agendamentosPendentes.map(({ index }) => index);
+    
+    return convertAgendamentosEmMassa(agendamentosIds, intervalo);
+  }
+
+  // ✅ CONVERTER POR FILTRO (origem, alvo, tropas)
+  function convertPorFiltro(filtro, intervalo = 5) {
+    const lista = getList();
+    
+    const agendamentosFiltrados = lista
+      .map((agendamento, index) => ({ agendamento, index }))
+      .filter(({ agendamento }) => {
+        if (agendamento.done) return false;
+        
+        // Filtro por origem
+        if (filtro.origem && !agendamento.origem.includes(filtro.origem)) {
+          return false;
+        }
+        
+        // Filtro por alvo
+        if (filtro.alvo && !agendamento.alvo.includes(filtro.alvo)) {
+          return false;
+        }
+        
+        // Filtro por tipo de tropa (pelo menos uma tropa > 0)
+        if (filtro.temTropas) {
+          const temTropas = TROOP_LIST.some(u => agendamento[u] > 0);
+          if (!temTropas) return false;
+        }
+        
+        return true;
+      });
+
+    const agendamentosIds = agendamentosFiltrados.map(({ index }) => index);
+    
+    return convertAgendamentosEmMassa(agendamentosIds, intervalo);
   }
 
   // ✅ MONITORAR execução de agendamentos para Farms (CÁLCULO CORRETO IDA+VOLTA)
@@ -291,7 +375,7 @@
         <div style="text-align: center; padding: 40px; color: #999;">
           <div style="font-size: 48px; margin-bottom: 10px;">🌾</div>
           <div style="font-size: 16px; font-weight: bold;">Nenhum farm inteligente ativo</div>
-          <small>Use "Converter Agendamento" para transformar agendamentos normais em farms automáticos</small>
+          <small>Use as opções abaixo para converter agendamentos em farms automáticos</small>
         </div>
       `;
     }
@@ -469,7 +553,7 @@
       border-radius: 12px;
       padding: 0;
       width: 90%;
-      max-width: 800px;
+      max-width: 900px;
       max-height: 90vh;
       overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -482,52 +566,59 @@
       <style>
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: scale(0.9) translateY(-20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        .farm-btn { padding: 12px 16px; border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; font-size: 14px; margin: 5px; transition: all 0.3s; }
+        .farm-btn:hover { transform: scale(1.05); opacity: 0.9; }
+        .btn-primary { background: #2196F3; }
+        .btn-success { background: #4CAF50; }
+        .btn-warning { background: #FF9800; }
+        .btn-danger { background: #F44336; }
+        .btn-info { background: #9C27B0; }
       </style>
 
       <!-- Cabeçalho -->
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com cálculo CORRETO de ida + volta
+          Sistema automático com conversão em massa
         </div>
       </div>
 
       <!-- Conteúdo -->
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
         <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
-          <strong>✅ CÁLCULO CORRIGIDO - IDA + VOLTA</strong><br>
-          • Agora calcula: Chegada + Tempo de Volta + Intervalo<br>
-          • Garante que tropas retornem antes do próximo ataque<br>
-          • Evita sobreposição de ciclos
+          <strong>🚀 CONVERSÃO EM MASSA DISPONÍVEL</strong><br>
+          • Converter todos os pendentes de uma vez<br>
+          • Converter por filtro (origem, alvo, tropas)<br>
+          • Converter IDs específicos manualmente
         </div>
 
-        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-          <button class="btn-convert" onclick="TWS_FarmInteligente._convertAgendamento()" style="
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            background: #9C27B0;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-          ">🔄 Converter Agendamento</button>
-          
-          <button class="btn-cancel" onclick="document.getElementById('tws-farm-modal').remove()" style="
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            background: #9E9E9E;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-          ">❌ Fechar</button>
+        <!-- Botões de Conversão em Massa -->
+        <div style="margin-bottom: 20px;">
+          <div style="font-weight: bold; color: #388E3C; margin-bottom: 10px;">🔄 CONVERSÃO EM MASSA:</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="farm-btn btn-success" onclick="TWS_FarmInteligente._convertTodosPendentes()">
+              📋 Converter Todos Pendentes
+            </button>
+            <button class="farm-btn btn-primary" onclick="TWS_FarmInteligente._showFiltroModal()">
+              🔍 Converter por Filtro
+            </button>
+            <button class="farm-btn btn-warning" onclick="TWS_FarmInteligente._showIdsModal()">
+              🔢 Converter IDs Específicos
+            </button>
+            <button class="farm-btn btn-info" onclick="TWS_FarmInteligente._convertAgendamento()">
+              ✨ Converter Individual
+            </button>
+          </div>
         </div>
 
         <div id="farm-list-container">
           ${renderFarmList()}
         </div>
+      </div>
+
+      <!-- Rodapé -->
+      <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+        Farm Inteligente - Conversão em Massa | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos
       </div>
     `;
 
@@ -555,13 +646,13 @@
         }
       },
 
-      // ✅ FUNÇÃO PRINCIPAL: Converter Agendamento em Farm
+      // ✅ CONVERSÃO INDIVIDUAL (mantida para compatibilidade)
       _convertAgendamento() {
         const lista = getList();
         const pendentes = lista.filter(a => !a.done);
         
         if (pendentes.length === 0) {
-          alert('❌ Nenhum agendamento pendente encontrado!\n\nCrie um agendamento normal primeiro usando:\n• ➕ Adicionar Agendamento\n• 📋 Importar BBCode\n• 📂 Importar JSON');
+          alert('❌ Nenhum agendamento pendente encontrado!');
           return;
         }
         
@@ -592,24 +683,125 @@
           const agendamentoEscolhido = pendentes[idxEscolhido];
           const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
           
-          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):\n\nRecomendado: tempo_volta + margem de segurança', '5');
+          const intervalo = prompt('⏰ Intervalo entre ciclos (minutos):', '5');
           if (intervalo === null) return;
           
           const intervaloNum = parseInt(intervalo) || 5;
           
           if (convertToFarm(listaIdx, intervaloNum)) {
-            const distancia = calcularDistancia(agendamentoEscolhido.origem, agendamentoEscolhido.alvo);
-            const tropas = {};
-            TROOP_LIST.forEach(u => { tropas[u] = agendamentoEscolhido[u] || 0; });
-            const tempoIda = calculateTravelTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
-            const tempoVolta = calculateReturnTime(agendamentoEscolhido.origem, agendamentoEscolhido.alvo, tropas);
-            
-            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n📏 Distância: ${distancia.toFixed(1)} campos\n⏱️ Tempos calculados: ${Math.round(tempoIda/60)}min (ida) + ${Math.round(tempoVolta/60)}min (volta)\n🔄 Ciclos automáticos a cada ${intervaloNum} minutos\n\nO sistema agora calculará CORRETAMENTE o retorno das tropas!`);
+            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}`);
             document.getElementById('farm-list-container').innerHTML = renderFarmList();
           }
         } else {
-          alert('❌ Número inválido! Selecione um número da lista.');
+          alert('❌ Número inválido!');
         }
+      },
+
+      // ✅ CONVERSÃO EM MASSA - TODOS OS PENDENTES
+      _convertTodosPendentes() {
+        const intervalo = prompt('⏰ Intervalo entre ciclos para todos os farms (minutos):', '5');
+        if (intervalo === null) return;
+        
+        const intervaloNum = parseInt(intervalo) || 5;
+        const results = convertTodosPendentes(intervaloNum);
+        
+        alert(`✅ CONVERSÃO EM MASSA CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos com sucesso\n• ❌ ${results.errors} erros\n\nTotal de farms ativos: ${getFarmList().filter(f => f.active !== false).length}`);
+        document.getElementById('farm-list-container').innerHTML = renderFarmList();
+      },
+
+      // ✅ MODAL DE FILTRO
+      _showFiltroModal() {
+        const filtroModal = document.createElement('div');
+        filtroModal.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          z-index: 1000000;
+          min-width: 400px;
+        `;
+
+        filtroModal.innerHTML = `
+          <h3 style="margin-top: 0; color: #388E3C;">🔍 Converter por Filtro</h3>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Origem (opcional):</label>
+            <input type="text" id="filtro-origem" placeholder="Ex: 500|500" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Alvo (opcional):</label>
+            <input type="text" id="filtro-alvo" placeholder="Ex: barb" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px;">
+              <input type="checkbox" id="filtro-temTropas" checked>
+              Apenas agendamentos com tropas
+            </label>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Intervalo (minutos):</label>
+            <input type="number" id="filtro-intervalo" value="5" min="1" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button onclick="this.parentElement.parentElement.remove()" style="padding: 8px 16px; background: #9E9E9E; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancelar</button>
+            <button onclick="TWS_FarmInteligente._aplicarFiltro()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Aplicar Filtro</button>
+          </div>
+        `;
+
+        document.body.appendChild(filtroModal);
+      },
+
+      // ✅ APLICAR FILTRO
+      _aplicarFiltro() {
+        const origem = document.getElementById('filtro-origem').value;
+        const alvo = document.getElementById('filtro-alvo').value;
+        const temTropas = document.getElementById('filtro-temTropas').checked;
+        const intervalo = parseInt(document.getElementById('filtro-intervalo').value) || 5;
+
+        const filtro = { origem, alvo, temTropas };
+        const results = convertPorFiltro(filtro, intervalo);
+
+        // Remover modal
+        document.querySelector('div > h3:contains("🔍 Converter por Filtro")')?.parentElement?.remove();
+
+        alert(`✅ CONVERSÃO POR FILTRO CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos com sucesso\n• ❌ ${results.errors} erros\n\nFiltros aplicados:\n• Origem: ${origem || 'Qualquer'}\n• Alvo: ${alvo || 'Qualquer'}\n• Com tropas: ${temTropas ? 'Sim' : 'Não'}`);
+        document.getElementById('farm-list-container').innerHTML = renderFarmList();
+      },
+
+      // ✅ MODAL DE IDs ESPECÍFICOS
+      _showIdsModal() {
+        const lista = getList();
+        let mensagemIds = '📋 AGENDAMENTOS DISPONÍVEIS:\n\n';
+        lista.forEach((agend, index) => {
+          if (!agend.done) {
+            const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
+            mensagemIds += `ID ${index}: ${agend.origem} → ${agend.alvo} | ${tropas}\n`;
+          }
+        });
+
+        const ids = prompt(`🆔 CONVERTER IDs ESPECÍFICOS\n\n${mensagemIds}\n\nDigite os IDs separados por vírgula:\nEx: 0, 3, 5, 7`);
+        if (ids === null) return;
+
+        const idsArray = ids.split(',')
+          .map(id => parseInt(id.trim()))
+          .filter(id => !isNaN(id) && id >= 0 && id < lista.length && !lista[id].done);
+
+        if (idsArray.length === 0) {
+          alert('❌ Nenhum ID válido encontrado!');
+          return;
+        }
+
+        const intervalo = prompt(`⏰ Intervalo entre ciclos para ${idsArray.length} farms (minutos):`, '5');
+        if (intervalo === null) return;
+
+        const intervaloNum = parseInt(intervalo) || 5;
+        const results = convertAgendamentosEmMassa(idsArray, intervaloNum);
+
+        alert(`✅ CONVERSÃO DE IDs CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos com sucesso\n• ❌ ${results.errors} erros\n\nIDs processados: ${idsArray.join(', ')}`);
+        document.getElementById('farm-list-container').innerHTML = renderFarmList();
       }
     };
 
@@ -621,9 +813,15 @@
     window.TWS_FarmInteligente = window.TWS_FarmInteligente || {};
     window.TWS_FarmInteligente.show = showFarmModal;
     
+    // Expor funções de conversão em massa globalmente
+    window.TWS_FarmInteligente.convertToFarm = convertToFarm;
+    window.TWS_FarmInteligente.convertAgendamentosEmMassa = convertAgendamentosEmMassa;
+    window.TWS_FarmInteligente.convertTodosPendentes = convertTodosPendentes;
+    window.TWS_FarmInteligente.convertPorFiltro = convertPorFiltro;
+    
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema CORRIGIDO com cálculo IDA+VOLTA!');
+    console.log('[TW Farm Inteligente] ✅ Carregado - Sistema com CONVERSÃO EM MASSA!');
   }
 
   if (document.readyState === 'loading') {
