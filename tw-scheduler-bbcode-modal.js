@@ -170,6 +170,209 @@
     return agendamentos;
   }
 
+  // === FUNÇÕES DO COORDENADOR DE ATAQUES ===
+  const velocidadesUnidades = {
+    spear: 18, sword: 22, axe: 18, archer: 18, spy: 9, light: 10,
+    marcher: 10, heavy: 11, ram: 30, catapult: 30, knight: 10, snob: 35
+  };
+
+  const unidadesPorVelocidade = [
+    'snob', 'catapult', 'ram', 'sword', 'spear', 'archer', 'axe',
+    'heavy', 'light', 'marcher', 'knight', 'spy'
+  ];
+
+  function validarCoordenada(coord) {
+    const coordSanitizada = coord.replace(/\s+/g, '');
+    return /^\d{1,3}\|\d{1,3}$/.test(coordSanitizada);
+  }
+
+  function sanitizarCoordenada(coord) {
+    const coordSanitizada = coord.replace(/\s+/g, '');
+    if (!validarCoordenada(coordSanitizada)) {
+      throw new Error(`Coordenada inválida: ${coord}`);
+    }
+    return coordSanitizada;
+  }
+
+  function validarDataHora(dataHoraStr) {
+    return /^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2}$/.test(dataHoraStr);
+  }
+
+  function parseDataHora(dataHoraStr) {
+    if (!validarDataHora(dataHoraStr)) {
+      throw new Error(`Formato de data inválido: ${dataHoraStr}`);
+    }
+    
+    const [data, tempo] = dataHoraStr.split(' ');
+    const [dia, mes, ano] = data.split('/').map(Number);
+    const [hora, minuto, segundo] = tempo.split(':').map(Number);
+    
+    const date = new Date(ano, mes - 1, dia, hora, minuto, segundo);
+    
+    if (isNaN(date.getTime())) {
+      throw new Error(`Data inválida: ${dataHoraStr}`);
+    }
+    
+    return date;
+  }
+
+  function calcularDistancia(coord1, coord2) {
+    const [x1, y1] = coord1.split('|').map(Number);
+    const [x2, y2] = coord2.split('|').map(Number);
+    const deltaX = Math.abs(x1 - x2);
+    const deltaY = Math.abs(y1 - y2);
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
+  function calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal = 0) {
+    const distancia = calcularDistancia(origem, destino);
+    const velocidadeBase = velocidadesUnidades[unidadeMaisLenta];
+    const fatorBonus = 1 + (bonusSinal / 100);
+    const tempoMinutos = (distancia * velocidadeBase) / fatorBonus;
+    return tempoMinutos * 60000;
+  }
+
+  function formatarDataHora(data) {
+    const dia = String(data.getDate()).padStart(2, '0');
+    const mes = String(data.getMonth() + 1).padStart(2, '0');
+    const ano = data.getFullYear();
+    const hora = String(data.getHours()).padStart(2, '0');
+    const minuto = String(data.getMinutes()).padStart(2, '0');
+    const segundo = String(data.getSeconds()).padStart(2, '0');
+    return `${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`;
+  }
+
+  function getUnidadeMaisLenta(tropas) {
+    for (const unidade of unidadesPorVelocidade) {
+      if (tropas[unidade] > 0) {
+        return unidade;
+      }
+    }
+    return null;
+  }
+
+  function calcularHorarioLancamento(origem, destino, horaChegada, tropas, bonusSinal = 0) {
+    const unidadeMaisLenta = getUnidadeMaisLenta(tropas);
+    const tempoViagem = calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal);
+    const chegadaDate = parseDataHora(horaChegada);
+    const lancamentoDate = new Date(chegadaDate.getTime() - tempoViagem);
+    return formatarDataHora(lancamentoDate);
+  }
+
+  function calcularHorarioChegada(origem, destino, horaLancamento, tropas, bonusSinal = 0) {
+    const unidadeMaisLenta = getUnidadeMaisLenta(tropas);
+    const tempoViagem = calcularTempoViagem(origem, destino, unidadeMaisLenta, bonusSinal);
+    const lancamentoDate = parseDataHora(horaLancamento);
+    const chegadaDate = new Date(lancamentoDate.getTime() + tempoViagem);
+    return formatarDataHora(chegadaDate);
+  }
+
+  // === GERADOR DE BBCODE DO COORDENADOR ===
+  async function gerarBBCodeCoordenador(config) {
+    try {
+      const { destinos, origens, tipoCalculo, horaBase, tropas, bonusSinal, tipoOrdenacao, incrementarSegundos } = config;
+      
+      // Carrega o village.txt
+      const res = await fetch('/map/village.txt');
+      const text = await res.text();
+      const lines = text.trim().split('\n');
+      const villageMap = {};
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length >= 6) {
+          const x = parts[2], y = parts[3], id = parts[0];
+          villageMap[`${x}|${y}`] = id;
+        }
+      }
+
+      // Processa combinações
+      const combinacoes = [];
+      
+      for (const o of origens) {
+        const vid = villageMap[o];
+        if (!vid) continue;
+        
+        for (const d of destinos) {
+          const [x, y] = d.split('|');
+          
+          let horaLancamento, horaChegada;
+          
+          if (tipoCalculo === 'chegada') {
+            horaLancamento = calcularHorarioLancamento(o, d, horaBase, tropas, bonusSinal);
+            horaChegada = horaBase;
+          } else {
+            horaLancamento = horaBase;
+            horaChegada = calcularHorarioChegada(o, d, horaBase, tropas, bonusSinal);
+          }
+          
+          const distancia = calcularDistancia(o, d);
+          
+          combinacoes.push({
+            origem: o,
+            destino: d,
+            horaLancamento,
+            horaChegada,
+            distancia,
+            timestampLancamento: parseDataHora(horaLancamento).getTime(),
+            timestampChegada: parseDataHora(horaChegada).getTime(),
+            vid,
+            x, y
+          });
+        }
+      }
+
+      // Aplica ordenação
+      switch(tipoOrdenacao) {
+        case 'lancamento':
+          combinacoes.sort((a, b) => a.timestampLancamento - b.timestampLancamento);
+          break;
+        case 'chegada':
+          combinacoes.sort((a, b) => a.timestampChegada - b.timestampChegada);
+          break;
+        case 'distancia':
+          combinacoes.sort((a, b) => a.distancia - b.distancia);
+          break;
+      }
+
+      // Aplica incremento de segundos
+      if (incrementarSegundos) {
+        let segundoIncremento = 0;
+        combinacoes.forEach((comb, index) => {
+          if (index > 0) {
+            segundoIncremento += 5;
+            const lancamentoDate = parseDataHora(comb.horaLancamento);
+            const chegadaDate = parseDataHora(comb.horaChegada);
+            lancamentoDate.setSeconds(lancamentoDate.getSeconds() + segundoIncremento);
+            chegadaDate.setSeconds(chegadaDate.getSeconds() + segundoIncremento);
+            comb.horaLancamento = formatarDataHora(lancamentoDate);
+            comb.horaChegada = formatarDataHora(chegadaDate);
+          }
+        });
+      }
+
+      // Gera BBCode
+      const unidadeMaisLenta = getUnidadeMaisLenta(tropas);
+      let bbcode = '';
+      
+      combinacoes.forEach((comb) => {
+        const qs = Object.entries(tropas).map(([k,v]) => `att_${k}=${v}`).join('&');
+        const link = `https://${location.host}/game.php?village=${comb.vid}&screen=place&x=${comb.x}&y=${comb.y}&from=simulator&${qs}`;
+        
+        bbcode += `[*]${comb.origem} → ${comb.destino} em ${comb.horaChegada} [url=${link}]ENVIAR[/url]\n`;
+      });
+
+      return {
+        bbcode,
+        combinacoes: combinacoes.length,
+        unidadeMaisLenta
+      };
+
+    } catch (error) {
+      console.error('Erro ao gerar BBCode:', error);
+      throw error;
+    }
+  }
+
   // === Preview dos agendamentos importados ===
   function renderPreview(agendamentos) {
     if (agendamentos.length === 0) {
@@ -209,7 +412,6 @@
         statusColor = '#FFF9C4';
       }
 
-      // Validar coordenadas
       const origemValida = parseCoordValidate(cfg.origem) !== null;
       const destValida = parseCoordValidate(cfg.alvo) !== null;
       
@@ -241,7 +443,6 @@
       setList(agendamentos);
       console.log('[BBCode Modal] ✅ Lista substituída completamente');
     } else {
-      // ✅ PROTEÇÃO: Verificar duplicatas
       const existingKeys = new Set(
         list.map(a => `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`)
       );
@@ -294,9 +495,9 @@
       border: 3px solid #8B4513;
       border-radius: 8px;
       padding: 20px;
-      width: 90%;
-      max-width: 800px;
-      max-height: 85vh;
+      width: 95%;
+      max-width: 900px;
+      max-height: 90vh;
       overflow-y: auto;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       animation: slideIn 0.3s ease;
@@ -368,6 +569,10 @@
           background: #9E9E9E;
           color: white;
         }
+        .bbcode-btn-generate {
+          background: #9C27B0;
+          color: white;
+        }
         .bbcode-info {
           background: #E3F2FD;
           border: 1px solid #2196F3;
@@ -399,48 +604,178 @@
           align-items: center;
           gap: 5px;
         }
-        .bbcode-format-examples {
-          background: #F5F5F5;
-          border-left: 4px solid #2196F3;
-          padding: 8px 12px;
-          margin-top: 8px;
+        .bbcode-tabs {
+          display: flex;
+          margin-bottom: 15px;
+          border-bottom: 2px solid #8B4513;
+        }
+        .bbcode-tab {
+          padding: 10px 20px;
+          background: #D7CCC8;
+          border: none;
+          border-radius: 4px 4px 0 0;
+          margin-right: 5px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+        .bbcode-tab.active {
+          background: #8B4513;
+          color: white;
+        }
+        .bbcode-tab-content {
+          display: none;
+        }
+        .bbcode-tab-content.active {
+          display: block;
+        }
+        .coord-input-group {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        .coord-input {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #8B4513;
+          border-radius: 4px;
+        }
+        .troops-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin: 10px 0;
+        }
+        .troop-input {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .troop-input label {
+          min-width: 80px;
           font-size: 12px;
-          font-family: monospace;
+        }
+        .troop-input input {
+          width: 60px;
+          padding: 4px;
         }
       </style>
 
-      <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar BBCode</h2>
+      <h2 style="margin: 0 0 15px 0; color: #8B4513;">📋 Importar/Gerar BBCode</h2>
 
-      <div class="bbcode-info">
-        <strong>📝 Como usar:</strong><br>
-        1️⃣ Cole o BBCode no campo abaixo<br>
-        2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
-        3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
-        <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
-        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
+      <div class="bbcode-tabs">
+        <button class="bbcode-tab active" data-tab="import">📥 Importar BBCode</button>
+        <button class="bbcode-tab" data-tab="generate">🎯 Gerar BBCode</button>
       </div>
 
-      <textarea 
-        id="bbcode-input" 
-        class="bbcode-textarea" 
-        placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]544|436 → 529|431 em 16/11/2024 14:35:00 [url=https://...]"
-      ></textarea>
+      <!-- ABA DE IMPORTAÇÃO -->
+      <div id="tab-import" class="bbcode-tab-content active">
+        <div class="bbcode-info">
+          <strong>📝 Como usar:</strong><br>
+          1️⃣ Cole o BBCode no campo abaixo<br>
+          2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
+          3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
+          <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
+          <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
+        </div>
 
-      <div class="bbcode-btn-group">
-        <button id="bbcode-btn-parse" class="bbcode-btn bbcode-btn-parse">🔍 Analisar BBCode</button>
-        <button id="bbcode-btn-cancel" class="bbcode-btn bbcode-btn-cancel">❌ Cancelar</button>
+        <textarea 
+          id="bbcode-input" 
+          class="bbcode-textarea" 
+          placeholder="Cole seu BBCode aqui...&#10;&#10;Exemplos:&#10;[*]5|4 → 52|43 em 16/11/2024 14:30:00 [url=https://...]&#10;[*]544|436 → 529|431 em 16/11/2024 14:35:00 [url=https://...]"
+        ></textarea>
+
+        <div class="bbcode-btn-group">
+          <button id="bbcode-btn-parse" class="bbcode-btn bbcode-btn-parse">🔍 Analisar BBCode</button>
+          <button id="bbcode-btn-cancel" class="bbcode-btn bbcode-btn-cancel">❌ Cancelar</button>
+        </div>
+
+        <div id="bbcode-preview" class="bbcode-preview">
+          <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 Preview dos Agendamentos</h3>
+          
+          <div id="bbcode-stats" class="bbcode-stats"></div>
+          
+          <div id="bbcode-preview-content"></div>
+
+          <div class="bbcode-btn-group" style="margin-top: 15px;">
+            <button id="bbcode-btn-import" class="bbcode-btn bbcode-btn-import">✅ Adicionar à Lista</button>
+            <button id="bbcode-btn-replace" class="bbcode-btn bbcode-btn-replace">🔄 Substituir Tudo</button>
+          </div>
+        </div>
       </div>
 
-      <div id="bbcode-preview" class="bbcode-preview">
-        <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 Preview dos Agendamentos</h3>
-        
-        <div id="bbcode-stats" class="bbcode-stats"></div>
-        
-        <div id="bbcode-preview-content"></div>
+      <!-- ABA DE GERAÇÃO -->
+      <div id="tab-generate" class="bbcode-tab-content">
+        <div class="bbcode-info">
+          <strong>🎯 Gerador de Ataques:</strong><br>
+          Configure origens, destinos e tropas para gerar automaticamente o BBCode dos ataques.
+        </div>
 
-        <div class="bbcode-btn-group" style="margin-top: 15px;">
-          <button id="bbcode-btn-import" class="bbcode-btn bbcode-btn-import">✅ Adicionar à Lista</button>
-          <button id="bbcode-btn-replace" class="bbcode-btn bbcode-btn-replace">🔄 Substituir Tudo</button>
+        <div class="coord-input-group">
+          <div>
+            <label style="font-weight:600; color:#2c3e50;">🎯 Destino(s):</label>
+            <input id="generate-destinos" class="coord-input" placeholder="559|452 560|453">
+            <small style="color:#7f8c8d; font-size:10px;">Coordenadas separadas por espaço</small>
+          </div>
+          <div>
+            <label style="font-weight:600; color:#2c3e50;">🏠 Origem(ns):</label>
+            <input id="generate-origens" class="coord-input" placeholder="542|433 544|432">
+            <small style="color:#7f8c8d; font-size:10px;">Coordenadas separadas por espaço</small>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="font-weight:600; color:#2c3e50;">🎯 Tipo de Cálculo:</label>
+              <select id="generate-tipoCalculo" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
+                <option value="chegada">Por Hora de Chegada</option>
+                <option value="lancamento">Por Hora de Lançamento</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-weight:600; color:#2c3e50;">📈 Sinal (%):</label>
+              <input id="generate-bonusSinal" type="number" value="0" min="0" max="100" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;">
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          <label style="font-weight:600; color:#2c3e50;" id="generate-hora-label">⏰ Hora de Chegada:</label>
+          <input id="generate-horaBase" type="text" style="width:100%; padding:8px; border:1px solid #8B4513; border-radius:4px;" placeholder="15/11/2025 18:30:00">
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          <label style="font-weight:600; color:#2c3e50;">⚔️ Tropas:</label>
+          <div class="troops-grid">
+            ${Object.keys(velocidadesUnidades).map(unit => `
+              <div class="troop-input">
+                <label for="generate-${unit}" style="text-transform:capitalize;">${unit}:</label>
+                <input type="number" id="generate-${unit}" value="0" min="0" style="border:1px solid #8B4513; border-radius:2px;">
+              </div>
+            `).join('')}
+          </div>
+          <div style="display:flex; gap:5px; margin-top:10px;">
+            <button id="generate-limpar" style="padding:5px 10px; background:#95a5a6; color:white; border:none; border-radius:2px; cursor:pointer; font-size:11px;">🗑️ Limpar</button>
+            <button id="generate-ataque" style="padding:5px 10px; background:#e74c3c; color:white; border:none; border-radius:2px; cursor:pointer; font-size:11px;">⚔️ Ataque</button>
+            <button id="generate-defesa" style="padding:5px 10px; background:#3498db; color:white; border:none; border-radius:2px; cursor:pointer; font-size:11px;">🛡️ Defesa</button>
+            <button id="generate-nobre" style="padding:5px 10px; background:#9b59b6; color:white; border:none; border-radius:2px; cursor:pointer; font-size:11px;">👑 Nobre</button>
+          </div>
+        </div>
+
+        <div class="bbcode-btn-group">
+          <button id="bbcode-btn-generate" class="bbcode-btn bbcode-btn-generate">🎯 Gerar BBCode</button>
+          <button id="bbcode-btn-cancel-generate" class="bbcode-btn bbcode-btn-cancel">❌ Cancelar</button>
+        </div>
+
+        <div id="generate-preview" class="bbcode-preview" style="display:none;">
+          <h3 style="margin: 0 0 15px 0; color: #8B4513;">📊 BBCode Gerado</h3>
+          <div id="generate-stats" class="bbcode-stats"></div>
+          <textarea id="generate-output" class="bbcode-textarea" style="min-height: 200px;"></textarea>
+          <div class="bbcode-btn-group" style="margin-top: 15px;">
+            <button id="generate-copy" class="bbcode-btn bbcode-btn-parse">📄 Copiar</button>
+            <button id="generate-import" class="bbcode-btn bbcode-btn-import">✅ Importar para Lista</button>
+          </div>
         </div>
       </div>
     `;
@@ -448,8 +783,11 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
+    // Variáveis de estado
     let parsedAgendamentos = [];
+    let generatedBBCode = '';
 
+    // Elementos da aba Importação
     const inputTextarea = document.getElementById('bbcode-input');
     const previewDiv = document.getElementById('bbcode-preview');
     const previewContent = document.getElementById('bbcode-preview-content');
@@ -460,6 +798,121 @@
     const btnReplace = document.getElementById('bbcode-btn-replace');
     const btnCancel = document.getElementById('bbcode-btn-cancel');
 
+    // Elementos da aba Geração
+    const tabs = document.querySelectorAll('.bbcode-tab');
+    const tabContents = document.querySelectorAll('.bbcode-tab-content');
+    const btnGenerate = document.getElementById('bbcode-btn-generate');
+    const btnCancelGenerate = document.getElementById('bbcode-btn-cancel-generate');
+    const generatePreview = document.getElementById('generate-preview');
+    const generateOutput = document.getElementById('generate-output');
+    const generateStats = document.getElementById('generate-stats');
+    const btnGenerateCopy = document.getElementById('generate-copy');
+    const btnGenerateImport = document.getElementById('generate-import');
+
+    // Sistema de abas
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.getAttribute('data-tab');
+        
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+      });
+    });
+
+    // Alternar campo de hora base
+    const tipoCalculoSelect = document.getElementById('generate-tipoCalculo');
+    const horaLabel = document.getElementById('generate-hora-label');
+    
+    tipoCalculoSelect.addEventListener('change', function() {
+      if (this.value === 'chegada') {
+        horaLabel.textContent = '⏰ Hora de Chegada:';
+      } else {
+        horaLabel.textContent = '🚀 Hora de Lançamento:';
+      }
+    });
+
+    // Botões de predefinição de tropas
+    document.getElementById('generate-limpar').onclick = () => {
+      Object.keys(velocidadesUnidades).forEach(unit => {
+        document.getElementById(`generate-${unit}`).value = '0';
+      });
+    };
+
+    document.getElementById('generate-ataque').onclick = () => {
+      document.getElementById('generate-spear').value = '0';
+      document.getElementById('generate-sword').value = '0';
+      document.getElementById('generate-axe').value = '0';
+      document.getElementById('generate-archer').value = '0';
+      document.getElementById('generate-spy').value = '5';
+      document.getElementById('generate-light').value = '3000';
+      document.getElementById('generate-marcher').value = '6000';
+      document.getElementById('generate-heavy').value = '0';
+      document.getElementById('generate-ram').value = '300';
+      document.getElementById('generate-catapult').value = '0';
+      document.getElementById('generate-knight').value = '0';
+      document.getElementById('generate-snob').value = '0';
+    };
+
+    document.getElementById('generate-defesa').onclick = () => {
+      document.getElementById('generate-spear').value = '1000';
+      document.getElementById('generate-sword').value = '1000';
+      document.getElementById('generate-axe').value = '0';
+      document.getElementById('generate-archer').value = '0';
+      document.getElementById('generate-spy').value = '0';
+      document.getElementById('generate-light').value = '0';
+      document.getElementById('generate-marcher').value = '0';
+      document.getElementById('generate-heavy').value = '0';
+      document.getElementById('generate-ram').value = '0';
+      document.getElementById('generate-catapult').value = '0';
+      document.getElementById('generate-knight').value = '0';
+      document.getElementById('generate-snob').value = '0';
+    };
+
+    document.getElementById('generate-nobre').onclick = () => {
+      document.getElementById('generate-spear').value = '0';
+      document.getElementById('generate-sword').value = '0';
+      document.getElementById('generate-axe').value = '0';
+      document.getElementById('generate-archer').value = '0';
+      document.getElementById('generate-spy').value = '5';
+      document.getElementById('generate-light').value = '25';
+      document.getElementById('generate-marcher').value = '0';
+      document.getElementById('generate-heavy').value = '0';
+      document.getElementById('generate-ram').value = '0';
+      document.getElementById('generate-catapult').value = '0';
+      document.getElementById('generate-knight').value = '0';
+      document.getElementById('generate-snob').value = '1';
+    };
+
+    // Função auxiliar para mostrar mensagens
+    function mostrarMensagem(mensagem, cor) {
+      const alertDiv = document.createElement('div');
+      alertDiv.innerHTML = mensagem;
+      Object.assign(alertDiv.style, {
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        background: cor,
+        color: 'white',
+        padding: '12px 20px',
+        borderRadius: '6px',
+        border: `1px solid ${cor}`,
+        fontWeight: '600',
+        zIndex: 1000000,
+        fontSize: '13px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+      });
+      document.body.appendChild(alertDiv);
+      
+      setTimeout(() => {
+        alertDiv.remove();
+      }, 1500);
+    }
+
+    // === FUNÇÕES DA ABA IMPORTAÇÃO ===
     btnCancel.onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
@@ -467,7 +920,7 @@
       const bbcode = inputTextarea.value.trim();
       
       if (!bbcode) {
-        alert('❌ Cole o BBCode primeiro!');
+        mostrarMensagem('❌ Cole o BBCode primeiro!', '#e74c3c');
         return;
       }
 
@@ -567,12 +1020,149 @@
       }
     };
 
-    setTimeout(() => inputTextarea.focus(), 100);
+    // === FUNÇÕES DA ABA GERAÇÃO ===
+    btnCancelGenerate.onclick = () => overlay.remove();
+
+    btnGenerate.onclick = async () => {
+      try {
+        // Validações
+        const destinosRaw = document.getElementById('generate-destinos').value.trim();
+        const origensRaw = document.getElementById('generate-origens').value.trim();
+        const horaBase = document.getElementById('generate-horaBase').value.trim();
+        const bonusSinal = parseInt(document.getElementById('generate-bonusSinal').value) || 0;
+        const tipoCalculo = document.getElementById('generate-tipoCalculo').value;
+
+        if (!destinosRaw) {
+          mostrarMensagem('❌ Informe pelo menos um destino!', '#e74c3c');
+          return;
+        }
+        if (!origensRaw) {
+          mostrarMensagem('❌ Informe pelo menos uma origem!', '#e74c3c');
+          return;
+        }
+        if (!horaBase) {
+          mostrarMensagem('❌ Informe a hora base!', '#e74c3c');
+          return;
+        }
+        if (!validarDataHora(horaBase)) {
+          mostrarMensagem('❌ Formato de data inválido! Use: DD/MM/AAAA HH:MM:SS', '#e74c3c');
+          return;
+        }
+
+        const destinos = destinosRaw.split(/\s+/).map(coord => {
+          try { return sanitizarCoordenada(coord); } catch { return null; }
+        }).filter(coord => coord !== null);
+
+        const origens = origensRaw.split(/\s+/).map(coord => {
+          try { return sanitizarCoordenada(coord); } catch { return null; }
+        }).filter(coord => coord !== null);
+
+        // Pega tropas
+        const tropas = {};
+        Object.keys(velocidadesUnidades).forEach(unit => {
+          tropas[unit] = parseInt(document.getElementById(`generate-${unit}`).value) || 0;
+        });
+
+        if (!getUnidadeMaisLenta(tropas)) {
+          mostrarMensagem('❌ Selecione pelo menos uma tropa!', '#e74c3c');
+          return;
+        }
+
+        // Gera BBCode
+        const result = await gerarBBCodeCoordenador({
+          destinos,
+          origens,
+          tipoCalculo,
+          horaBase,
+          tropas,
+          bonusSinal,
+          tipoOrdenacao: 'digitacao',
+          incrementarSegundos: false
+        });
+
+        generatedBBCode = result.bbcode;
+        generateOutput.value = generatedBBCode;
+        generateStats.innerHTML = `
+          <div class="bbcode-stat-item">
+            <span>📦 Ataques Gerados:</span>
+            <span style="color: #2196F3;">${result.combinacoes}</span>
+          </div>
+          <div class="bbcode-stat-item">
+            <span>🐢 Unidade Mais Lenta:</span>
+            <span style="color: #4CAF50;">${result.unidadeMaisLenta}</span>
+          </div>
+        `;
+        generatePreview.style.display = 'block';
+        generatePreview.scrollIntoView({ behavior: 'smooth' });
+
+        mostrarMensagem(`✅ ${result.combinacoes} ataque(s) gerado(s)!`, '#27ae60');
+
+      } catch (error) {
+        console.error('Erro ao gerar BBCode:', error);
+        mostrarMensagem(`❌ Erro: ${error.message}`, '#e74c3c');
+      }
+    };
+
+    btnGenerateCopy.onclick = () => {
+      if (!generatedBBCode) {
+        mostrarMensagem('❌ Gere o BBCode primeiro!', '#e74c3c');
+        return;
+      }
+      
+      generateOutput.select();
+      try {
+        navigator.clipboard.writeText(generatedBBCode).then(() => {
+          mostrarMensagem('✅ BBCode copiado!', '#27ae60');
+        }).catch(() => {
+          document.execCommand('copy');
+          mostrarMensagem('✅ BBCode copiado!', '#27ae60');
+        });
+      } catch {
+        document.execCommand('copy');
+        mostrarMensagem('✅ BBCode copiado!', '#27ae60');
+      }
+    };
+
+    btnGenerateImport.onclick = () => {
+      if (!generatedBBCode) {
+        mostrarMensagem('❌ Gere o BBCode primeiro!', '#e74c3c');
+        return;
+      }
+
+      try {
+        const agendamentos = parseBBCodeRobust(generatedBBCode);
+        if (agendamentos.length === 0) {
+          mostrarMensagem('❌ Nenhum agendamento válido para importar!', '#e74c3c');
+          return;
+        }
+
+        const result = handleImport(agendamentos, false);
+        if (result.duplicados > 0) {
+          mostrarMensagem(`✅ ${result.novos} importado(s)! ⚠️ ${result.duplicados} duplicado(s) ignorado(s).`, '#27ae60');
+        } else {
+          mostrarMensagem(`✅ ${result.novos} agendamento(s) importado(s)!`, '#27ae60');
+        }
+        overlay.remove();
+      } catch (error) {
+        console.error('Erro ao importar BBCode gerado:', error);
+        mostrarMensagem(`❌ Erro ao importar: ${error.message}`, '#e74c3c');
+      }
+    };
+
+    // Focar no campo apropriado
+    setTimeout(() => {
+      const activeTab = document.querySelector('.bbcode-tab.active');
+      if (activeTab.getAttribute('data-tab') === 'import') {
+        inputTextarea.focus();
+      } else {
+        document.getElementById('generate-destinos').focus();
+      }
+    }, 100);
   }
 
   window.TWS_BBCodeModal = {
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas!');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas e gerador integrado!');
 })();
