@@ -9,13 +9,12 @@
   const {
     getList,
     setList,
-    importarDeBBCode,
     parseDateTimeToMs,
     generateUniqueId
   } = window.TWS_Backend;
 
   // ============================================
-  // ⚙️ MÓDULO DE CÁLCULOS (COMPARTILHADO)
+  // ⚙️ MÓDULO DE CÁLCULOS
   // ============================================
   const CalculosUtilitarios = {
     velocidadesUnidades: {
@@ -114,7 +113,6 @@
     }
   };
 
-  // ✅ VALIDADOR MELHORADO DE COORDENADAS
   function parseCoordValidate(s) {
     if (!s) return null;
     try {
@@ -124,7 +122,6 @@
     }
   }
 
-  // ✅ EXTRATOR ROBUSTO DE COORDENADAS
   function extractCoordinatesFromLine(text) {
     if (!text) return [];
     const coordPattern = /\b(\d{1,4})\|(\d{1,4})\b/g;
@@ -140,7 +137,6 @@
     return coords;
   }
 
-  // ✅ PARSER BBCODE MELHORADO
   function parseBBCodeRobust(bbcode) {
     if (!bbcode || typeof bbcode !== 'string') {
       return [];
@@ -151,27 +147,18 @@
     for (const linha of linhas) {
       try {
         const coords = extractCoordinatesFromLine(linha);
-        if (coords.length < 2) {
-          console.warn(`[BBCode] ⚠️ Linha pulada: ${linha.substring(0, 50)}`);
-          continue;
-        }
+        if (coords.length < 2) continue;
         
         const origem = coords[0];
         const destino = coords[1];
         
         const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/;
         const dateMatch = linha.match(datePattern);
-        if (!dateMatch) {
-          console.warn(`[BBCode] ⚠️ Data/hora inválida: ${linha.substring(0, 50)}`);
-          continue;
-        }
+        if (!dateMatch) continue;
         
         const dataHora = `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')}/${dateMatch[3]} ${dateMatch[4].padStart(2, '0')}:${dateMatch[5].padStart(2, '0')}:${dateMatch[6].padStart(2, '0')}`;
         
-        if (!CalculosUtilitarios.validarDataHora(dataHora)) {
-          console.warn(`[BBCode] ⚠️ Data/hora fora dos limites: ${dataHora}`);
-          continue;
-        }
+        if (!CalculosUtilitarios.validarDataHora(dataHora)) continue;
         
         const urlMatch = linha.match(/\[url=(.*?)\]/i);
         const params = {};
@@ -209,7 +196,7 @@
         });
         
         agendamentos.push(cfg);
-        console.log(`[BBCode] ✅ Parseado: ${origem} → ${destino} em ${dataHora}`);
+        console.log(`[BBCode] ✅ Parseado: ${origem} → ${destino}`);
         
       } catch (error) {
         console.error(`[BBCode] ❌ Erro: ${error.message}`);
@@ -220,7 +207,6 @@
     return agendamentos;
   }
 
-  // === Preview dos agendamentos importados ===
   function renderPreview(agendamentos) {
     if (agendamentos.length === 0) {
       return '<p style="text-align:center;color:#888;padding:20px;">Nenhum agendamento detectado</p>';
@@ -229,18 +215,15 @@
     const now = Date.now();
     let html = '<div style="max-height: 400px; overflow-y: auto;">';
     html += '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
-    html += `
-      <thead style="position: sticky; top: 0; background: #8B4513; color: white;">
-        <tr>
-          <th style="padding:8px; border:1px solid #654321;">#</th>
-          <th style="padding:8px; border:1px solid #654321;">Origem</th>
-          <th style="padding:8px; border:1px solid #654321;">Destino</th>
-          <th style="padding:8px; border:1px solid #654321;">Data/Hora</th>
-          <th style="padding:8px; border:1px solid #654321;">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-    `;
+    html += `<thead style="position: sticky; top: 0; background: #8B4513; color: white;">
+      <tr>
+        <th style="padding:8px; border:1px solid #654321;">#</th>
+        <th style="padding:8px; border:1px solid #654321;">Origem</th>
+        <th style="padding:8px; border:1px solid #654321;">Destino</th>
+        <th style="padding:8px; border:1px solid #654321;">Data/Hora</th>
+        <th style="padding:8px; border:1px solid #654321;">Status</th>
+      </tr>
+    </thead><tbody>`;
 
     agendamentos.forEach((cfg, idx) => {
       const t = parseDateTimeToMs(cfg.datetime);
@@ -267,28 +250,27 @@
         statusColor = '#FFEBEE';
       }
 
-      html += `
-        <tr style="background: ${statusColor};">
-          <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
-        </tr>
-      `;
+      html += `<tr style="background: ${statusColor};">
+        <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
+        <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '❌'}</td>
+        <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '❌'}</td>
+        <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '❌'}</td>
+        <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
+      </tr>`;
     });
 
     html += '</tbody></table></div>';
     return html;
   }
 
-  // === Processa a importação ===
   function handleImport(agendamentos, replaceAll) {
     const list = getList();
     
     if (replaceAll) {
       setList(agendamentos);
-      console.log('[BBCode Modal] ✅ Lista substituída completamente');
+      console.log('[BBCode Modal] ✅ Lista substituída');
+      window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
+      return { novos: agendamentos.length, duplicados: 0 };
     } else {
       const existingKeys = new Set(
         list.map(a => `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`)
@@ -303,20 +285,13 @@
       list.push(...novos);
       setList(list);
       
-      console.log(`[BBCode Modal] ✅ ${novos.length} agendamentos adicionados`);
-      if (duplicados > 0) {
-        console.warn(`[BBCode Modal] ⚠️ ${duplicados} duplicados ignorados`);
-      }
-      
+      window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
       return { novos: novos.length, duplicados };
     }
-
-    window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
   }
 
   // Carrega village.txt
   let villageMap = {};
-
   fetch('/map/village.txt')
     .then(res => res.text())
     .then(text => {
@@ -328,7 +303,7 @@
           villageMap[`${x}|${y}`] = id;
         }
       }
-      console.log(`[TW Scheduler] Aldeias carregadas: ${Object.keys(villageMap).length}`);
+      console.log(`[TW Scheduler] ${Object.keys(villageMap).length} aldeias carregadas`);
     })
     .catch(err => console.error('[TW Scheduler] Erro ao carregar villages:', err));
 
@@ -354,163 +329,37 @@
 
     const overlay = document.createElement('div');
     overlay.id = 'tws-bbcode-modal';
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 999999;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      animation: fadeIn 0.2s ease;
-    `;
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 999999; display: flex; justify-content: center; align-items: center;`;
 
     const modal = document.createElement('div');
-    modal.style.cssText = `
-      background: #F4E4C1;
-      border: 3px solid #8B4513;
-      border-radius: 8px;
-      padding: 20px;
-      width: 90%;
-      max-width: 900px;
-      max-height: 85vh;
-      overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-      animation: slideIn 0.3s ease;
-    `;
+    modal.style.cssText = `background: #F4E4C1; border: 3px solid #8B4513; border-radius: 8px; padding: 20px; width: 90%; max-width: 900px; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);`;
 
     modal.innerHTML = `
       <style>
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        
-        .tws-tabs {
-          display: flex;
-          gap: 5px;
-          margin-bottom: 15px;
-          border-bottom: 2px solid #8B4513;
-        }
-        .tws-tab-btn {
-          padding: 8px 15px;
-          background: #DEB887;
-          border: none;
-          cursor: pointer;
-          font-weight: bold;
-          color: #333;
-          border-radius: 4px 4px 0 0;
-          transition: all 0.2s;
-        }
-        .tws-tab-btn.active {
-          background: #8B4513;
-          color: white;
-        }
-        .tws-tab-btn:hover:not(.active) {
-          background: #CD853F;
-        }
-        .tws-tab-content {
-          display: none;
-        }
-        .tws-tab-content.active {
-          display: block;
-        }
-        
-        .bbcode-textarea, .tws-input {
-          width: 100%;
-          padding: 8px;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          font-size: 12px;
-          background: white;
-          color: #333;
-          box-sizing: border-box;
-        }
+        .tws-tabs { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 2px solid #8B4513; }
+        .tws-tab-btn { padding: 8px 15px; background: #DEB887; border: none; cursor: pointer; font-weight: bold; color: #333; border-radius: 4px 4px 0 0; transition: 0.2s; }
+        .tws-tab-btn.active { background: #8B4513; color: white; }
+        .tws-tab-btn:hover:not(.active) { background: #CD853F; }
+        .tws-tab-content { display: none; }
+        .tws-tab-content.active { display: block; }
+        .bbcode-textarea, .tws-input { width: 100%; padding: 8px; border: 2px solid #8B4513; border-radius: 4px; font-size: 12px; background: white; color: #333; box-sizing: border-box; }
         .bbcode-textarea { min-height: 120px; font-family: monospace; resize: vertical; }
         .tws-input { margin-bottom: 8px; }
-        
-        .tws-btn-group {
-          display: flex;
-          gap: 8px;
-          margin: 12px 0;
-          flex-wrap: wrap;
-        }
-        .tws-btn {
-          flex: 1;
-          min-width: 80px;
-          padding: 8px;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-weight: bold;
-          transition: all 0.2s;
-        }
-        .tws-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
+        .tws-btn-group { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+        .tws-btn { flex: 1; min-width: 80px; padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .tws-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
         .tws-btn-primary { background: #27ae60; color: white; }
         .tws-btn-secondary { background: #2196F3; color: white; }
         .tws-btn-danger { background: #e74c3c; color: white; }
         .tws-btn-warning { background: #FF9800; color: white; }
         .tws-btn-neutral { background: #95a5a6; color: white; }
-        
-        .tws-tropas-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px;
-          margin: 12px 0;
-        }
-        .tws-tropa-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .tws-tropa-item img {
-          width: 20px; height: 20px; flex-shrink: 0;
-        }
-        .tws-tropa-item label {
-          min-width: 70px; font-size: 11px;
-        }
-        .tws-tropa-item input {
-          width: 60px; padding: 4px; font-size: 11px;
-        }
-        
-        .tws-info {
-          background: #E3F2FD;
-          border: 1px solid #2196F3;
-          border-radius: 4px;
-          padding: 10px;
-          margin-bottom: 12px;
-          font-size: 12px;
-          line-height: 1.5;
-        }
-        .tws-preview {
-          background: white;
-          border: 2px solid #8B4513;
-          border-radius: 4px;
-          padding: 12px;
-          max-height: 350px;
-          overflow-y: auto;
-        }
-        .tws-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 11px;
-        }
-        .tws-table thead {
-          background: #8B4513;
-          color: white;
-          position: sticky;
-          top: 0;
-        }
-        .tws-table th, .tws-table td {
-          padding: 6px;
-          border: 1px solid #ddd;
-          text-align: left;
-        }
-        .tws-table th { font-weight: bold; }
+        .tws-tropas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+        .tws-tropa-item { display: flex; align-items: center; gap: 6px; }
+        .tws-tropa-item img { width: 20px; height: 20px; flex-shrink: 0; }
+        .tws-tropa-item label { min-width: 70px; font-size: 11px; }
+        .tws-tropa-item input { width: 60px; padding: 4px; font-size: 11px; }
+        .tws-info { background: #E3F2FD; border: 1px solid #2196F3; border-radius: 4px; padding: 10px; margin-bottom: 12px; font-size: 12px; line-height: 1.5; }
+        .tws-preview { background: white; border: 2px solid #8B4513; border-radius: 4px; padding: 12px; max-height: 350px; overflow-y: auto; }
       </style>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -526,38 +375,17 @@
       <!-- ABA 1: PLANO DE ENVIO -->
       <div id="plano" class="tws-tab-content active">
         <div class="tws-info">
-          <strong>📝 Como usar:</strong><br>
-          1️⃣ Defina destino(s) e origem(ns)<br>
-          2️⃣ Configure as tropas<br>
-          3️⃣ Escolha horário (chegada ou lançamento)<br>
-          4️⃣ Clique em "Gerar BBCode"
+          <strong>📝 Como usar:</strong><br>1️⃣ Destino(s) e origem(ns) | 2️⃣ Configure tropas | 3️⃣ Horário | 4️⃣ Gerar BBCode
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div>
-            <label>🎯 Destino(s):</label>
-            <input id="tws-destinos" class="tws-input" placeholder="559|452 560|453">
-            <small style="color: #7f8c8d; font-size: 10px;">Separados por espaço</small>
-          </div>
-          <div>
-            <label>🏠 Origem(ns):</label>
-            <input id="tws-origens" class="tws-input" placeholder="542|433 544|432">
-            <small style="color: #7f8c8d; font-size: 10px;">Separados por espaço</small>
-          </div>
+          <div><label>🎯 Destino(s):</label><input id="tws-destinos" class="tws-input" placeholder="559|452 560|453"></div>
+          <div><label>🏠 Origem(ns):</label><input id="tws-origens" class="tws-input" placeholder="542|433 544|432"></div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div>
-            <label>🎯 Tipo de Cálculo:</label>
-            <select id="tws-tipoCalculo" class="tws-input">
-              <option value="chegada">Por Hora de Chegada</option>
-              <option value="lancamento">Por Hora de Lançamento</option>
-            </select>
-          </div>
-          <div>
-            <label>📈 Sinal (%):</label>
-            <input id="tws-bonusSinal" type="number" class="tws-input" value="0" min="0" max="100">
-          </div>
+          <div><label>🎯 Tipo de Cálculo:</label><select id="tws-tipoCalculo" class="tws-input"><option value="chegada">Por Hora de Chegada</option><option value="lancamento">Por Hora de Lançamento</option></select></div>
+          <div><label>📈 Sinal (%):</label><input id="tws-bonusSinal" type="number" class="tws-input" value="0" min="0" max="100"></div>
         </div>
 
         <div style="margin-bottom: 12px;">
@@ -571,88 +399,32 @@
         </div>
 
         <div style="margin-bottom: 12px;">
-          <label style="display: flex; align-items: center; gap: 6px;">
-            <input type="checkbox" id="tws-incrementarSegundos">
-            ⏱️ Incrementar 
-            <input type="number" id="tws-incrementoValor" value="5" min="1" max="60" style="width: 50px; margin: 0 6px; padding: 2px;"> 
-            segundos por ataque
-          </label>
-          <small style="color: #7f8c8d; font-size: 10px;">Evita ataques simultâneos</small>
+          <label><input type="checkbox" id="tws-incrementarSegundos"> ⏱️ Incrementar <input type="number" id="tws-incrementoValor" value="5" min="1" max="60" style="width: 50px; margin: 0 6px; padding: 2px;"> segundos por ataque</label>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px;">
-          <div id="tws-campoHoraChegada">
-            <label>⏰ Hora de Chegada:</label>
-            <input id="tws-horaChegada" class="tws-input" placeholder="15/11/2025 18:30:00">
-          </div>
-          <div id="tws-campoHoraLancamento" style="display: none;">
-            <label>🚀 Hora de Lançamento:</label>
-            <input id="tws-horaLancamento" class="tws-input" placeholder="15/11/2025 17:45:00">
-          </div>
+        <div id="tws-campoHoraChegada" style="margin-bottom: 12px;">
+          <label>⏰ Hora de Chegada:</label>
+          <input id="tws-horaChegada" class="tws-input" placeholder="15/11/2025 18:30:00">
+        </div>
+        <div id="tws-campoHoraLancamento" style="display: none; margin-bottom: 12px;">
+          <label>🚀 Hora de Lançamento:</label>
+          <input id="tws-horaLancamento" class="tws-input" placeholder="15/11/2025 17:45:00">
         </div>
 
         <label style="font-weight: bold; display: block; margin-bottom: 8px;">⚔️ Tropas:</label>
         <div class="tws-tropas-grid">
-          <div class="tws-tropa-item">
-            <img src="${unitImages.spear}" onerror="this.style.display='none'">
-            <label>Lança:</label>
-            <input type="number" id="tws-spear" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.sword}" onerror="this.style.display='none'">
-            <label>Espada:</label>
-            <input type="number" id="tws-sword" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.axe}" onerror="this.style.display='none'">
-            <label>Machado:</label>
-            <input type="number" id="tws-axe" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.archer}" onerror="this.style.display='none'">
-            <label>Arqueiro:</label>
-            <input type="number" id="tws-archer" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.spy}" onerror="this.style.display='none'">
-            <label>Espião:</label>
-            <input type="number" id="tws-spy" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.light}" onerror="this.style.display='none'">
-            <label>Cav. Leve:</label>
-            <input type="number" id="tws-light" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.marcher}" onerror="this.style.display='none'">
-            <label>Arq. Cav.:</label>
-            <input type="number" id="tws-marcher" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.heavy}" onerror="this.style.display='none'">
-            <label>Cav. Pes.:</label>
-            <input type="number" id="tws-heavy" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.ram}" onerror="this.style.display='none'">
-            <label>Ariete:</label>
-            <input type="number" id="tws-ram" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.catapult}" onerror="this.style.display='none'">
-            <label>Catapulta:</label>
-            <input type="number" id="tws-catapult" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.knight}" onerror="this.style.display='none'">
-            <label>Paladino:</label>
-            <input type="number" id="tws-knight" value="0" min="0">
-          </div>
-          <div class="tws-tropa-item">
-            <img src="${unitImages.snob}" onerror="this.style.display='none'">
-            <label>Nobre:</label>
-            <input type="number" id="tws-snob" value="0" min="0">
-          </div>
+          <div class="tws-tropa-item"><img src="${unitImages.spear}" onerror="this.style.display='none'"><label>Lança:</label><input type="number" id="tws-spear" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.sword}" onerror="this.style.display='none'"><label>Espada:</label><input type="number" id="tws-sword" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.axe}" onerror="this.style.display='none'"><label>Machado:</label><input type="number" id="tws-axe" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.archer}" onerror="this.style.display='none'"><label>Arqueiro:</label><input type="number" id="tws-archer" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.spy}" onerror="this.style.display='none'"><label>Espião:</label><input type="number" id="tws-spy" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.light}" onerror="this.style.display='none'"><label>Cav. Leve:</label><input type="number" id="tws-light" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.marcher}" onerror="this.style.display='none'"><label>Arq. Cav.:</label><input type="number" id="tws-marcher" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.heavy}" onerror="this.style.display='none'"><label>Cav. Pes.:</label><input type="number" id="tws-heavy" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.ram}" onerror="this.style.display='none'"><label>Ariete:</label><input type="number" id="tws-ram" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.catapult}" onerror="this.style.display='none'"><label>Catapulta:</label><input type="number" id="tws-catapult" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.knight}" onerror="this.style.display='none'"><label>Paladino:</label><input type="number" id="tws-knight" value="0" min="0"></div>
+          <div class="tws-tropa-item"><img src="${unitImages.snob}" onerror="this.style.display='none'"><label>Nobre:</label><input type="number" id="tws-snob" value="0" min="0"></div>
         </div>
 
         <div class="tws-btn-group">
@@ -675,17 +447,10 @@
       <!-- ABA 2: IMPORTAR BBCODE -->
       <div id="bbcode" class="tws-tab-content">
         <div class="tws-info">
-          <strong>📝 Como usar:</strong><br>
-          1️⃣ Cole o BBCode no campo abaixo<br>
-          2️⃣ Clique em "Analisar BBCode"<br>
-          3️⃣ Escolha "Adicionar" ou "Substituir Tudo"
+          <strong>📝 Como usar:</strong><br>1️⃣ Cole o BBCode | 2️⃣ Analisar | 3️⃣ Adicionar ou Substituir
         </div>
 
-        <textarea 
-          id="tws-bbcode-input" 
-          class="bbcode-textarea" 
-          placeholder="Cole seu BBCode aqui..."
-        ></textarea>
+        <textarea id="tws-bbcode-input" class="bbcode-textarea" placeholder="Cole seu BBCode aqui..."></textarea>
 
         <div class="tws-btn-group">
           <button id="tws-btn-parse" class="tws-btn tws-btn-secondary">🔍 Analisar BBCode</button>
@@ -786,10 +551,9 @@
             }
           }
           document.getElementById('tws-tipoCalculo').dispatchEvent(new Event('change'));
-          console.log('✅ Configurações carregadas!');
         }
       } catch (error) {
-        console.error('❌ Erro ao carregar configurações:', error);
+        console.error('Erro ao carregar config:', error);
       }
     }
 
@@ -934,7 +698,7 @@
         }
 
         if (coordenadasNaoEncontradas.length > 0) {
-          console.warn('⚠️ Coordenadas não encontradas:', coordenadasNaoEncontradas.join(', '));
+          console.warn('Coordenadas não encontradas:', coordenadasNaoEncontradas.join(', '));
           mostrarMensagem(`⚠️ ${coordenadasNaoEncontradas.length} coordenada(s) não encontrada(s)`, '#f39c12');
         }
 
@@ -986,7 +750,7 @@
         mostrarMensagem(`✅ ${combinacoes.length} ataque(s) gerado(s)!`, '#27ae60');
 
       } catch (error) {
-        console.error('❌ Erro:', error);
+        console.error('Erro:', error);
         mostrarMensagem(`❌ Erro: ${error.message}`, '#e74c3c');
       }
     };
@@ -1112,5 +876,5 @@
     CalculosUtilitarios: CalculosUtilitarios
   };
 
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com planoEnvio integrado!');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado!');
 })();
