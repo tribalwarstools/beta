@@ -13,12 +13,11 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ SISTEMA DE LOCK POR TIMESLOT (HORÁRIO)
+  // ✅ SISTEMA DE LOCK POR TIMESLOT (HORÁRIO) - ANTI-DUPLICAÇÃO
   class TimeslotCoordinator {
     constructor() {
       this.currentTabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       this.activeTimeslots = new Set();
-      this.executionQueue = new Map();
       this.useBroadcast = false;
       this.channel = null;
       
@@ -214,10 +213,24 @@
     }
   }
 
-  // ✅ Instância global
+  // ✅ Instância global do TimeslotCoordinator
   const timeslotCoordinator = new TimeslotCoordinator();
 
-  // === FUNÇÕES UTILITÁRIAS COMPLETAS ===
+  // === Auto-confirm na página de confirmação ===
+  try {
+    if (location.href.includes('screen=place&try=confirm')) {
+      const btn = document.querySelector('#troop_confirm_submit') || 
+                   document.querySelector('button[name="submit"], input[name="submit"]');
+      if (btn) {
+        console.log('[TWS_Backend] Auto-confirmando ataque...');
+        setTimeout(() => btn.click(), 300);
+      }
+    }
+  } catch (e) {
+    console.error('[TWS_Backend] Erro no auto-confirm:', e);
+  }
+
+  // === Utility functions ===
   function parseDateTimeToMs(str) {
     const m = str?.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
     if (!m) return NaN;
@@ -225,14 +238,24 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
+  /**
+   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
+   */
   function parseCoord(s) {
     if (!s) return null;
+    
     const t = s.trim();
     const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    
     if (!match) return null;
+    
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
-    if (x < 0 || x > 499 || y < 0 || y > 499) return null;
+    
+    if (x < 0 || x > 499 || y < 0 || y > 499) {
+      return null;
+    }
+    
     return `${x}|${y}`;
   }
 
@@ -240,13 +263,88 @@
     return parseCoord(s) !== null;
   }
 
+  function getCoordInfo(s) {
+    const normalized = parseCoord(s);
+    
+    if (!normalized) {
+      return {
+        valid: false,
+        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
+      };
+    }
+    
+    const [x, y] = normalized.split('|').map(Number);
+    
+    return {
+      valid: true,
+      original: s.trim(),
+      normalized,
+      x,
+      y,
+      mapSection: getMapSection(x, y),
+      distance: null
+    };
+  }
+
+  function getMapSection(x, y) {
+    const sections = [];
+    if (x < 250) sections.push('Oeste');
+    else if (x > 250) sections.push('Leste');
+    else sections.push('Centro');
+    
+    if (y < 250) sections.push('Norte');
+    else if (y > 250) sections.push('Sul');
+    else sections.push('Centro');
+    
+    return sections.join('-');
+  }
+
+  function getDistance(coord1, coord2) {
+    const c1 = parseCoord(coord1);
+    const c2 = parseCoord(coord2);
+    
+    if (!c1 || !c2) return null;
+    
+    const [x1, y1] = c1.split('|').map(Number);
+    const [x2, y2] = c2.split('|').map(Number);
+    
+    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+  }
+
+  function validateCoordList(coordStrings) {
+    return coordStrings.map((coord, idx) => ({
+      index: idx + 1,
+      input: coord,
+      valid: isValidCoord(coord),
+      normalized: parseCoord(coord),
+      error: !isValidCoord(coord) ? 'Formato inválido' : null
+    }));
+  }
+
+  function sanitizeCoordInput(input) {
+    if (!input) return null;
+    
+    let cleaned = input.trim().replace(/\s+/g, '');
+    cleaned = cleaned.replace(/-/g, '|');
+    cleaned = cleaned.replace(/[^\d|]/g, '');
+    
+    if (!cleaned) return null;
+    
+    return parseCoord(cleaned);
+  }
+
+  // ✅ Gerar ID único
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
     const timestamp = Date.now();
     const random = Math.random().toString(36).substr(2, 9);
-    return `attack_${timestamp}_${random}`;
+    const perf = (typeof performance !== 'undefined' && performance.now) 
+      ? performance.now().toString(36) 
+      : Math.random().toString(36).substr(2, 5);
+    
+    return `${timestamp}_${random}_${perf}`;
   }
 
   function getList() {
@@ -267,7 +365,7 @@
     }
   }
 
-  // === CARREGAR village.txt ===
+  // === Carrega village.txt ===
   async function loadVillageTxt() {
     try {
       const res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
@@ -297,7 +395,7 @@
     }
   }
 
-  // === BUSCAR TROPAS DISPONÍVEIS ===
+  // === Busca tropas disponíveis ===
   async function getVillageTroops(villageId) {
     try {
       const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
@@ -323,6 +421,7 @@
         troops[u] = available;
       });
 
+      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
       return troops;
     } catch (err) {
       console.error('[TWS_Backend] getVillageTroops error:', err);
@@ -330,7 +429,7 @@
     }
   }
 
-  // === VALIDAR TROPAS ===
+  // === Valida tropas ===
   function validateTroops(requested, available) {
     const errors = [];
     TROOP_LIST.forEach(u => {
@@ -343,10 +442,15 @@
     return errors;
   }
 
-  // === VERIFICAR CONFIRMAÇÃO ===
+  // === Verifica confirmação ===
   function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
+    if (/screen=info_command.*type=own/i.test(htmlText)) {
+      return true;
+    }
+
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      return true;
+    }
 
     const successPatterns = [
       /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
@@ -357,11 +461,13 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
-  // === EXECUTAR ATAQUE (COMPLETO) ===
+  // === Execute attack ===
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
-      try { if (statusEl) statusEl.innerHTML = msg; } catch {}
+      try {
+        if (statusEl) statusEl.innerHTML = msg;
+      } catch {}
       console.log('[TWScheduler]', msg);
     };
 
@@ -511,11 +617,14 @@
         
         const finalText = await confirmRes.text();
         
+        console.log('[TWS_Backend] Resposta final recebida');
+        
         if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
           setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
+          console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
           return false;
         }
       } else {
@@ -534,11 +643,12 @@
     }
   }
 
+  // ✅ Delay entre execuções
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // === SCHEDULER ANTI-DUPLICAÇÃO COMPLETO ===
+  // === SCHEDULER COM ANTI-DUPLICAÇÃO POR TIMESLOT ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -656,7 +766,7 @@
     console.log('[TWS_Backend] ✅ SCHEDULER ANTI-DUPLICAÇÃO ATIVADO');
   }
 
-  // === IMPORTAR DE BBCODE ===
+  // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
     const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
     const agendamentos = [];
@@ -702,29 +812,15 @@
     }
     
     console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
+    
     return agendamentos;
   }
 
-  // === AUTO-CONFIRM ===
-  try {
-    if (location.href.includes('screen=place&try=confirm')) {
-      const btn = document.querySelector('#troop_confirm_submit') || 
-                   document.querySelector('button[name="submit"], input[name="submit"]');
-      if (btn) {
-        console.log('[TWS_Backend] Auto-confirmando ataque...');
-        setTimeout(() => btn.click(), 300);
-      }
-    }
-  } catch (e) {
-    console.error('[TWS_Backend] Erro no auto-confirm:', e);
-  }
-
-  // === EXPORTAR API COMPLETA ===
+  // === Exportar API ===
   window.TWS_Backend = {
     loadVillageTxt,
     parseDateTimeToMs,
     parseCoord,
-    isValidCoord,
     getList,
     setList,
     startScheduler,
@@ -733,7 +829,7 @@
     getVillageTroops,
     validateTroops,
     generateUniqueId,
-    timeslotCoordinator,
+    timeslotCoordinator, // ✅ Exportando o novo coordenador
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -741,12 +837,10 @@
     _internal: {
       get villageMap() { return _villageMap; },
       get myVillages() { return _myVillages; },
-      get coordinatorStats() { return timeslotCoordinator.getStats(); }
+      get coordinatorStats() { return timeslotCoordinator.getStats(); } // ✅ Estatísticas do novo sistema
     }
   };
 
   console.log('[TWS_Backend] ✅ SISTEMA COMPLETO ANTI-DUPLICAÇÃO CARREGADO');
+  console.log('[TWS_Backend] 💡 AGORA: Apenas UMA aba processa cada horário específico!');
 })();
-
-
-//teste
