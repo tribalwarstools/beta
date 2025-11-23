@@ -50,24 +50,23 @@
     return html;
   }
 
-  // ✅ Renderiza lista de agendamentos (TAB 1)
+  // ✅ MODIFICADO: Renderiza lista de TODOS os agendamentos (TAB 1)
   function renderAgendamentosList(onSelect) {
     const list = getList();
-    const pendentes = list.filter(a => !a.done);
     
-    if (pendentes.length === 0) {
+    if (list.length === 0) {
       return `
         <div style="text-align: center; padding: 40px; color: #999;">
           <div style="font-size: 48px; margin-bottom: 10px;">📭</div>
-          <div style="font-size: 16px; font-weight: bold;">Nenhum agendamento pendente</div>
-          <small>Todos os agendamentos já foram processados</small>
+          <div style="font-size: 16px; font-weight: bold;">Nenhum agendamento encontrado</div>
+          <small>Não há agendamentos na lista</small>
         </div>
       `;
     }
 
     let html = '<div style="display: grid; gap: 10px;">';
     
-    pendentes.forEach((agend, idx) => {
+    list.forEach((agend, idx) => {
       const now = Date.now();
       const t = parseDateTimeToMs(agend.datetime);
       const diff = t - now;
@@ -78,14 +77,29 @@
         ? `${minutes}:${secs.toString().padStart(2, '0')}` 
         : `${secs}s`;
 
-      let timeColor = '#4CAF50';
-      if (diff < 300000) timeColor = '#FF9800'; // < 5 min = laranja
-      if (diff < 60000) timeColor = '#F44336';  // < 1 min = vermelho
+      // ✅ MODIFICADO: Cores diferentes para status
+      let statusColor, statusText, timeColor;
+      
+      if (agend.done) {
+        statusColor = agend.success ? '#4CAF50' : '#F44336';
+        statusText = agend.success ? '✅ CONCLUÍDO' : '❌ FALHOU';
+        timeColor = '#9E9E9E';
+      } else {
+        statusColor = '#FF9800';
+        statusText = '⏰ PENDENTE';
+        timeColor = '#4CAF50';
+        if (diff < 300000) timeColor = '#FF9800'; // < 5 min = laranja
+        if (diff < 60000) timeColor = '#F44336';  // < 1 min = vermelho
+      }
+
+      // ✅ MODIFICADO: Exibir informações de execução se disponível
+      const execInfo = agend.executedAt ? 
+        `<br><small style="color: #666;">Executado: ${formatDateTime(new Date(agend.executedAt))}</small>` : '';
 
       html += `
         <div onclick="TWS_TestModal._selectAgenda(${idx})" style="
-          background: white;
-          border: 3px solid #8B4513;
+          background: ${agend.done ? (agend.success ? '#F1F8E9' : '#FFEBEE') : 'white'};
+          border: 3px solid ${statusColor};
           border-radius: 8px;
           padding: 12px;
           cursor: pointer;
@@ -93,26 +107,46 @@
           display: flex;
           justify-content: space-between;
           align-items: center;
-        " onmouseover="this.style.background='#FFF9E6'; this.style.transform='scale(1.02)'" onmouseout="this.style.background='white'; this.style.transform='scale(1)'">
-          <div>
+          opacity: ${agend.done ? 0.8 : 1};
+        " onmouseover="this.style.background='${agend.done ? (agend.success ? '#E8F5E9' : '#FFE5E5') : '#FFF9E6'}'; this.style.transform='scale(1.02)'" onmouseout="this.style.background='${agend.done ? (agend.success ? '#F1F8E9' : '#FFEBEE') : 'white'}'; this.style.transform='scale(1)'">
+          <div style="flex: 1;">
             <div style="font-weight: bold; color: #8B4513;">
               #${idx + 1}: ${agend.origem} → ${agend.alvo}
+              <span style="font-size: 12px; background: ${statusColor}; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px;">
+                ${statusText}
+              </span>
             </div>
             <small style="color: #666;">
               📅 ${agend.datetime}
+              ${execInfo}
             </small>
           </div>
-          <div style="
-            background: ${timeColor};
-            color: white;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            text-align: center;
-            min-width: 60px;
-          ">
-            ${timeStr}
-          </div>
+          ${!agend.done ? `
+            <div style="
+              background: ${timeColor};
+              color: white;
+              padding: 8px 12px;
+              border-radius: 4px;
+              font-weight: bold;
+              text-align: center;
+              min-width: 60px;
+            ">
+              ${timeStr}
+            </div>
+          ` : `
+            <div style="
+              background: #9E9E9E;
+              color: white;
+              padding: 8px 12px;
+              border-radius: 4px;
+              font-weight: bold;
+              text-align: center;
+              min-width: 60px;
+              font-size: 12px;
+            ">
+              FINALIZADO
+            </div>
+          `}
         </div>
       `;
     });
@@ -140,11 +174,19 @@
       </div>
     `).join('');
 
+    // ✅ MODIFICADO: Exibir status atual do agendamento
+    const statusInfo = cfg.done ? 
+      `<div style="background: ${cfg.success ? '#E8F5E9' : '#FFEBEE'}; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 2px solid ${cfg.success ? '#4CAF50' : '#F44336'};">
+        <strong>Status:</strong> ${cfg.success ? '✅ CONCLUÍDO COM SUCESSO' : '❌ FALHOU NA EXECUÇÃO'}
+        ${cfg.executedAt ? `<br><small>Executado em: ${formatDateTime(new Date(cfg.executedAt))}</small>` : ''}
+      </div>` : '';
+
     return `
       <div style="display: grid; gap: 15px;">
         <!-- Info básica (leitura) -->
         <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
           <div style="font-weight: bold; color: #8B4513; margin-bottom: 8px;">📍 Dados Básicos</div>
+          ${statusInfo}
           <div style="font-size: 13px; line-height: 1.8;">
             <strong>Origem:</strong> ${cfg.origem}<br>
             <strong>Alvo:</strong> ${cfg.alvo}<br>
@@ -157,18 +199,20 @@
           <div style="font-weight: bold; color: #1976D2; margin-bottom: 10px;">🚀 Opções de Envio</div>
           
           <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" checked style="cursor: pointer;">
+            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" ${cfg.done ? 'disabled' : 'checked'} style="cursor: pointer;">
             <span style="color: #333;">
               <strong>Envio Imediato</strong><br>
               <small style="color: #666;">Envia o ataque AGORA, ignorando o horário</small>
+              ${cfg.done ? '<br><small style="color: #F44336;">⚠️ Agendamento já executado</small>' : ''}
             </span>
           </label>
 
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" style="cursor: pointer;">
+            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" ${cfg.done ? 'disabled' : ''} style="cursor: pointer;">
             <span style="color: #333;">
               <strong>Data/Hora Customizada</strong><br>
               <small style="color: #666;">Define um novo horário de envio</small>
+              ${cfg.done ? '<br><small style="color: #F44336;">⚠️ Agendamento já executado</small>' : ''}
             </span>
           </label>
 
@@ -178,20 +222,24 @@
               id="edit-datetime" 
               placeholder="DD/MM/YYYY HH:MM:SS"
               value="${cfg.datetime}"
+              ${cfg.done ? 'disabled' : ''}
               style="
                 width: 100%;
                 padding: 8px;
                 border: 2px solid #8B4513;
                 border-radius: 4px;
                 box-sizing: border-box;
+                ${cfg.done ? 'background: #F5F5F5; color: #999;' : ''}
               "
             />
-            <small style="color: #666; display: block; margin-top: 8px;">
-              Atalhos: 
-              <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3;">+1min</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3;">+5min</a>
-            </small>
+            ${!cfg.done ? `
+              <small style="color: #666; display: block; margin-top: 8px;">
+                Atalhos: 
+                <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
+                <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3;">+1min</a> | 
+                <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3;">+5min</a>
+              </small>
+            ` : ''}
           </div>
         </div>
 
@@ -210,6 +258,7 @@
   function renderConfirmTab(cfg, datetime, envioType) {
     const isImediato = envioType === 'imediato';
     const isAgendado = envioType === 'agendado';
+    const isOriginalDone = cfg.done;
     
     return `
       <div style="display: grid; gap: 15px;">
@@ -230,12 +279,17 @@
               ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
               : `Novo agendamento criado para: <strong>${datetime}</strong>`}
           </div>
-          ${!isImediato ? `
+          ${isOriginalDone ? `
+            <div style="margin-top: 8px; padding: 8px; background: #FFF3E0; border-radius: 4px; font-size: 12px;">
+              🔄 <strong>Agendamento original já foi executado</strong><br>
+              <small>Criando um NOVO agendamento baseado no original</small>
+            </div>
+          ` : `
             <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
               ✅ <strong>Agendamento original preservado</strong><br>
               <small>Foi criado um NOVO agendamento com suas alterações</small>
             </div>
-          ` : ''}
+          `}
         </div>
 
         <!-- Info do ataque -->
@@ -292,15 +346,15 @@
           statusDiv.style.background = '#E8F5E9';
           statusDiv.style.borderColor = '#4CAF50';
           
-          // ✅ Para envio imediato, marca o original como feito
+          // ✅ Para envio imediato, marca o original como feito apenas se ainda não estava
           const list = getList();
           const idx = list.findIndex(a => 
             a.origem === cfg.origem && 
             a.alvo === cfg.alvo &&
-            !a.done // Apenas se ainda não foi executado
+            a.datetime === cfg.datetime // Match exato
           );
           
-          if (idx !== -1) {
+          if (idx !== -1 && !list[idx].done) {
             list[idx].done = true;
             list[idx].success = true;
             list[idx].executedAt = new Date().toISOString();
@@ -340,10 +394,9 @@
   // === Cria e exibe o modal com abas ===
   function showModal() {
     const list = getList();
-    const pendentes = list.filter(a => !a.done);
     
-    if (pendentes.length === 0) {
-      alert('❌ Nenhum agendamento pendente encontrado!');
+    if (list.length === 0) {
+      alert('❌ Nenhum agendamento encontrado!');
       return;
     }
 
@@ -492,9 +545,9 @@
 
     // Estado compartilhado
     let currentTab = 0;
-    let selectedAgenda = pendentes[0];
+    let selectedAgenda = list[0];
     let currentDatetime = selectedAgenda.datetime;
-    let currentEnvioType = 'imediato';
+    let currentEnvioType = selectedAgenda.done ? 'agendado' : 'imediato';
 
     // Renderizar TAB 1 (Seleção)
     document.getElementById('tab-0').innerHTML = renderAgendamentosList();
@@ -502,8 +555,9 @@
     // ✅ CORREÇÃO CRÍTICA: Reatribuir funções SEMPRE que o modal abrir
     const modalFunctions = {
       _selectAgenda(idx) {
-        selectedAgenda = { ...pendentes[idx] }; // ✅ Cria cópia para não modificar o original
+        selectedAgenda = { ...list[idx] }; // ✅ Cria cópia para não modificar o original
         currentDatetime = selectedAgenda.datetime;
+        currentEnvioType = selectedAgenda.done ? 'agendado' : 'imediato';
         
         // Renderizar TAB 2
         document.getElementById('tab-1').innerHTML = renderEditTab(selectedAgenda);
@@ -532,7 +586,7 @@
         // Se tab 2, renderizar confirmação
         if (tab === 2) {
           // Capturar dados editados
-          currentEnvioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
+          currentEnvioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || currentEnvioType;
           
           if (currentEnvioType === 'agendado') {
             currentDatetime = document.getElementById('edit-datetime')?.value || selectedAgenda.datetime;
@@ -589,14 +643,14 @@
         const list = getList();
         
         if (isImediato) {
-          // ✅ ENVIO IMEDIATO: Marca original como feito
+          // ✅ ENVIO IMEDIATO: Marca original como feito apenas se ainda não estava
           const idx = list.findIndex(a => 
             a.origem === selectedAgenda.origem && 
             a.alvo === selectedAgenda.alvo &&
-            !a.done // Apenas se ainda não foi executado
+            a.datetime === selectedAgenda.datetime // Match exato
           );
 
-          if (idx !== -1) {
+          if (idx !== -1 && !list[idx].done) {
             list[idx].done = true;
             list[idx].success = true;
             list[idx].executedAt = new Date().toISOString();
@@ -647,7 +701,7 @@
     // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
     window.TWS_TestModal.show = showModal;
     
-    console.log('[TW Scheduler Test Modal] ✅ Carregado - CRIA NOVOS AGENDAMENTOS!');
+    console.log('[TW Scheduler Test Modal] ✅ Carregado - EXIBE TODOS OS AGENDAMENTOS!');
     console.log('[TW Scheduler Test Modal] ✅ Função show disponível:', typeof window.TWS_TestModal.show);
   }
 
