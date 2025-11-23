@@ -4,6 +4,7 @@
   // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
+  const LOCK_STORAGE_KEY = 'tws_attack_locks';
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
@@ -12,87 +13,232 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ NOVO: Gerenciador de Broadcast Channel
+  // ✅ SISTEMA HÍBRIDO ANTI-DUPLICAÇÃO
   class AttackCoordinator {
     constructor() {
-      this.processingAttacks = new Map(); // { attackId: timestamp }
+      this.processingAttacks = new Map();
       this.currentTabId = this.generateTabId();
       this.useBroadcast = false;
       this.channel = null;
+      this.localLocks = new Set();
       
-      // Tentar usar BroadcastChannel
+      // Camada 1: BroadcastChannel
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           this.channel = new BroadcastChannel('tws_attacks');
           this.useBroadcast = true;
-          
-          this.channel.onmessage = (event) => {
-            this.handleMessage(event.data);
-          };
-          
+          this.channel.onmessage = (event) => this.handleMessage(event.data);
           console.log(`✅ [${this.currentTabId}] BroadcastChannel ativado`);
         } catch (e) {
           console.warn('⚠️ BroadcastChannel não disponível:', e);
-          this.useBroadcast = false;
         }
-      } else {
-        console.warn('⚠️ BroadcastChannel não suportado neste navegador');
       }
       
-      // Limpar ao fechar aba
-      window.addEventListener('beforeunload', () => {
-        this.cleanup();
-      });
+      // Camada 2: Limpar locks antigos do localStorage
+      this.cleanupExpiredLocks();
+      
+      window.addEventListener('beforeunload', () => this.cleanup());
     }
 
     generateTabId() {
       return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    // 📤 Notificar que vou processar um ataque
-    notifyAttackStart(attackId) {
+    // 🆔 Gerar fingerprint único para o ataque
+    generateAttackFingerprint(attackData) {
+      const { origem, alvo, datetime, ...troops } = attackData;
+      const troopsHash = Object.keys(troops)
+        .filter(k => TROOP_LIST.includes(k))
+        .sort()
+        .map(k => `${k}:${troops[k]}`)
+        .join(';');
+      
+      return btoa(`${origem}|${alvo}|${datetime}|${troopsHash}`).substr(0, 32);
+    }
+
+    // 🔒 CAMADA 1: localStorage (Rápido)
+    acquireLocalStorageLock(fingerprint) {
+      try {
+        const locks = this.getLocalStorageLocks();
+        const now = Date.now();
+        
+        // Limpar locks expirados
+        Object.keys(locks).forEach(fp => {
+          if (now - locks[fp].timestamp > 60000) { // 60 segundos
+            delete locks[fp];
+          }
+        });
+        
+        // Verificar se já está lockado
+        if (locks[fingerprint] && (now - locks[fingerprint].timestamp < 30000)) {
+          return false; // Lock ativo
+        }
+        
+        // Adquirir lock
+        locks[fingerprint] = {
+          tabId: this.currentTabId,
+          timestamp: now,
+          attackData: fingerprint
+        };
+        
+        localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify(locks));
+        return true;
+      } catch (e) {
+        console.warn('⚠️ Erro no localStorage lock:', e);
+        return true; // Permite execução se localStorage falhar
+      }
+    }
+
+    // 🔓 Liberar lock do localStorage
+    releaseLocalStorageLock(fingerprint) {
+      try {
+        const locks = this.getLocalStorageLocks();
+        if (locks[fingerprint]) {
+          delete locks[fingerprint];
+          localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify(locks));
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao liberar localStorage lock:', e);
+      }
+    }
+
+    // 📋 Obter locks do localStorage
+    getLocalStorageLocks() {
+      try {
+        return JSON.parse(localStorage.getItem(LOCK_STORAGE_KEY) || '{}');
+      } catch {
+        return {};
+      }
+    }
+
+    // 🧹 Limpar locks expirados
+    cleanupExpiredLocks() {
+      try {
+        const locks = this.getLocalStorageLocks();
+        const now = Date.now();
+        let changed = false;
+        
+        Object.keys(locks).forEach(fp => {
+          if (now - locks[fp].timestamp > 60000) {
+            delete locks[fp];
+            changed = true;
+          }
+        });
+        
+        if (changed) {
+          localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify(locks));
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao limpar locks expirados:', e);
+      }
+    }
+
+    // 📤 CAMADA 2: BroadcastChannel
+    notifyAttackStart(fingerprint, attackId) {
       this.processingAttacks.set(attackId, Date.now());
       
       if (this.useBroadcast) {
         this.channel.postMessage({
           type: 'ATTACK_START',
+          fingerprint,
           attackId,
           tabId: this.currentTabId,
           timestamp: Date.now()
         });
       }
-      
-      console.log(`📤 [${this.currentTabId}] Iniciando: ${attackId}`);
     }
 
-    // 📥 Notificar que terminei de processar
-    notifyAttackEnd(attackId) {
+    notifyAttackEnd(fingerprint, attackId) {
       this.processingAttacks.delete(attackId);
+      this.localLocks.delete(fingerprint);
       
       if (this.useBroadcast) {
         this.channel.postMessage({
           type: 'ATTACK_END',
+          fingerprint,
           attackId,
           tabId: this.currentTabId,
           timestamp: Date.now()
         });
       }
       
-      console.log(`📤 [${this.currentTabId}] Finalizado: ${attackId}`);
+      // Liberar lock do localStorage
+      this.releaseLocalStorageLock(fingerprint);
     }
 
-    // ✅ Verificar se outro ataque já está processando
+    // 🔒 CAMADA 3: Lock Local (Crítico)
+    acquireLocalLock(fingerprint) {
+      if (this.localLocks.has(fingerprint)) {
+        return false;
+      }
+      this.localLocks.add(fingerprint);
+      return true;
+    }
+
+    releaseLocalLock(fingerprint) {
+      this.localLocks.delete(fingerprint);
+    }
+
+    // ✅ VERIFICAÇÃO HÍBRIDA (3 camadas)
+    canProcessAttack(attackData) {
+      const fingerprint = this.generateAttackFingerprint(attackData);
+      const attackId = attackData._id;
+      
+      // Camada 3: Lock Local (Mais rápido)
+      if (!this.acquireLocalLock(fingerprint)) {
+        console.log(`⏭️ [LocalLock] Já em processamento: ${fingerprint}`);
+        return false;
+      }
+      
+      // Camada 1: localStorage (Verificação cross-tab)
+      if (!this.acquireLocalStorageLock(fingerprint)) {
+        this.releaseLocalLock(fingerprint);
+        console.log(`⏭️ [LocalStorage] Outra aba processando: ${fingerprint}`);
+        return false;
+      }
+      
+      // Camada 2: BroadcastChannel (Sincronização em tempo real)
+      if (this.isBeingProcessed(attackId)) {
+        this.releaseLocalLock(fingerprint);
+        this.releaseLocalStorageLock(fingerprint);
+        console.log(`⏭️ [Broadcast] Já processado: ${attackId}`);
+        return false;
+      }
+      
+      return { fingerprint, attackId };
+    }
+
+    // 📥 Processar mensagens BroadcastChannel
+    handleMessage(data) {
+      const { type, fingerprint, attackId, tabId, timestamp } = data;
+      
+      switch (type) {
+        case 'ATTACK_START':
+          console.log(`📥 [${tabId}] Iniciou: ${fingerprint}`);
+          this.processingAttacks.set(attackId, timestamp);
+          break;
+          
+        case 'ATTACK_END':
+          console.log(`📥 [${tabId}] Finalizou: ${fingerprint}`);
+          this.processingAttacks.delete(attackId);
+          break;
+          
+        case 'CLEANUP':
+          console.log(`📥 [${tabId}] Encerrada`);
+          data.attackIds?.forEach(id => this.processingAttacks.delete(id));
+          break;
+      }
+    }
+
+    // ✅ Verificação BroadcastChannel
     isBeingProcessed(attackId) {
       const timestamp = this.processingAttacks.get(attackId);
-      
       if (!timestamp) return false;
       
       const age = Date.now() - timestamp;
-      const TIMEOUT = 60000; // 60 segundos
+      const TIMEOUT = 60000;
       
-      // Se processando há mais de 60s, considerar morto
       if (age > TIMEOUT) {
-        console.warn(`⚠️ Ataque ${attackId} expirado (${age}ms), removendo lock`);
         this.processingAttacks.delete(attackId);
         return false;
       }
@@ -100,29 +246,7 @@
       return true;
     }
 
-    // 📋 Processar mensagens recebidas
-    handleMessage(data) {
-      const { type, attackId, tabId, timestamp } = data;
-      
-      switch (type) {
-        case 'ATTACK_START':
-          console.log(`📥 Aba ${tabId} iniciou: ${attackId}`);
-          this.processingAttacks.set(attackId, timestamp);
-          break;
-          
-        case 'ATTACK_END':
-          console.log(`📥 Aba ${tabId} finalizou: ${attackId}`);
-          this.processingAttacks.delete(attackId);
-          break;
-          
-        case 'CLEANUP':
-          console.log(`📥 Aba ${tabId} encerrada`);
-          data.attackIds?.forEach(id => this.processingAttacks.delete(id));
-          break;
-      }
-    }
-
-    // 🧹 Limpar ao fechar aba
+    // 🧹 Cleanup
     cleanup() {
       const attackIds = Array.from(this.processingAttacks.keys());
       
@@ -134,18 +258,21 @@
         });
       }
       
-      console.log(`🧹 [${this.currentTabId}] Limpando ${attackIds.length} locks`);
+      // Liberar todos os locks locais
+      this.localLocks.clear();
       
       if (this.channel) {
         this.channel.close();
       }
     }
 
-    // 📊 Obter estatísticas
+    // 📊 Estatísticas
     getStats() {
       return {
         tabId: this.currentTabId,
         processingCount: this.processingAttacks.size,
+        localLocks: this.localLocks.size,
+        storageLocks: Object.keys(this.getLocalStorageLocks()).length,
         useBroadcast: this.useBroadcast
       };
     }
@@ -176,24 +303,14 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
-  /**
-   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
-   */
   function parseCoord(s) {
     if (!s) return null;
-    
     const t = s.trim();
     const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    
     if (!match) return null;
-    
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
-    
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
-      return null;
-    }
-    
+    if (x < 0 || x > 499 || y < 0 || y > 499) return null;
     return `${x}|${y}`;
   }
 
@@ -201,77 +318,6 @@
     return parseCoord(s) !== null;
   }
 
-  function getCoordInfo(s) {
-    const normalized = parseCoord(s);
-    
-    if (!normalized) {
-      return {
-        valid: false,
-        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
-      };
-    }
-    
-    const [x, y] = normalized.split('|').map(Number);
-    
-    return {
-      valid: true,
-      original: s.trim(),
-      normalized,
-      x,
-      y,
-      mapSection: getMapSection(x, y),
-      distance: null
-    };
-  }
-
-  function getMapSection(x, y) {
-    const sections = [];
-    if (x < 250) sections.push('Oeste');
-    else if (x > 250) sections.push('Leste');
-    else sections.push('Centro');
-    
-    if (y < 250) sections.push('Norte');
-    else if (y > 250) sections.push('Sul');
-    else sections.push('Centro');
-    
-    return sections.join('-');
-  }
-
-  function getDistance(coord1, coord2) {
-    const c1 = parseCoord(coord1);
-    const c2 = parseCoord(coord2);
-    
-    if (!c1 || !c2) return null;
-    
-    const [x1, y1] = c1.split('|').map(Number);
-    const [x2, y2] = c2.split('|').map(Number);
-    
-    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-  }
-
-  function validateCoordList(coordStrings) {
-    return coordStrings.map((coord, idx) => ({
-      index: idx + 1,
-      input: coord,
-      valid: isValidCoord(coord),
-      normalized: parseCoord(coord),
-      error: !isValidCoord(coord) ? 'Formato inválido' : null
-    }));
-  }
-
-  function sanitizeCoordInput(input) {
-    if (!input) return null;
-    
-    let cleaned = input.trim().replace(/\s+/g, '');
-    cleaned = cleaned.replace(/-/g, '|');
-    cleaned = cleaned.replace(/[^\d|]/g, '');
-    
-    if (!cleaned) return null;
-    
-    return parseCoord(cleaned);
-  }
-
-  // ✅ Gerar ID único
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
@@ -281,7 +327,6 @@
     const perf = (typeof performance !== 'undefined' && performance.now) 
       ? performance.now().toString(36) 
       : Math.random().toString(36).substr(2, 5);
-    
     return `${timestamp}_${random}_${perf}`;
   }
 
@@ -359,7 +404,6 @@
         troops[u] = available;
       });
 
-      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
       return troops;
     } catch (err) {
       console.error('[TWS_Backend] getVillageTroops error:', err);
@@ -382,13 +426,8 @@
 
   // === Verifica confirmação ===
   function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) {
-      return true;
-    }
-
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
-      return true;
-    }
+    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
 
     const successPatterns = [
       /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
@@ -403,9 +442,7 @@
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
-      try {
-        if (statusEl) statusEl.innerHTML = msg;
-      } catch {}
+      try { if (statusEl) statusEl.innerHTML = msg; } catch {}
       console.log('[TWScheduler]', msg);
     };
 
@@ -555,14 +592,11 @@
         
         const finalText = await confirmRes.text();
         
-        console.log('[TWS_Backend] Resposta final recebida');
-        
         if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
           setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
-          console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
           return false;
         }
       } else {
@@ -581,12 +615,11 @@
     }
   }
 
-  // ✅ Delay entre execuções
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // === Scheduler ===
+  // === Scheduler com Sistema Híbrido ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -596,62 +629,34 @@
       const msgs = [];
       let hasChanges = false;
 
-      const ataquesPorHorario = {};
-      
       for (const a of list) {
         if (a.done || a.locked) continue;
-        
-        // ✅ PROTEÇÃO: Verificar BroadcastChannel
-        if (attackCoordinator.isBeingProcessed(a._id)) {
-          console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
-          continue;
-        }
         
         const t = parseDateTimeToMs(a.datetime);
         if (!t || isNaN(t)) continue;
         
         const diff = t - now;
         
-        if (diff <= 0 && diff > -10000) {
-          if (!ataquesPorHorario[a.datetime]) {
-            ataquesPorHorario[a.datetime] = [];
-          }
-          ataquesPorHorario[a.datetime].push(a);
-        } else if (diff > 0) {
-          const seconds = Math.ceil(diff / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
-        }
-      }
-
-      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-        console.log(`🔥 Processando ${ataques.length} ataques`);
-        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
-        
-        for (let i = 0; i < ataques.length; i++) {
-          const a = ataques[i];
+        // ✅ Só processar se estiver no timing correto (-10s a +2s de tolerância)
+        if (diff <= 2000 && diff >= -10000) {
           
-          // ✅ Verificação dupla
-          if (attackCoordinator.isBeingProcessed(a._id)) {
-            console.log(`⏭️ Pulando ${a._id} (outra aba pegou)`);
+          // 🛡️ VERIFICAÇÃO HÍBRIDA (3 camadas)
+          const lockInfo = attackCoordinator.canProcessAttack(a);
+          if (!lockInfo) {
+            console.log(`⏭️ Ataque bloqueado pelas 3 camadas: ${a.origem} → ${a.alvo}`);
             continue;
           }
           
-          // ✅ Gerar ID se necessário
-          if (!a._id) {
-            a._id = generateUniqueId();
-            hasChanges = true;
-          }
+          const { fingerprint, attackId } = lockInfo;
           
-          // ✅ Notificar início via BroadcastChannel
-          attackCoordinator.notifyAttackStart(a._id);
+          console.log(`🚀 Executando ataque com fingerprint: ${fingerprint}`);
+          
+          // ✅ Notificar início (BroadcastChannel)
+          attackCoordinator.notifyAttackStart(fingerprint, attackId);
           
           a.locked = true;
           hasChanges = true;
           setList(list);
-          
-          console.log(`🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
           
           try {
             const success = await executeAttack(a);
@@ -660,26 +665,29 @@
             a.executedAt = new Date().toISOString();
             hasChanges = true;
             
-            console.log(`✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
+            console.log(`✅ Ataque concluído: ${fingerprint}`);
+            msgs.push(`✅ ${a.origem} → ${a.alvo}`);
           } catch (err) {
             a.error = err.message;
             a.done = true;
             a.success = false;
             hasChanges = true;
-            console.error(`❌ [${i + 1}/${ataques.length}] Erro:`, err);
+            console.error(`❌ Erro no ataque:`, err);
+            msgs.push(`❌ ${a.origem} → ${a.alvo}: ${err.message}`);
           } finally {
-            // ✅ Notificar fim via BroadcastChannel
-            attackCoordinator.notifyAttackEnd(a._id);
-            
+            // ✅ Liberar todos os locks
+            attackCoordinator.notifyAttackEnd(fingerprint, attackId);
             a.locked = false;
             hasChanges = true;
-            console.log(`🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
           
-          if (i < ataques.length - 1) {
-            console.log(`⏳ Aguardando 100ms antes do próximo...`);
-            await sleep(100);
-          }
+          // ⏳ Delay entre execuções
+          await sleep(300);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
         }
       }
 
@@ -693,13 +701,14 @@
       }
     }, 1000);
     
-    console.log('[TWS_Backend] Scheduler iniciado com BroadcastChannel');
+    console.log('[TWS_Backend] ✅ Scheduler iniciado com Sistema Híbrido Anti-Duplicação');
   }
 
   // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
     const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
     const agendamentos = [];
+    const fingerprints = new Set();
     
     for (const linha of linhas) {
       const coords = linha.match(/(\d{3}\|\d{3})/g) || [];
@@ -736,13 +745,15 @@
         cfg[u] = params['att_' + u] || 0;
       });
       
-      if (origem && destino && dataHora) {
+      // ✅ Verificar duplicatas na importação
+      const fingerprint = attackCoordinator.generateAttackFingerprint(cfg);
+      if (!fingerprints.has(fingerprint)) {
+        fingerprints.add(fingerprint);
         agendamentos.push(cfg);
       }
     }
     
     console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
-    
     return agendamentos;
   }
 
@@ -750,7 +761,6 @@
   window.TWS_Backend = {
     loadVillageTxt,
     parseDateTimeToMs,
-    parseCoord,
     getList,
     setList,
     startScheduler,
@@ -771,5 +781,5 @@
     }
   };
 
-  console.log('[TWS_Backend] ✅ Backend v3 carregado (BroadcastChannel)');
+  console.log('[TWS_Backend] ✅ Backend Híbrido carregado (3 camadas anti-duplicação)');
 })();
