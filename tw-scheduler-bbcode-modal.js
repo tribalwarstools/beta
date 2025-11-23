@@ -15,23 +15,25 @@
   } = window.TWS_Backend;
 
   // ✅ VALIDADOR MELHORADO DE COORDENADAS
-  function parseCoordValidate(s) {
-    if (!s) return null;
-    
-    const t = s.trim();
-    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    
-    if (!match) return null;
-    
-    const x = parseInt(match[1], 10);
-    const y = parseInt(match[2], 10);
-    
-    if (x < 0 || x > 999 || y < 0 || y > 999) {
-      return null;
-    }
-    
-    return `${x}|${y}`;
+// ✅ VALIDADOR MELHORADO DE COORDENADAS - VERSÃO CORRIGIDA
+function parseCoordValidate(s) {
+  if (!s) return null;
+  
+  const t = s.trim();
+  const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+  
+  if (!match) return null;
+  
+  const x = parseInt(match[1], 10);
+  const y = parseInt(match[2], 10);
+  
+  // Corrigido: máximo 9999 (4 dígitos) para compatibilidade com a regex
+  if (x < 0 || x > 9999 || y < 0 || y > 9999) {
+    return null;
   }
+  
+  return `${x}|${y}`;
+}
 
   // ✅ EXTRATOR ROBUSTO DE COORDENADAS
   function extractCoordinatesFromLine(text) {
