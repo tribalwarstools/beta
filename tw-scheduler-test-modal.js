@@ -18,13 +18,13 @@
     _internal
   } = window.TWS_Backend;
 
-  // ✅ FORMATA DATA
+  // ✅ Formata data para DD/MM/YYYY HH:MM:SS
   function formatDateTime(date) {
     const pad = (n) => n.toString().padStart(2, '0');
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
-  // ✅ RENDERIZA TROPAS EM CARDS
+  // ✅ Renderiza tropas em cards visuais
   function renderTroopsPreview(cfg) {
     let html = '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;">';
     
@@ -50,44 +50,24 @@
     return html;
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ #1 RENDERIZAR TODOS OS AGENDAMENTOS (NÃO SÓ PENDENTES)
-  // ═════════════════════════════════════════════════════════
-
-  function renderAgendamentosList(filterStatus = 'all') {
+  // ✅ Renderiza lista de agendamentos (TAB 1)
+  function renderAgendamentosList(onSelect) {
     const list = getList();
+    const pendentes = list.filter(a => !a.done);
     
-    if (list.length === 0) {
+    if (pendentes.length === 0) {
       return `
         <div style="text-align: center; padding: 40px; color: #999;">
           <div style="font-size: 48px; margin-bottom: 10px;">📭</div>
-          <div style="font-size: 16px; font-weight: bold;">Nenhum agendamento encontrado</div>
-          <small>Comece adicionando um novo agendamento</small>
-        </div>
-      `;
-    }
-
-    // ✅ FILTRAR POR STATUS
-    let agendamentos = list;
-    if (filterStatus === 'pending') {
-      agendamentos = list.filter(a => !a.done);
-    } else if (filterStatus === 'completed') {
-      agendamentos = list.filter(a => a.done && a.success);
-    } else if (filterStatus === 'failed') {
-      agendamentos = list.filter(a => a.done && !a.success);
-    }
-
-    if (agendamentos.length === 0) {
-      return `
-        <div style="text-align: center; padding: 20px; color: #999; font-size: 14px;">
-          Nenhum agendamento com este filtro
+          <div style="font-size: 16px; font-weight: bold;">Nenhum agendamento pendente</div>
+          <small>Todos os agendamentos já foram processados</small>
         </div>
       `;
     }
 
     let html = '<div style="display: grid; gap: 10px;">';
     
-    agendamentos.forEach((agend, idx) => {
+    pendentes.forEach((agend, idx) => {
       const now = Date.now();
       const t = parseDateTimeToMs(agend.datetime);
       const diff = t - now;
@@ -99,35 +79,13 @@
         : `${secs}s`;
 
       let timeColor = '#4CAF50';
-      let statusIcon = '⏳';
-      let statusText = 'Pendente';
-
-      if (agend.done) {
-        if (agend.success) {
-          timeColor = '#4CAF50';
-          statusIcon = '✅';
-          statusText = 'Enviado';
-        } else {
-          timeColor = '#F44336';
-          statusIcon = '❌';
-          statusText = agend.error ? agend.error.substring(0, 20) : 'Falha';
-        }
-      } else {
-        if (diff < 60000) {
-          timeColor = '#F44336';
-          statusIcon = '🔥';
-        } else if (diff < 300000) {
-          timeColor = '#FF9800';
-          statusIcon = '⏰';
-        }
-      }
-
-      const listaIdx = list.findIndex(a => a === agend);
+      if (diff < 300000) timeColor = '#FF9800'; // < 5 min = laranja
+      if (diff < 60000) timeColor = '#F44336';  // < 1 min = vermelho
 
       html += `
-        <div style="
+        <div onclick="TWS_TestModal._selectAgenda(${idx})" style="
           background: white;
-          border: 3px solid ${timeColor};
+          border: 3px solid #8B4513;
           border-radius: 8px;
           padding: 12px;
           cursor: pointer;
@@ -136,14 +94,13 @@
           justify-content: space-between;
           align-items: center;
         " onmouseover="this.style.background='#FFF9E6'; this.style.transform='scale(1.02)'" onmouseout="this.style.background='white'; this.style.transform='scale(1)'">
-          <div style="flex: 1;">
-            <div style="font-weight: bold; color: #8B4513; font-size: 14px;">
-              ${statusIcon} ${agend.origem} → ${agend.alvo}
+          <div>
+            <div style="font-weight: bold; color: #8B4513;">
+              #${idx + 1}: ${agend.origem} → ${agend.alvo}
             </div>
-            <small style="color: #666; display: block; margin-top: 4px;">
+            <small style="color: #666;">
               📅 ${agend.datetime}
             </small>
-            ${agend.error ? `<small style="color: #F44336;">⚠️ ${agend.error.substring(0, 50)}</small>` : ''}
           </div>
           <div style="
             background: ${timeColor};
@@ -152,22 +109,10 @@
             border-radius: 4px;
             font-weight: bold;
             text-align: center;
-            min-width: 70px;
+            min-width: 60px;
           ">
-            ${agend.done ? statusText : timeStr}
+            ${timeStr}
           </div>
-          <button onclick="TWS_TestModal._selectAgenda(${listaIdx})" style="
-            margin-left: 10px;
-            padding: 6px 12px;
-            background: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-            Testar / Editar
-          </button>
         </div>
       `;
     });
@@ -176,14 +121,11 @@
     return html;
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ #2 EDIÇÃO AVANÇADA DE TROPAS COM VALIDAÇÃO
-  // ═════════════════════════════════════════════════════════
-
+  // ✅ Renderiza edição de dados (TAB 2)
   function renderEditTab(cfg, onUpdate) {
     const troopsHtml = TROOP_LIST.map(u => `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; background: #F5F5F5; padding: 8px; border-radius: 4px;">
-        <label style="width: 70px; font-weight: bold; color: #8B4513;">${u}:</label>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <label style="width: 60px; font-weight: bold; color: #8B4513;">${u}:</label>
         <input type="number" 
           id="edit-troop-${u}" 
           value="${cfg[u] || 0}" 
@@ -193,24 +135,14 @@
             padding: 6px;
             border: 2px solid #8B4513;
             border-radius: 4px;
-            text-align: center;
           "
         />
-        <button onclick="document.getElementById('edit-troop-${u}').value = 0" style="
-          padding: 4px 8px;
-          background: #F44336;
-          color: white;
-          border: none;
-          border-radius: 3px;
-          cursor: pointer;
-          font-size: 11px;
-        ">🗑️ 0</button>
       </div>
     `).join('');
 
     return `
       <div style="display: grid; gap: 15px;">
-        <!-- Info básica -->
+        <!-- Info básica (leitura) -->
         <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
           <div style="font-weight: bold; color: #8B4513; margin-bottom: 8px;">📍 Dados Básicos</div>
           <div style="font-size: 13px; line-height: 1.8;">
@@ -225,18 +157,18 @@
           <div style="font-weight: bold; color: #1976D2; margin-bottom: 10px;">🚀 Opções de Envio</div>
           
           <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" checked style="cursor: pointer; width: 16px; height: 16px;">
+            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" checked style="cursor: pointer;">
             <span style="color: #333;">
               <strong>Envio Imediato</strong><br>
-              <small style="color: #666;">Envia AGORA, testando tropas e configuração</small>
+              <small style="color: #666;">Envia o ataque AGORA, ignorando o horário</small>
             </span>
           </label>
 
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" style="cursor: pointer; width: 16px; height: 16px;">
+            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" style="cursor: pointer;">
             <span style="color: #333;">
-              <strong>Reagendar</strong><br>
-              <small style="color: #666;">Cria novo agendamento com nova data</small>
+              <strong>Data/Hora Customizada</strong><br>
+              <small style="color: #666;">Define um novo horário de envio</small>
             </span>
           </label>
 
@@ -256,72 +188,28 @@
             />
             <small style="color: #666; display: block; margin-top: 8px;">
               Atalhos: 
-              <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3; text-decoration: underline;">Agora</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3; text-decoration: underline;">+1min</a> | 
-              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3; text-decoration: underline;">+5min</a>
+              <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
+              <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3;">+1min</a> | 
+              <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3;">+5min</a>
             </small>
           </div>
         </div>
 
-        <!-- Tropas editáveis com quickfix -->
+        <!-- Tropas editáveis -->
         <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
-          <div style="font-weight: bold; color: #8B4513; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-            <span>🪖 Tropas (Editáveis)</span>
-            <button onclick="document.querySelectorAll('input[id^=edit-troop-]').forEach(el => el.value = 0)" style="
-              padding: 4px 12px;
-              background: #F44336;
-              color: white;
-              border: none;
-              border-radius: 3px;
-              cursor: pointer;
-              font-size: 11px;
-            ">🗑️ Limpar Todas</button>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div style="font-weight: bold; color: #8B4513; margin-bottom: 10px;">🪖 Tropas (Editáveis)</div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
             ${troopsHtml}
           </div>
-        </div>
-
-        <!-- ✅ Verificação de tropas disponíveis -->
-        <div id="troop-validation" style="display: none; background: #FFF3E0; border: 2px solid #FF9800; padding: 12px; border-radius: 8px; color: #E65100;">
-          <strong>⚠️ Validação de Tropas</strong>
-          <div id="validation-content" style="margin-top: 8px; font-size: 12px;"></div>
         </div>
       </div>
     `;
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ #3 RENDERIZAR CONFIRMAÇÃO COM DETALHES COMPLETOS
-  // ═════════════════════════════════════════════════════════
-
-  function renderConfirmTab(cfg, datetime, envioType, availableTroops = null) {
+  // ✅ Renderiza confirmação final (TAB 3)
+  function renderConfirmTab(cfg, datetime, envioType) {
     const isImediato = envioType === 'imediato';
-    
-    // ✅ Validar tropas se disponíveis
-    let troopsValidation = '';
-    if (availableTroops) {
-      const errors = validateTroops(cfg, availableTroops);
-      if (errors.length > 0) {
-        troopsValidation = `
-          <div style="
-            background: #FFEBEE;
-            border: 2px solid #F44336;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 15px;
-          ">
-            <div style="font-weight: bold; color: #D32F2F; margin-bottom: 10px;">⚠️ TROPAS INSUFICIENTES!</div>
-            <div style="color: #C62828; font-size: 12px;">
-              ${errors.map(e => `❌ ${e}`).join('<br>')}
-            </div>
-            <div style="margin-top: 10px; font-size: 11px; color: #D32F2F;">
-              ℹ️ Edite as tropas para as quantidades disponíveis
-            </div>
-          </div>
-        `;
-      }
-    }
+    const isAgendado = envioType === 'agendado';
     
     return `
       <div style="display: grid; gap: 15px;">
@@ -339,9 +227,15 @@
           </div>
           <div style="color: ${isImediato ? '#C62828' : '#1B5E20'}; font-size: 14px; margin-top: 8px;">
             ${isImediato 
-              ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong> (testando tropas)' 
+              ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
               : `Novo agendamento criado para: <strong>${datetime}</strong>`}
           </div>
+          ${!isImediato ? `
+            <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
+              ✅ <strong>Agendamento original preservado</strong><br>
+              <small>Foi criado um NOVO agendamento com suas alterações</small>
+            </div>
+          ` : ''}
         </div>
 
         <!-- Info do ataque -->
@@ -368,9 +262,6 @@
           </div>
         </div>
 
-        <!-- ✅ Validação de tropas (se aplicável) -->
-        ${troopsValidation}
-
         <!-- Checkbox de confirmação -->
         <div style="background: #FFF9E6; border: 2px dashed #FF9800; border-radius: 8px; padding: 15px;">
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -386,10 +277,7 @@
     `;
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ #4 EXECUTAR OU REAGENDAR COM TRATAMENTO DE ERROS
-  // ═════════════════════════════════════════════════════════
-
+  // ✅ Executa o ataque ou cria novo agendamento
   async function executeTest(cfg, datetime, statusDiv, overlay, isImediato) {
     try {
       if (isImediato) {
@@ -404,11 +292,12 @@
           statusDiv.style.background = '#E8F5E9';
           statusDiv.style.borderColor = '#4CAF50';
           
+          // ✅ Para envio imediato, marca o original como feito
           const list = getList();
           const idx = list.findIndex(a => 
             a.origem === cfg.origem && 
             a.alvo === cfg.alvo &&
-            !a.done
+            !a.done // Apenas se ainda não foi executado
           );
           
           if (idx !== -1) {
@@ -430,19 +319,6 @@
         }
       } else {
         // ✅ AGENDAMENTO - CRIA NOVO agendamento
-        const list = getList();
-        const novoAgendamento = {
-          ...cfg,
-          datetime: datetime,
-          done: false,
-          success: false,
-          executedAt: null,
-          error: null
-        };
-
-        list.push(novoAgendamento);
-        setList(list);
-
         statusDiv.innerHTML = '✅ <strong>Novo agendamento criado com sucesso!</strong><br><small>O agendamento original foi preservado.</small>';
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
@@ -455,21 +331,19 @@
       
     } catch (error) {
       console.error('[Test Modal] Erro:', error);
-      statusDiv.innerHTML = `❌ <strong>Erro:</strong> ${error.message}<br><small>Tente novamente ou edite as tropas</small>`;
+      statusDiv.innerHTML = `❌ <strong>Erro:</strong> ${error.message}`;
       statusDiv.style.background = '#FFEBEE';
       statusDiv.style.borderColor = '#F44336';
     }
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ #5 MODAL PRINCIPAL COM ABAS E FILTROS
-  // ═════════════════════════════════════════════════════════
-
+  // === Cria e exibe o modal com abas ===
   function showModal() {
     const list = getList();
+    const pendentes = list.filter(a => !a.done);
     
-    if (list.length === 0) {
-      alert('❌ Nenhum agendamento encontrado!');
+    if (pendentes.length === 0) {
+      alert('❌ Nenhum agendamento pendente encontrado!');
       return;
     }
 
@@ -499,8 +373,8 @@
       border-radius: 12px;
       padding: 0;
       width: 90%;
-      max-width: 900px;
-      max-height: 90vh;
+      max-width: 800px;
+      max-height: 85vh;
       overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       animation: slideIn 0.3s ease;
@@ -513,120 +387,151 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: scale(0.9) translateY(-20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
         
-        .test-filter-btn {
-          padding: 8px 14px;
-          border: 2px solid #8B4513;
-          background: white;
-          color: #8B4513;
+        .tab-header {
+          display: flex;
+          gap: 0;
+          background: #8B4513;
+          border-bottom: 3px solid #654321;
+        }
+        .tab-btn {
+          flex: 1;
+          padding: 15px;
+          border: none;
+          background: #A0522D;
+          color: white;
           font-weight: bold;
           cursor: pointer;
-          border-radius: 4px;
-          transition: all 0.2s;
-          margin: 5px;
+          border-bottom: 4px solid transparent;
+          transition: all 0.3s;
+          font-size: 14px;
         }
-        .test-filter-btn.active {
+        .tab-btn:hover {
           background: #8B4513;
-          color: white;
         }
-        .test-filter-btn:hover {
+        .tab-btn.active {
+          background: #8B4513;
+          border-bottom-color: #FFD700;
+          box-shadow: inset 0 -2px 0 #FFD700;
+        }
+        .tab-content {
+          flex: 1;
+          padding: 20px;
+          overflow-y: auto;
+          display: none;
+        }
+        .tab-content.active {
+          display: block;
+        }
+        .tab-footer {
+          padding: 15px 20px;
+          background: #E8D4A8;
+          border-top: 2px solid #8B4513;
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+        }
+        .btn {
+          padding: 10px 20px;
+          border: none;
+          border-radius: 6px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) {
           transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-      </style>
-
-      <!-- Cabeçalho -->
-      <div style="background: #8B4513; padding: 20px; color: white;">
-        <h2 style="margin: 0 0 10px 0;">🔥 Teste / Edição Avançada</h2>
-        <div style="font-size: 12px; opacity: 0.9;">
-          ✅ Exibe TODOS os agendamentos | 🔧 Edite tropas e horários | 💾 Crie novo agendamento
-        </div>
-      </div>
-
-      <!-- Filtros -->
-      <div style="background: #F5E6D3; padding: 12px; border-bottom: 2px solid #8B4513; display: flex; gap: 10px; flex-wrap: wrap;">
-        <button class="test-filter-btn active" onclick="TWS_TestModal._filterBy('all')">📋 Todos (${list.length})</button>
-        <button class="test-filter-btn" onclick="TWS_TestModal._filterBy('pending')">⏳ Pendentes (${list.filter(a => !a.done).length})</button>
-        <button class="test-filter-btn" onclick="TWS_TestModal._filterBy('completed')">✅ Enviados (${list.filter(a => a.done && a.success).length})</button>
-        <button class="test-filter-btn" onclick="TWS_TestModal._filterBy('failed')">❌ Falhados (${list.filter(a => a.done && !a.success).length})</button>
-      </div>
-
-      <!-- Conteúdo com abas -->
-      <div id="test-content" style="flex: 1; overflow-y: auto; padding: 20px;">
-        <div id="test-status" style="
+        .btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .btn-cancel { background: #9E9E9E; color: white; }
+        .btn-next { background: #2196F3; color: white; }
+        .btn-prev { background: #9C27B0; color: white; }
+        .btn-send { background: #F44336; color: white; }
+        .btn-schedule { background: #4CAF50; color: white; }
+        #test-status {
           padding: 12px;
           border: 2px solid #2196F3;
           border-radius: 6px;
           background: #E3F2FD;
           margin-bottom: 15px;
-          display: none;
-        "></div>
-        
-        <div id="test-list"></div>
-        <div id="tab-1" class="tab-content" style="display: none;"></div>
-        <div id="tab-2" class="tab-content" style="display: none;"></div>
+          font-size: 13px;
+          line-height: 1.6;
+        }
+      </style>
+
+      <!-- Abas -->
+      <div class="tab-header">
+        <button class="tab-btn active" onclick="TWS_TestModal._switchTab(0)">1️⃣ Selecionar</button>
+        <button class="tab-btn" onclick="TWS_TestModal._switchTab(1)">2️⃣ Editar</button>
+        <button class="tab-btn" onclick="TWS_TestModal._switchTab(2)">3️⃣ Confirmar</button>
       </div>
 
-      <!-- Rodapé -->
-      <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        Teste Modal v2.0 | Total: ${list.length} agendamentos
+      <!-- Conteúdo das abas -->
+      <div id="test-content" style="flex: 1; overflow-y: auto; padding: 20px;">
+        <div id="test-status"></div>
+        <div id="tab-0" class="tab-content active"></div>
+        <div id="tab-1" class="tab-content"></div>
+        <div id="tab-2" class="tab-content"></div>
+      </div>
+
+      <!-- Rodapé com botões -->
+      <div class="tab-footer">
+        <button class="btn btn-cancel" onclick="document.getElementById('tws-test-modal').remove()">❌ Cancelar</button>
+        <button class="btn btn-prev" id="btn-prev" onclick="TWS_TestModal._prevTab()" style="display: none;">⬅️ Voltar</button>
+        <button class="btn btn-next" id="btn-next" onclick="TWS_TestModal._nextTab()">Próximo ➡️</button>
+        <button class="btn btn-send" id="btn-send-imediato" onclick="TWS_TestModal._executeFinal(true)" style="display: none;">🚀 Enviar Agora</button>
+        <button class="btn btn-schedule" id="btn-send-agendado" onclick="TWS_TestModal._executeFinal(false)" style="display: none;">💾 Criar Novo Agendamento</button>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // ✅ Estado compartilhado
+    // Estado compartilhado
     let currentTab = 0;
-    let currentFilter = 'all';
-    let selectedAgenda = null;
-    let currentDatetime = null;
+    let selectedAgenda = pendentes[0];
+    let currentDatetime = selectedAgenda.datetime;
     let currentEnvioType = 'imediato';
 
-    // Renderizar lista inicial
-    document.getElementById('test-list').innerHTML = renderAgendamentosList('all');
+    // Renderizar TAB 1 (Seleção)
+    document.getElementById('tab-0').innerHTML = renderAgendamentosList();
 
-    // Funções
+    // ✅ CORREÇÃO CRÍTICA: Reatribuir funções SEMPRE que o modal abrir
     const modalFunctions = {
-      _filterBy(filter) {
-        currentFilter = filter;
-        
-        // Atualizar botões
-        document.querySelectorAll('.test-filter-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-
-        // Atualizar lista
-        document.getElementById('test-list').innerHTML = renderAgendamentosList(filter);
-      },
-
       _selectAgenda(idx) {
-        selectedAgenda = { ...getList()[idx] };
+        selectedAgenda = { ...pendentes[idx] }; // ✅ Cria cópia para não modificar o original
         currentDatetime = selectedAgenda.datetime;
         
-        // Renderizar TAB 1 (Edição)
+        // Renderizar TAB 2
         document.getElementById('tab-1').innerHTML = renderEditTab(selectedAgenda);
-        document.getElementById('tab-1').style.display = 'block';
-        document.getElementById('test-list').style.display = 'none';
-
-        // Auto-validar tropas
-        setTimeout(() => {
-          this._validateTroops();
-        }, 500);
+        
+        // Ir para TAB 2
+        TWS_TestModal._switchTab(1);
+        
+        console.log('[Test Modal] Agendamento selecionado (cópia):', selectedAgenda);
       },
 
-      _validateTroops() {
-        const origemSelect = document.querySelector('input[id^="edit-troop-"]:first-of-type')?.parentElement;
-        if (!origemSelect) return;
-
-        // Aqui você poderia chamar getVillageTroops se necessário
-        console.log('[Test] Tropas validadas');
-      },
-
-      _nextTab() {
-        if (currentTab === 0) {
-          // De lista para edição
-          this._selectAgenda(currentTab);
-          currentTab = 1;
-        } else if (currentTab === 1) {
-          // De edição para confirmação
+      _switchTab(tab) {
+        currentTab = tab;
+        
+        // Ocultar todas as abas
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        
+        // Mostrar aba atual
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.querySelectorAll('.tab-btn')[tab].classList.add('active');
+        
+        // Atualizar botões
+        document.getElementById('btn-prev').style.display = tab === 0 ? 'none' : 'block';
+        document.getElementById('btn-next').style.display = tab === 2 ? 'none' : 'block';
+        
+        // Se tab 2, renderizar confirmação
+        if (tab === 2) {
+          // Capturar dados editados
           currentEnvioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || 'imediato';
           
           if (currentEnvioType === 'agendado') {
@@ -635,30 +540,39 @@
             currentDatetime = formatDateTime(new Date());
           }
 
-          // Atualizar tropas editadas
+          // Atualizar tropas se editadas
           TROOP_LIST.forEach(u => {
             const val = document.getElementById(`edit-troop-${u}`)?.value || selectedAgenda[u];
             selectedAgenda[u] = parseInt(val, 10);
           });
 
-          // Renderizar confirmação
+          // Mostrar botão correto
+          document.getElementById('btn-send-imediato').style.display = currentEnvioType === 'imediato' ? 'block' : 'none';
+          document.getElementById('btn-send-agendado').style.display = currentEnvioType === 'agendado' ? 'block' : 'none';
+
           document.getElementById('tab-2').innerHTML = renderConfirmTab(selectedAgenda, currentDatetime, currentEnvioType);
-          document.getElementById('tab-1').style.display = 'none';
-          document.getElementById('tab-2').style.display = 'block';
-          currentTab = 2;
+        } else {
+          document.getElementById('btn-send-imediato').style.display = 'none';
+          document.getElementById('btn-send-agendado').style.display = 'none';
+        }
+
+        // Listener para tipo de envio
+        if (tab === 1) {
+          document.getElementById('envio-imediato').onchange = () => {
+            document.getElementById('datetime-editor').style.display = 'none';
+          };
+          document.getElementById('envio-agendado').onchange = () => {
+            document.getElementById('datetime-editor').style.display = 'block';
+          };
         }
       },
 
+      _nextTab() {
+        if (currentTab < 2) TWS_TestModal._switchTab(currentTab + 1);
+      },
+
       _prevTab() {
-        if (currentTab === 2) {
-          document.getElementById('tab-2').style.display = 'none';
-          document.getElementById('tab-1').style.display = 'block';
-          currentTab = 1;
-        } else if (currentTab === 1) {
-          document.getElementById('tab-1').style.display = 'none';
-          document.getElementById('test-list').style.display = 'block';
-          currentTab = 0;
-        }
+        if (currentTab > 0) TWS_TestModal._switchTab(currentTab - 1);
       },
 
       _executeFinal(isImediato) {
@@ -669,59 +583,75 @@
         }
 
         const statusDiv = document.getElementById('test-status');
-        statusDiv.style.display = 'block';
         const overlay = document.getElementById('tws-test-modal');
 
+        // ✅ NOVO COMPORTAMENTO: CRIAR NOVO AGENDAMENTO
+        const list = getList();
+        
+        if (isImediato) {
+          // ✅ ENVIO IMEDIATO: Marca original como feito
+          const idx = list.findIndex(a => 
+            a.origem === selectedAgenda.origem && 
+            a.alvo === selectedAgenda.alvo &&
+            !a.done // Apenas se ainda não foi executado
+          );
+
+          if (idx !== -1) {
+            list[idx].done = true;
+            list[idx].success = true;
+            list[idx].executedAt = new Date().toISOString();
+          }
+        } else {
+          // ✅ AGENDAMENTO: CRIA NOVO agendamento
+          const novoAgendamento = {
+            ...selectedAgenda,
+            datetime: currentDatetime,
+            done: false,
+            success: false,
+            executedAt: null,
+            error: null
+          };
+
+          list.push(novoAgendamento);
+          console.log('[Test Modal] ✅ NOVO agendamento criado:', novoAgendamento);
+        }
+
+        setList(list);
+
+        // Preparar config final
         const finalCfg = { ...selectedAgenda };
+        
+        // Executar com o tipo correto
         executeTest(finalCfg, currentDatetime, statusDiv, overlay, isImediato);
       }
     };
 
+    // ✅ CORREÇÃO: Usar Object.assign para adicionar funções sem sobrescrever
     Object.assign(window.TWS_TestModal, modalFunctions);
 
-    // Listener para tipo de envio
-    setTimeout(() => {
-      const envioImediato = document.getElementById('envio-imediato');
-      const envioAgendado = document.getElementById('envio-agendado');
-      const datetimeEditor = document.getElementById('datetime-editor');
-
-      if (envioImediato) {
-        envioImediato.onchange = () => {
-          if (datetimeEditor) datetimeEditor.style.display = 'none';
-        };
-      }
-
-      if (envioAgendado) {
-        envioAgendado.onchange = () => {
-          if (datetimeEditor) datetimeEditor.style.display = 'block';
-        };
-      }
-    }, 100);
-
+    // ✅ CORREÇÃO: Fechar seguro - só remove elementos DOM
     overlay.onclick = (e) => { 
       if (e.target === overlay) {
-        overlay.remove(); 
+        overlay.remove(); // ⚠️ Só remove DOM, não as funções
       }
     };
   }
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ INICIALIZAÇÃO
-  // ═════════════════════════════════════════════════════════
-
+  // === INICIALIZAÇÃO CORRIGIDA ===
   function init() {
+    // ✅ CORREÇÃO: Garantir que TWS_TestModal existe
     if (!window.TWS_TestModal) {
       window.TWS_TestModal = {};
     }
     
+    // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
     window.TWS_TestModal.show = showModal;
     
-    console.log('[TW Scheduler Test Modal] ✅ Carregado v2.0 - Teste e Edição Avançada!');
-    console.log('[TW Scheduler Test Modal] ✅ Exibe TODOS os agendamentos (não só pendentes)');
-    console.log('[TW Scheduler Test Modal] ✅ Edição de tropas com validação');
-    console.log('[TW Scheduler Test Modal] ✅ Recuperação em caso de falha');
+    console.log('[TW Scheduler Test Modal] ✅ Carregado - CRIA NOVOS AGENDAMENTOS!');
+    console.log('[TW Scheduler Test Modal] ✅ Função show disponível:', typeof window.TWS_TestModal.show);
   }
 
+  // Inicializar
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
