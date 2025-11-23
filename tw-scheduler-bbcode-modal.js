@@ -14,7 +14,6 @@
     generateUniqueId
   } = window.TWS_Backend;
 
-  // ✅ VALIDADOR MELHORADO DE COORDENADAS
 // ✅ VALIDADOR MELHORADO DE COORDENADAS - VERSÃO CORRIGIDA
 function parseCoordValidate(s) {
   if (!s) return null;
@@ -47,7 +46,7 @@ function parseCoordValidate(s) {
       const x = parseInt(match[1], 10);
       const y = parseInt(match[2], 10);
       
-      if (x >= 0 && x <= 499 && y >= 0 && y <= 499) {
+      if (x >= 0 && x <= 9999 && y >= 0 && y <= 9999) {
         coords.push(`${x}|${y}`);
       }
     }
