@@ -4,7 +4,6 @@
   // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
-  const TIMESLOT_LOCK_KEY = 'tws_timeslot_locks';
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
@@ -13,211 +12,163 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ SISTEMA DE LOCK POR TIMESLOT (HORÁRIO)
-  class TimeslotCoordinator {
+  // ✅ NOVO: Gerenciador de Broadcast Channel
+  class AttackCoordinator {
     constructor() {
-      this.currentTabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      this.activeTimeslots = new Set();
-      this.executionQueue = new Map();
+      this.processingAttacks = new Map(); // { attackId: timestamp }
+      this.currentTabId = this.generateTabId();
       this.useBroadcast = false;
       this.channel = null;
       
+      // Tentar usar BroadcastChannel
       if (typeof BroadcastChannel !== 'undefined') {
         try {
-          this.channel = new BroadcastChannel('tws_timeslots');
+          this.channel = new BroadcastChannel('tws_attacks');
           this.useBroadcast = true;
-          this.channel.onmessage = (event) => this.handleMessage(event.data);
-          console.log(`✅ [${this.currentTabId}] TimeslotCoordinator ativado`);
+          
+          this.channel.onmessage = (event) => {
+            this.handleMessage(event.data);
+          };
+          
+          console.log(`✅ [${this.currentTabId}] BroadcastChannel ativado`);
         } catch (e) {
           console.warn('⚠️ BroadcastChannel não disponível:', e);
+          this.useBroadcast = false;
         }
+      } else {
+        console.warn('⚠️ BroadcastChannel não suportado neste navegador');
       }
       
-      // Limpar locks expirados a cada 30s
-      setInterval(() => this.cleanupExpiredLocks(), 30000);
-      window.addEventListener('beforeunload', () => this.cleanup());
+      // Limpar ao fechar aba
+      window.addEventListener('beforeunload', () => {
+        this.cleanup();
+      });
     }
 
-    // 🕒 Gerar chave de timeslot (segundo específico)
-    getTimeslotKey(datetimeStr) {
-      const timestamp = parseDateTimeToMs(datetimeStr);
-      if (isNaN(timestamp)) return null;
-      
-      // Arredonda para o segundo (remove milissegundos)
-      const timeslot = Math.floor(timestamp / 1000);
-      return `timeslot_${timeslot}`;
+    generateTabId() {
+      return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    // 🔒 Tentar adquirir lock de um timeslot
-    async acquireTimeslotLock(timeslotKey, attackCount = 1) {
-      const now = Date.now();
+    // 📤 Notificar que vou processar um ataque
+    notifyAttackStart(attackId) {
+      this.processingAttacks.set(attackId, Date.now());
       
-      // ✅ Camada 1: Lock local (evita duplicata na mesma aba)
-      if (this.activeTimeslots.has(timeslotKey)) {
-        console.log(`⏭️ [Local] Timeslot ${timeslotKey} já está sendo processado`);
-        return false;
-      }
-
-      // ✅ Camada 2: Lock em localStorage (entre abas)
-      try {
-        const allLocks = this.getGlobalLocks();
-        const existingLock = allLocks[timeslotKey];
-        
-        if (existingLock) {
-          const lockAge = now - existingLock.timestamp;
-          
-          // Se lock é recente (< 30 segundos), não permitir
-          if (lockAge < 30000) {
-            console.log(`⏭️ [Global] Timeslot ${timeslotKey} travado por ${existingLock.tabId} (${Math.round(lockAge/1000)}s)`);
-            return false;
-          } else {
-            // Lock expirado, remover
-            console.log(`🧹 Removendo lock expirado: ${timeslotKey}`);
-            delete allLocks[timeslotKey];
-          }
-        }
-
-        // Adquirir lock
-        allLocks[timeslotKey] = {
-          tabId: this.currentTabId,
-          timestamp: now,
-          attackCount: attackCount,
-          acquiredAt: new Date().toISOString()
-        };
-        
-        localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        
-        // ✅ Camada 3: Notificar via BroadcastChannel
-        if (this.useBroadcast) {
-          this.channel.postMessage({
-            type: 'TIMESLOT_ACQUIRED',
-            timeslotKey,
-            tabId: this.currentTabId,
-            timestamp: now,
-            attackCount
-          });
-        }
-
-      } catch (e) {
-        console.warn('⚠️ Erro no lock global:', e);
-        return false;
-      }
-
-      // ✅ Adicionar ao controle local
-      this.activeTimeslots.add(timeslotKey);
-      console.log(`🔒 [${this.currentTabId}] Timeslot adquirido: ${timeslotKey} para ${attackCount} ataques`);
-      
-      return true;
-    }
-
-    // 🔓 Liberar lock do timeslot
-    releaseTimeslotLock(timeslotKey) {
-      // Remover localmente
-      this.activeTimeslots.delete(timeslotKey);
-      
-      // Remover do localStorage
-      try {
-        const allLocks = this.getGlobalLocks();
-        if (allLocks[timeslotKey]?.tabId === this.currentTabId) {
-          delete allLocks[timeslotKey];
-          localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        }
-      } catch (e) {
-        console.warn('⚠️ Erro ao liberar lock global:', e);
-      }
-      
-      // Notificar via Broadcast
       if (this.useBroadcast) {
         this.channel.postMessage({
-          type: 'TIMESLOT_RELEASED',
-          timeslotKey,
+          type: 'ATTACK_START',
+          attackId,
           tabId: this.currentTabId,
           timestamp: Date.now()
         });
       }
       
-      console.log(`🔓 [${this.currentTabId}] Timeslot liberado: ${timeslotKey}`);
+      console.log(`📤 [${this.currentTabId}] Iniciando: ${attackId}`);
     }
 
-    // 🧹 Limpar locks expirados
-    cleanupExpiredLocks() {
-      try {
-        const allLocks = this.getGlobalLocks();
-        const now = Date.now();
-        let changed = false;
-        
-        Object.keys(allLocks).forEach(timeslotKey => {
-          const lock = allLocks[timeslotKey];
-          if (now - lock.timestamp > 60000) { // 60 segundos
-            delete allLocks[timeslotKey];
-            changed = true;
-            console.log(`🧹 Limpando lock expirado: ${timeslotKey}`);
-          }
+    // 📥 Notificar que terminei de processar
+    notifyAttackEnd(attackId) {
+      this.processingAttacks.delete(attackId);
+      
+      if (this.useBroadcast) {
+        this.channel.postMessage({
+          type: 'ATTACK_END',
+          attackId,
+          tabId: this.currentTabId,
+          timestamp: Date.now()
         });
-        
-        if (changed) {
-          localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        }
-      } catch (e) {
-        console.warn('⚠️ Erro ao limpar locks expirados:', e);
       }
+      
+      console.log(`📤 [${this.currentTabId}] Finalizado: ${attackId}`);
     }
 
-    // 📋 Obter locks globais
-    getGlobalLocks() {
-      try {
-        return JSON.parse(localStorage.getItem(TIMESLOT_LOCK_KEY) || '{}');
-      } catch {
-        return {};
+    // ✅ Verificar se outro ataque já está processando
+    isBeingProcessed(attackId) {
+      const timestamp = this.processingAttacks.get(attackId);
+      
+      if (!timestamp) return false;
+      
+      const age = Date.now() - timestamp;
+      const TIMEOUT = 60000; // 60 segundos
+      
+      // Se processando há mais de 60s, considerar morto
+      if (age > TIMEOUT) {
+        console.warn(`⚠️ Ataque ${attackId} expirado (${age}ms), removendo lock`);
+        this.processingAttacks.delete(attackId);
+        return false;
       }
+      
+      return true;
     }
 
-    // 📥 Processar mensagens
+    // 📋 Processar mensagens recebidas
     handleMessage(data) {
-      const { type, timeslotKey, tabId, timestamp } = data;
+      const { type, attackId, tabId, timestamp } = data;
       
       switch (type) {
-        case 'TIMESLOT_ACQUIRED':
-          console.log(`📥 Aba ${tabId} adquiriu timeslot: ${timeslotKey}`);
-          // Adicionar ao controle local para evitar conflitos
-          this.activeTimeslots.add(timeslotKey);
+        case 'ATTACK_START':
+          console.log(`📥 Aba ${tabId} iniciou: ${attackId}`);
+          this.processingAttacks.set(attackId, timestamp);
           break;
           
-        case 'TIMESLOT_RELEASED':
-          console.log(`📥 Aba ${tabId} liberou timeslot: ${timeslotKey}`);
-          this.activeTimeslots.delete(timeslotKey);
+        case 'ATTACK_END':
+          console.log(`📥 Aba ${tabId} finalizou: ${attackId}`);
+          this.processingAttacks.delete(attackId);
+          break;
+          
+        case 'CLEANUP':
+          console.log(`📥 Aba ${tabId} encerrada`);
+          data.attackIds?.forEach(id => this.processingAttacks.delete(id));
           break;
       }
     }
 
-    // 🧹 Cleanup
+    // 🧹 Limpar ao fechar aba
     cleanup() {
-      // Liberar todos os locks desta aba
-      this.activeTimeslots.forEach(timeslotKey => {
-        this.releaseTimeslotLock(timeslotKey);
-      });
+      const attackIds = Array.from(this.processingAttacks.keys());
+      
+      if (this.useBroadcast && this.channel) {
+        this.channel.postMessage({
+          type: 'CLEANUP',
+          tabId: this.currentTabId,
+          attackIds
+        });
+      }
+      
+      console.log(`🧹 [${this.currentTabId}] Limpando ${attackIds.length} locks`);
       
       if (this.channel) {
         this.channel.close();
       }
     }
 
-    // 📊 Estatísticas
+    // 📊 Obter estatísticas
     getStats() {
-      const globalLocks = this.getGlobalLocks();
       return {
         tabId: this.currentTabId,
-        activeTimeslots: Array.from(this.activeTimeslots),
-        globalLocks: Object.keys(globalLocks).length,
+        processingCount: this.processingAttacks.size,
         useBroadcast: this.useBroadcast
       };
     }
   }
 
   // ✅ Instância global
-  const timeslotCoordinator = new TimeslotCoordinator();
+  const attackCoordinator = new AttackCoordinator();
 
-  // === FUNÇÕES UTILITÁRIAS COMPLETAS ===
+  // === Auto-confirm na página de confirmação ===
+  try {
+    if (location.href.includes('screen=place&try=confirm')) {
+      const btn = document.querySelector('#troop_confirm_submit') || 
+                   document.querySelector('button[name="submit"], input[name="submit"]');
+      if (btn) {
+        console.log('[TWS_Backend] Auto-confirmando ataque...');
+        setTimeout(() => btn.click(), 300);
+      }
+    }
+  } catch (e) {
+    console.error('[TWS_Backend] Erro no auto-confirm:', e);
+  }
+
+  // === Utility functions ===
   function parseDateTimeToMs(str) {
     const m = str?.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
     if (!m) return NaN;
@@ -225,14 +176,24 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
+  /**
+   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
+   */
   function parseCoord(s) {
     if (!s) return null;
+    
     const t = s.trim();
     const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    
     if (!match) return null;
+    
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
-    if (x < 0 || x > 499 || y < 0 || y > 499) return null;
+    
+    if (x < 0 || x > 499 || y < 0 || y > 499) {
+      return null;
+    }
+    
     return `${x}|${y}`;
   }
 
@@ -240,13 +201,88 @@
     return parseCoord(s) !== null;
   }
 
+  function getCoordInfo(s) {
+    const normalized = parseCoord(s);
+    
+    if (!normalized) {
+      return {
+        valid: false,
+        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
+      };
+    }
+    
+    const [x, y] = normalized.split('|').map(Number);
+    
+    return {
+      valid: true,
+      original: s.trim(),
+      normalized,
+      x,
+      y,
+      mapSection: getMapSection(x, y),
+      distance: null
+    };
+  }
+
+  function getMapSection(x, y) {
+    const sections = [];
+    if (x < 250) sections.push('Oeste');
+    else if (x > 250) sections.push('Leste');
+    else sections.push('Centro');
+    
+    if (y < 250) sections.push('Norte');
+    else if (y > 250) sections.push('Sul');
+    else sections.push('Centro');
+    
+    return sections.join('-');
+  }
+
+  function getDistance(coord1, coord2) {
+    const c1 = parseCoord(coord1);
+    const c2 = parseCoord(coord2);
+    
+    if (!c1 || !c2) return null;
+    
+    const [x1, y1] = c1.split('|').map(Number);
+    const [x2, y2] = c2.split('|').map(Number);
+    
+    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+  }
+
+  function validateCoordList(coordStrings) {
+    return coordStrings.map((coord, idx) => ({
+      index: idx + 1,
+      input: coord,
+      valid: isValidCoord(coord),
+      normalized: parseCoord(coord),
+      error: !isValidCoord(coord) ? 'Formato inválido' : null
+    }));
+  }
+
+  function sanitizeCoordInput(input) {
+    if (!input) return null;
+    
+    let cleaned = input.trim().replace(/\s+/g, '');
+    cleaned = cleaned.replace(/-/g, '|');
+    cleaned = cleaned.replace(/[^\d|]/g, '');
+    
+    if (!cleaned) return null;
+    
+    return parseCoord(cleaned);
+  }
+
+  // ✅ Gerar ID único
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
     const timestamp = Date.now();
     const random = Math.random().toString(36).substr(2, 9);
-    return `attack_${timestamp}_${random}`;
+    const perf = (typeof performance !== 'undefined' && performance.now) 
+      ? performance.now().toString(36) 
+      : Math.random().toString(36).substr(2, 5);
+    
+    return `${timestamp}_${random}_${perf}`;
   }
 
   function getList() {
@@ -267,7 +303,7 @@
     }
   }
 
-  // === CARREGAR village.txt ===
+  // === Carrega village.txt ===
   async function loadVillageTxt() {
     try {
       const res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
@@ -297,7 +333,7 @@
     }
   }
 
-  // === BUSCAR TROPAS DISPONÍVEIS ===
+  // === Busca tropas disponíveis ===
   async function getVillageTroops(villageId) {
     try {
       const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
@@ -323,6 +359,7 @@
         troops[u] = available;
       });
 
+      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
       return troops;
     } catch (err) {
       console.error('[TWS_Backend] getVillageTroops error:', err);
@@ -330,7 +367,7 @@
     }
   }
 
-  // === VALIDAR TROPAS ===
+  // === Valida tropas ===
   function validateTroops(requested, available) {
     const errors = [];
     TROOP_LIST.forEach(u => {
@@ -343,10 +380,15 @@
     return errors;
   }
 
-  // === VERIFICAR CONFIRMAÇÃO ===
+  // === Verifica confirmação ===
   function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
+    if (/screen=info_command.*type=own/i.test(htmlText)) {
+      return true;
+    }
+
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      return true;
+    }
 
     const successPatterns = [
       /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
@@ -357,11 +399,13 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
-  // === EXECUTAR ATAQUE (COMPLETO) ===
+  // === Execute attack ===
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => {
-      try { if (statusEl) statusEl.innerHTML = msg; } catch {}
+      try {
+        if (statusEl) statusEl.innerHTML = msg;
+      } catch {}
       console.log('[TWScheduler]', msg);
     };
 
@@ -511,11 +555,14 @@
         
         const finalText = await confirmRes.text();
         
+        console.log('[TWS_Backend] Resposta final recebida');
+        
         if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
           setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
+          console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
           return false;
         }
       } else {
@@ -534,11 +581,12 @@
     }
   }
 
+  // ✅ Delay entre execuções
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // === SCHEDULER ANTI-DUPLICAÇÃO COMPLETO ===
+  // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -548,115 +596,107 @@
       const msgs = [];
       let hasChanges = false;
 
-      // 🎯 AGORA: Agrupar ataques por timeslot (segundo específico)
-      const attacksByTimeslot = {};
+      const ataquesPorHorario = {};
       
-      // Fase 1: Coletar ataques elegíveis por timeslot
-      for (const attack of list) {
-        if (attack.done || attack.locked) continue;
+      for (const a of list) {
+        if (a.done || a.locked) continue;
         
-        const attackTime = parseDateTimeToMs(attack.datetime);
-        if (!attackTime || isNaN(attackTime)) continue;
+        // ✅ PROTEÇÃO: Verificar BroadcastChannel
+        if (attackCoordinator.isBeingProcessed(a._id)) {
+          console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
+          continue;
+        }
         
-        const timeDiff = attackTime - now;
+        const t = parseDateTimeToMs(a.datetime);
+        if (!t || isNaN(t)) continue;
         
-        // ✅ Só considerar ataques entre -10s e +2s do horário
-        if (timeDiff <= 2000 && timeDiff >= -10000) {
-          const timeslotKey = timeslotCoordinator.getTimeslotKey(attack.datetime);
-          if (!timeslotKey) continue;
-          
-          if (!attacksByTimeslot[timeslotKey]) {
-            attacksByTimeslot[timeslotKey] = [];
+        const diff = t - now;
+        
+        if (diff <= 0 && diff > -10000) {
+          if (!ataquesPorHorario[a.datetime]) {
+            ataquesPorHorario[a.datetime] = [];
           }
-          
-          attacksByTimeslot[timeslotKey].push(attack);
-        } else if (timeDiff > 0) {
-          // Mostrar contagem regressiva
-          const seconds = Math.ceil(timeDiff / 1000);
+          ataquesPorHorario[a.datetime].push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
           const minutes = Math.floor(seconds / 60);
           const secs = seconds % 60;
-          msgs.push(`🕒 ${attack.origem} → ${attack.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
         }
       }
 
-      // Fase 2: Processar UM timeslot de cada vez
-      for (const [timeslotKey, attacks] of Object.entries(attacksByTimeslot)) {
-        // 🔒 TENTAR ADQUIRIR LOCK DESTE TIMESLOT
-        const acquired = await timeslotCoordinator.acquireTimeslotLock(timeslotKey, attacks.length);
+      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+        console.log(`🔥 Processando ${ataques.length} ataques`);
+        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
         
-        if (!acquired) {
-          console.log(`⏭️ Pulando timeslot ${timeslotKey} (já está sendo processado)`);
-          continue;
-        }
-
-        console.log(`🚀 PROCESSANDO TIMESLOT: ${timeslotKey} com ${attacks.length} ataques`);
-        msgs.push(`🔥 Executando ${attacks.length} ataque(s) no horário...`);
-
-        // ✅ EXECUTAR ATAQUES DESTE TIMESLOT EM SEQUÊNCIA
-        for (let i = 0; i < attacks.length; i++) {
-          const attack = attacks[i];
+        for (let i = 0; i < ataques.length; i++) {
+          const a = ataques[i];
           
-          // Marcar como locked
-          attack.locked = true;
+          // ✅ Verificação dupla
+          if (attackCoordinator.isBeingProcessed(a._id)) {
+            console.log(`⏭️ Pulando ${a._id} (outra aba pegou)`);
+            continue;
+          }
+          
+          // ✅ Gerar ID se necessário
+          if (!a._id) {
+            a._id = generateUniqueId();
+            hasChanges = true;
+          }
+          
+          // ✅ Notificar início via BroadcastChannel
+          attackCoordinator.notifyAttackStart(a._id);
+          
+          a.locked = true;
           hasChanges = true;
           setList(list);
           
+          console.log(`🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
+          
           try {
-            console.log(`🎯 [${i + 1}/${attacks.length}] ${attack.origem} → ${attack.alvo}`);
-            
-            const success = await executeAttack(attack);
-            
-            attack.done = true;
-            attack.success = success;
-            attack.executedAt = new Date().toISOString();
+            const success = await executeAttack(a);
+            a.done = true;
+            a.success = success;
+            a.executedAt = new Date().toISOString();
             hasChanges = true;
             
-            console.log(`✅ [${i + 1}/${attacks.length}] Concluído`);
-            msgs.push(`✅ ${attack.origem} → ${attack.alvo}`);
-            
+            console.log(`✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
           } catch (err) {
-            attack.error = err.message;
-            attack.done = true;
-            attack.success = false;
+            a.error = err.message;
+            a.done = true;
+            a.success = false;
             hasChanges = true;
-            
-            console.error(`❌ [${i + 1}/${attacks.length}] Erro:`, err);
-            msgs.push(`❌ ${attack.origem} → ${attack.alvo}: ${err.message}`);
+            console.error(`❌ [${i + 1}/${ataques.length}] Erro:`, err);
           } finally {
-            attack.locked = false;
+            // ✅ Notificar fim via BroadcastChannel
+            attackCoordinator.notifyAttackEnd(a._id);
+            
+            a.locked = false;
             hasChanges = true;
+            console.log(`🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
           
-          // ⏳ Delay entre ataques do MESMO timeslot
-          if (i < attacks.length - 1) {
-            await sleep(400); // 400ms entre ataques
+          if (i < ataques.length - 1) {
+            console.log(`⏳ Aguardando 100ms antes do próximo...`);
+            await sleep(100);
           }
         }
-
-        // 🔓 LIBERAR LOCK DO TIMESLOT
-        timeslotCoordinator.releaseTimeslotLock(timeslotKey);
-        console.log(`🏁 TIMESLOT ${timeslotKey} CONCLUÍDO`);
-        
-        // ⏰ Aguardar antes do próximo timeslot (evita sobrecarga)
-        await sleep(200);
       }
 
-      // Atualizar storage se necessário
       if (hasChanges) {
         setList(list);
       }
 
-      // Atualizar status
       const status = document.getElementById('tws-status');
       if (status) {
         status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
       }
-    }, 1000); // Verificar a cada 1 segundo
+    }, 1000);
     
-    console.log('[TWS_Backend] ✅ SCHEDULER ANTI-DUPLICAÇÃO ATIVADO');
+    console.log('[TWS_Backend] Scheduler iniciado com BroadcastChannel');
   }
 
-  // === IMPORTAR DE BBCODE ===
+  // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
     const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
     const agendamentos = [];
@@ -702,29 +742,15 @@
     }
     
     console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
+    
     return agendamentos;
   }
 
-  // === AUTO-CONFIRM ===
-  try {
-    if (location.href.includes('screen=place&try=confirm')) {
-      const btn = document.querySelector('#troop_confirm_submit') || 
-                   document.querySelector('button[name="submit"], input[name="submit"]');
-      if (btn) {
-        console.log('[TWS_Backend] Auto-confirmando ataque...');
-        setTimeout(() => btn.click(), 300);
-      }
-    }
-  } catch (e) {
-    console.error('[TWS_Backend] Erro no auto-confirm:', e);
-  }
-
-  // === EXPORTAR API COMPLETA ===
+  // === Exportar API ===
   window.TWS_Backend = {
     loadVillageTxt,
     parseDateTimeToMs,
     parseCoord,
-    isValidCoord,
     getList,
     setList,
     startScheduler,
@@ -733,7 +759,7 @@
     getVillageTroops,
     validateTroops,
     generateUniqueId,
-    timeslotCoordinator,
+    attackCoordinator,
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -741,9 +767,9 @@
     _internal: {
       get villageMap() { return _villageMap; },
       get myVillages() { return _myVillages; },
-      get coordinatorStats() { return timeslotCoordinator.getStats(); }
+      get coordinatorStats() { return attackCoordinator.getStats(); }
     }
   };
 
-  console.log('[TWS_Backend] ✅ SISTEMA COMPLETO ANTI-DUPLICAÇÃO CARREGADO');
+  console.log('[TWS_Backend] ✅ Backend v3 carregado (BroadcastChannel)');
 })();
