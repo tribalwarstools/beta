@@ -12,7 +12,6 @@
   let _villageMap = {};
   let _myVillages = [];
   let _schedulerInterval = null;
-  let _currentExecutionQueue = null;
   
   // ✅ SISTEMA DE LOCK POR TIMESLOT (HORÁRIO)
   class TimeslotCoordinator {
@@ -218,7 +217,7 @@
   // ✅ Instância global
   const timeslotCoordinator = new TimeslotCoordinator();
 
-  // === Funções utilitárias (mantidas do código anterior) ===
+  // === FUNÇÕES UTILITÁRIAS COMPLETAS ===
   function parseDateTimeToMs(str) {
     const m = str?.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
     if (!m) return NaN;
@@ -226,8 +225,28 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
+  function parseCoord(s) {
+    if (!s) return null;
+    const t = s.trim();
+    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    if (!match) return null;
+    const x = parseInt(match[1], 10);
+    const y = parseInt(match[2], 10);
+    if (x < 0 || x > 499 || y < 0 || y > 499) return null;
+    return `${x}|${y}`;
+  }
+
+  function isValidCoord(s) {
+    return parseCoord(s) !== null;
+  }
+
   function generateUniqueId() {
-    return `attack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substr(2, 9);
+    return `attack_${timestamp}_${random}`;
   }
 
   function getList() {
@@ -248,7 +267,278 @@
     }
   }
 
-  // === SCHEDULER REESCRITO - EVITA DUPLICAÇÃO POR HORÁRIO ===
+  // === CARREGAR village.txt ===
+  async function loadVillageTxt() {
+    try {
+      const res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Falha ao buscar village.txt: ' + res.status);
+      const text = await res.text();
+      const map = {};
+      const myVillages = [];
+      
+      for (const line of text.trim().split('\n')) {
+        const [id, name, x, y, playerId] = line.split(',');
+        const coord = `${x}|${y}`;
+        map[coord] = id;
+        
+        if (playerId === (window.game_data?.player?.id || '').toString()) {
+          const clean = decodeURIComponent((name || '').replace(/\+/g, ' '));
+          myVillages.push({ id, name: clean, coord });
+        }
+      }
+      
+      _villageMap = map;
+      _myVillages = myVillages;
+      console.log(`[TWS_Backend] Carregadas ${myVillages.length} aldeias próprias`);
+      return { map, myVillages };
+    } catch (err) {
+      console.error('[TWS_Backend] loadVillageTxt error:', err);
+      return { map: {}, myVillages: [] };
+    }
+  }
+
+  // === BUSCAR TROPAS DISPONÍVEIS ===
+  async function getVillageTroops(villageId) {
+    try {
+      const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
+      const res = await fetch(placeUrl, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Falha ao carregar /place: ' + res.status);
+      
+      const html = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      const troops = {};
+      TROOP_LIST.forEach(u => {
+        const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
+                           doc.querySelector(`#units_home_${u}`) ||
+                           doc.querySelector(`[id*="${u}"][class*="unit"]`);
+        
+        let available = 0;
+        if (availableEl) {
+          const match = availableEl.textContent.match(/\d+/);
+          available = match ? parseInt(match[0], 10) : 0;
+        }
+        
+        troops[u] = available;
+      });
+
+      return troops;
+    } catch (err) {
+      console.error('[TWS_Backend] getVillageTroops error:', err);
+      return null;
+    }
+  }
+
+  // === VALIDAR TROPAS ===
+  function validateTroops(requested, available) {
+    const errors = [];
+    TROOP_LIST.forEach(u => {
+      const req = parseInt(requested[u] || 0, 10);
+      const avail = parseInt(available[u] || 0, 10);
+      if (req > avail) {
+        errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
+      }
+    });
+    return errors;
+  }
+
+  // === VERIFICAR CONFIRMAÇÃO ===
+  function isAttackConfirmed(htmlText) {
+    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
+
+    const successPatterns = [
+      /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
+      /enfileirad/i, /A batalha começou/i, /march started/i, /comando enviado/i,
+      /tropas enviadas/i, /foi enfileirado/i, /command sent/i, /comando foi criado/i
+    ];
+
+    return successPatterns.some(p => p.test(htmlText));
+  }
+
+  // === EXECUTAR ATAQUE (COMPLETO) ===
+  async function executeAttack(cfg) {
+    const statusEl = document.getElementById('tws-status');
+    const setStatus = (msg) => {
+      try { if (statusEl) statusEl.innerHTML = msg; } catch {}
+      console.log('[TWScheduler]', msg);
+    };
+
+    const origemId = cfg.origemId || _villageMap[cfg.origem] || null;
+    if (!origemId) {
+      setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
+      throw new Error('Origem não encontrada');
+    }
+
+    const [x, y] = (cfg.alvo || '').split('|');
+    if (!x || !y) {
+      setStatus(`❌ Alvo inválido: ${cfg.alvo}`);
+      throw new Error('Alvo inválido');
+    }
+
+    setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
+    const availableTroops = await getVillageTroops(origemId);
+    if (availableTroops) {
+      const errors = validateTroops(cfg, availableTroops);
+      if (errors.length > 0) {
+        setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
+        throw new Error('Tropas insuficientes');
+      }
+    }
+
+    const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
+    setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
+
+    try {
+      // 1) GET /place
+      const getRes = await fetch(placeUrl, { credentials: 'same-origin' });
+      if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
+      
+      const html = await getRes.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // 2) Localizar form
+      let form = Array.from(doc.querySelectorAll('form')).find(f => 
+        (f.action && f.action.includes('screen=place')) || 
+        f.querySelector('input[name="x"]') ||
+        TROOP_LIST.some(u => f.querySelector(`input[name="${u}"]`))
+      );
+      
+      if (!form) throw new Error('Form de envio não encontrado');
+
+      // 3) Construir payload
+      const payloadObj = {};
+      Array.from(form.querySelectorAll('input, select, textarea')).forEach(inp => {
+        const name = inp.getAttribute('name');
+        if (!name) return;
+        
+        if (inp.type === 'checkbox' || inp.type === 'radio') {
+          if (inp.checked) payloadObj[name] = inp.value || 'on';
+        } else {
+          payloadObj[name] = inp.value || '';
+        }
+      });
+
+      // 4) Sobrescrever destino e tropas
+      payloadObj['x'] = String(x);
+      payloadObj['y'] = String(y);
+      TROOP_LIST.forEach(u => {
+        payloadObj[u] = String(cfg[u] !== undefined ? cfg[u] : '0');
+      });
+
+      // 5) Submit button
+      const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+      if (submitBtn) {
+        const n = submitBtn.getAttribute('name');
+        const v = submitBtn.getAttribute('value') || '';
+        if (n) payloadObj[n] = v;
+      }
+
+      // 6) URL encode
+      const urlEncoded = Object.entries(payloadObj)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+
+      // 7) POST URL
+      let postUrl = form.getAttribute('action') || placeUrl;
+      if (postUrl.startsWith('/')) {
+        postUrl = `${location.protocol}//${location.host}${postUrl}`;
+      }
+      if (!postUrl.includes('screen=place')) postUrl = placeUrl;
+
+      // 8) POST inicial
+      setStatus(`⏳ Enviando comando...`);
+      const postRes = await fetch(postUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: urlEncoded
+      });
+      
+      if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
+      const postText = await postRes.text();
+
+      // 9) Procurar form de confirmação
+      const postDoc = parser.parseFromString(postText, 'text/html');
+      let confirmForm = Array.from(postDoc.querySelectorAll('form')).find(f => 
+        (f.action && f.action.includes('try=confirm')) || 
+        f.querySelector('#troop_confirm_submit') ||
+        /confirm/i.test(f.outerHTML)
+      );
+
+      if (confirmForm) {
+        const confirmPayload = {};
+        Array.from(confirmForm.querySelectorAll('input, select, textarea')).forEach(inp => {
+          const name = inp.getAttribute('name');
+          if (!name) return;
+          
+          if (inp.type === 'checkbox' || inp.type === 'radio') {
+            if (inp.checked) confirmPayload[name] = inp.value || 'on';
+          } else {
+            confirmPayload[name] = inp.value || '';
+          }
+        });
+
+        const confirmBtn = confirmForm.querySelector(
+          'button[type="submit"], input[type="submit"], #troop_confirm_submit'
+        );
+        if (confirmBtn) {
+          const n = confirmBtn.getAttribute('name');
+          const v = confirmBtn.getAttribute('value') || '';
+          if (n) confirmPayload[n] = v;
+        }
+
+        const confirmBody = Object.entries(confirmPayload)
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+          .join('&');
+        
+        let confirmUrl = confirmForm.getAttribute('action') || postRes.url || placeUrl;
+        if (confirmUrl.startsWith('/')) {
+          confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
+        }
+
+        setStatus('⏳ Confirmando ataque...');
+        const confirmRes = await fetch(confirmUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          body: confirmBody
+        });
+
+        if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
+        
+        const finalText = await confirmRes.text();
+        
+        if (isAttackConfirmed(finalText)) {
+          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+          return true;
+        } else {
+          setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
+          return false;
+        }
+      } else {
+        if (isAttackConfirmed(postText)) {
+          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+          return true;
+        } else {
+          setStatus('⚠️ Resposta não indicou confirmação');
+          return false;
+        }
+      }
+    } catch (err) {
+      console.error('[TWScheduler] Erro executeAttack:', err);
+      setStatus(`❌ Erro: ${err.message}`);
+      throw err;
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // === SCHEDULER ANTI-DUPLICAÇÃO COMPLETO ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -302,7 +592,7 @@
         console.log(`🚀 PROCESSANDO TIMESLOT: ${timeslotKey} com ${attacks.length} ataques`);
         msgs.push(`🔥 Executando ${attacks.length} ataque(s) no horário...`);
 
-        // ✅ EXECUTAR ATACQUES DESTE TIMESLOT EM SEQUÊNCIA
+        // ✅ EXECUTAR ATAQUES DESTE TIMESLOT EM SEQUÊNCIA
         for (let i = 0; i < attacks.length; i++) {
           const attack = attacks[i];
           
@@ -366,44 +656,94 @@
     console.log('[TWS_Backend] ✅ SCHEDULER ANTI-DUPLICAÇÃO ATIVADO');
   }
 
-  // === Funções auxiliares ===
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  // === IMPORTAR DE BBCODE ===
+  function importarDeBBCode(bbcode) {
+    const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
+    const agendamentos = [];
+    
+    for (const linha of linhas) {
+      const coords = linha.match(/(\d{3}\|\d{3})/g) || [];
+      const origem = coords[0] || '';
+      const destino = coords[1] || '';
+      const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)?.[1] || '';
+      const url = linha.match(/\[url=(.*?)\]/)?.[1] || '';
+      
+      const params = {};
+      if (url) {
+        const query = url.split('?')[1];
+        if (query) {
+          query.split('&').forEach(p => {
+            const [k, v] = p.split('=');
+            params[k] = decodeURIComponent(v || '');
+          });
+        }
+      }
+      
+      const origemId = params.village || _villageMap[origem];
+      const uniqueId = generateUniqueId();
+      
+      const cfg = {
+        _id: uniqueId,
+        origem,
+        origemId,
+        alvo: destino,
+        datetime: dataHora,
+        done: false,
+        locked: false
+      };
+      
+      TROOP_LIST.forEach(u => {
+        cfg[u] = params['att_' + u] || 0;
+      });
+      
+      if (origem && destino && dataHora) {
+        agendamentos.push(cfg);
+      }
+    }
+    
+    console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
+    return agendamentos;
   }
 
-  async function executeAttack(cfg) {
-    // ✅ SIMPLIFIQUEI para focar no anti-duplicação
-    // Mantenha sua implementação original aqui
-    const statusEl = document.getElementById('tws-status');
-    const setStatus = (msg) => {
-      try { if (statusEl) statusEl.innerHTML = msg; } catch {}
-      console.log('[TWScheduler]', msg);
-    };
-
-    setStatus(`🎯 Executando: ${cfg.origem} → ${cfg.alvo}`);
-    
-    // Simular execução (substitua pela sua implementação)
-    await sleep(500);
-    
-    setStatus(`✅ Concluído: ${cfg.origem} → ${cfg.alvo}`);
-    return true;
+  // === AUTO-CONFIRM ===
+  try {
+    if (location.href.includes('screen=place&try=confirm')) {
+      const btn = document.querySelector('#troop_confirm_submit') || 
+                   document.querySelector('button[name="submit"], input[name="submit"]');
+      if (btn) {
+        console.log('[TWS_Backend] Auto-confirmando ataque...');
+        setTimeout(() => btn.click(), 300);
+      }
+    }
+  } catch (e) {
+    console.error('[TWS_Backend] Erro no auto-confirm:', e);
   }
 
-  // === Exportar API ===
+  // === EXPORTAR API COMPLETA ===
   window.TWS_Backend = {
+    loadVillageTxt,
+    parseDateTimeToMs,
+    parseCoord,
+    isValidCoord,
     getList,
     setList,
     startScheduler,
+    importarDeBBCode,
     executeAttack,
+    getVillageTroops,
+    validateTroops,
     generateUniqueId,
     timeslotCoordinator,
+    TROOP_LIST,
     STORAGE_KEY,
+    PANEL_STATE_KEY,
     
     _internal: {
+      get villageMap() { return _villageMap; },
+      get myVillages() { return _myVillages; },
       get coordinatorStats() { return timeslotCoordinator.getStats(); }
     }
   };
 
-  console.log('[TWS_Backend] ✅ SISTEMA ANTI-DUPLICAÇÃO CARREGADO');
-  console.log('[TWS_Backend] 💡 AGORA: Apenas UMA aba processa cada horário específico!');
+  console.log('[TWS_Backend] ✅ SISTEMA COMPLETO ANTI-DUPLICAÇÃO CARREGADO');
 })();
