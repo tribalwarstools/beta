@@ -4,6 +4,8 @@
   // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
+  const LOCK_PREFIX = 'tws_lock_';
+  const LOCK_TTL = 15000; // 15s - tempo de validade do lock no localStorage
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
@@ -12,7 +14,7 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ NOVO: Gerenciador de Broadcast Channel
+  // ✅ NOVO: Gerenciador de Broadcast Channel + sincronização inicial com localStorage
   class AttackCoordinator {
     constructor() {
       this.processingAttacks = new Map(); // { attackId: timestamp }
@@ -38,10 +40,48 @@
       } else {
         console.warn('⚠️ BroadcastChannel não suportado neste navegador');
       }
+
+      // Sincronizar locks existentes do localStorage (startup)
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (key.startsWith(LOCK_PREFIX)) {
+            const id = key.replace(LOCK_PREFIX, '');
+            const val = localStorage.getItem(key);
+            if (!val) continue;
+            const [ts] = val.split('|');
+            const tsNum = Number(ts) || 0;
+            // respeitar TTL
+            if (Date.now() - tsNum < LOCK_TTL) {
+              this.processingAttacks.set(id, tsNum);
+            } else {
+              // lock expirado, remover
+              try { localStorage.removeItem(key); } catch (e) {}
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[AttackCoordinator] Erro ao sincronizar localStorage:', e);
+      }
       
       // Limpar ao fechar aba
       window.addEventListener('beforeunload', () => {
         this.cleanup();
+      });
+
+      // Listener storage para atualizações cross-tab
+      window.addEventListener('storage', (ev) => {
+        if (!ev.key) return;
+        if (!ev.key.startsWith(LOCK_PREFIX)) return;
+
+        const id = ev.key.replace(LOCK_PREFIX, '');
+        if (ev.newValue) {
+          const [ts] = ev.newValue.split('|');
+          this.processingAttacks.set(id, Number(ts) || Date.now());
+        } else {
+          this.processingAttacks.delete(id);
+        }
       });
     }
 
@@ -51,15 +91,25 @@
 
     // 📤 Notificar que vou processar um ataque
     notifyAttackStart(attackId) {
-      this.processingAttacks.set(attackId, Date.now());
+      const now = Date.now();
+      this.processingAttacks.set(attackId, now);
+      try {
+        localStorage.setItem(`${LOCK_PREFIX}${attackId}`, `${now}|${this.currentTabId}`);
+      } catch (e) {
+        console.warn('[AttackCoordinator] falha ao setar localStorage lock:', e);
+      }
       
       if (this.useBroadcast) {
-        this.channel.postMessage({
-          type: 'ATTACK_START',
-          attackId,
-          tabId: this.currentTabId,
-          timestamp: Date.now()
-        });
+        try {
+          this.channel.postMessage({
+            type: 'ATTACK_START',
+            attackId,
+            tabId: this.currentTabId,
+            timestamp: now
+          });
+        } catch(e) {
+          console.warn('[AttackCoordinator] broadcast falhou:', e);
+        }
       }
       
       console.log(`📤 [${this.currentTabId}] Iniciando: ${attackId}`);
@@ -68,14 +118,34 @@
     // 📥 Notificar que terminei de processar
     notifyAttackEnd(attackId) {
       this.processingAttacks.delete(attackId);
-      
+      try {
+        const key = `${LOCK_PREFIX}${attackId}`;
+        const val = localStorage.getItem(key);
+        // remove apenas se for nosso lock ou se expirado
+        if (!val) {
+          // nada
+        } else {
+          const [ts, owner] = val.split('|');
+          const tsNum = Number(ts) || 0;
+          if (owner === this.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+            try { localStorage.removeItem(key); } catch(e) {}
+          }
+        }
+      } catch (e) {
+        console.warn('[AttackCoordinator] falha ao remover lock localStorage:', e);
+      }
+
       if (this.useBroadcast) {
-        this.channel.postMessage({
-          type: 'ATTACK_END',
-          attackId,
-          tabId: this.currentTabId,
-          timestamp: Date.now()
-        });
+        try {
+          this.channel.postMessage({
+            type: 'ATTACK_END',
+            attackId,
+            tabId: this.currentTabId,
+            timestamp: Date.now()
+          });
+        } catch(e) {
+          console.warn('[AttackCoordinator] broadcast falhou:', e);
+        }
       }
       
       console.log(`📤 [${this.currentTabId}] Finalizado: ${attackId}`);
@@ -83,21 +153,36 @@
 
     // ✅ Verificar se outro ataque já está processando
     isBeingProcessed(attackId) {
+      if (!attackId) return false;
       const timestamp = this.processingAttacks.get(attackId);
-      
-      if (!timestamp) return false;
-      
-      const age = Date.now() - timestamp;
-      const TIMEOUT = 60000; // 60 segundos
-      
-      // Se processando há mais de 60s, considerar morto
-      if (age > TIMEOUT) {
-        console.warn(`⚠️ Ataque ${attackId} expirado (${age}ms), removendo lock`);
-        this.processingAttacks.delete(attackId);
-        return false;
+      const now = Date.now();
+
+      // Se existir no Map e dentro do TTL
+      if (timestamp && (now - timestamp) < LOCK_TTL) return true;
+
+      // Caso contrário verificar localStorage
+      try {
+        const key = `${LOCK_PREFIX}${attackId}`;
+        const val = localStorage.getItem(key);
+        if (val) {
+          const [ts] = val.split('|');
+          const tsNum = Number(ts) || 0;
+          if (now - tsNum < LOCK_TTL) {
+            // atualizar mapa local
+            this.processingAttacks.set(attackId, tsNum);
+            return true;
+          } else {
+            // expirado -> remover
+            try { localStorage.removeItem(key); } catch (e) {}
+            this.processingAttacks.delete(attackId);
+            return false;
+          }
+        }
+      } catch (e) {
+        console.warn('[AttackCoordinator] isBeingProcessed erro:', e);
       }
-      
-      return true;
+
+      return false;
     }
 
     // 📋 Processar mensagens recebidas
@@ -107,7 +192,7 @@
       switch (type) {
         case 'ATTACK_START':
           console.log(`📥 Aba ${tabId} iniciou: ${attackId}`);
-          this.processingAttacks.set(attackId, timestamp);
+          this.processingAttacks.set(attackId, timestamp || Date.now());
           break;
           
         case 'ATTACK_END':
@@ -127,17 +212,34 @@
       const attackIds = Array.from(this.processingAttacks.keys());
       
       if (this.useBroadcast && this.channel) {
-        this.channel.postMessage({
-          type: 'CLEANUP',
-          tabId: this.currentTabId,
-          attackIds
-        });
+        try {
+          this.channel.postMessage({
+            type: 'CLEANUP',
+            tabId: this.currentTabId,
+            attackIds
+          });
+        } catch(e) {}
       }
       
       console.log(`🧹 [${this.currentTabId}] Limpando ${attackIds.length} locks`);
       
+      // remover locks proprietários
+      try {
+        attackIds.forEach(id => {
+          const key = `${LOCK_PREFIX}${id}`;
+          const val = localStorage.getItem(key);
+          if (!val) return;
+          const [ts, owner] = val.split('|');
+          if (owner === this.currentTabId) {
+            try { localStorage.removeItem(key); } catch(e) {}
+          }
+        });
+      } catch (e) {
+        console.warn('[AttackCoordinator] cleanup error:', e);
+      }
+
       if (this.channel) {
-        this.channel.close();
+        try { this.channel.close(); } catch (e) {}
       }
     }
 
@@ -176,9 +278,6 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
-  /**
-   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
-   */
   function parseCoord(s) {
     if (!s) return null;
     
@@ -190,7 +289,7 @@
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
     
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
+    if (x < 0 || x > 999 || y < 0 || y > 999) {
       return null;
     }
     
@@ -303,6 +402,49 @@
     }
   }
 
+  // === Lock utility via localStorage (atomic-ish)
+  function tryAcquireLock(id) {
+    try {
+      const key = `${LOCK_PREFIX}${id}`;
+      const now = Date.now();
+      const value = `${now}|${attackCoordinator.currentTabId}`;
+
+      // escrevemos e lemos - se o valor bater com o nosso, adquirimos
+      localStorage.setItem(key, value);
+      const stored = localStorage.getItem(key);
+      if (stored === value) return true;
+
+      // se não for nosso, verificar se expirou
+      const [ts] = (stored || '').split('|');
+      const tsNum = Number(ts) || 0;
+      if (Date.now() - tsNum > LOCK_TTL) {
+        // tentar "roubar" o lock
+        localStorage.setItem(key, value);
+        return localStorage.getItem(key) === value;
+      }
+
+      return false;
+    } catch (e) {
+      console.warn('[tryAcquireLock] erro:', e);
+      return false;
+    }
+  }
+
+  function releaseLock(id) {
+    try {
+      const key = `${LOCK_PREFIX}${id}`;
+      const stored = localStorage.getItem(key);
+      if (!stored) return;
+      const [ts, owner] = stored.split('|');
+      const tsNum = Number(ts) || 0;
+      if (owner === attackCoordinator.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+        try { localStorage.removeItem(key); } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('[releaseLock] erro:', e);
+    }
+  }
+
   // === Carrega village.txt ===
   async function loadVillageTxt() {
     try {
@@ -409,7 +551,11 @@
       console.log('[TWScheduler]', msg);
     };
 
-    const origemId = cfg.origemId || _villageMap[cfg.origem] || null;
+    // origemId robusto: usa origemId numérico se válido, senão tenta mapear por coordenada
+    const origemId = (cfg.origemId && /^\d+$/.test(String(cfg.origemId)))
+      ? String(cfg.origemId)
+      : (_villageMap[cfg.origem] || null);
+
     if (!origemId) {
       setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
       throw new Error('Origem não encontrada');
@@ -429,6 +575,9 @@
         setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
         throw new Error('Tropas insuficientes');
       }
+    } else {
+      // se não conseguimos ler tropas (página não permitida / erro), não bloquear o envio
+      console.warn('[TWS_Backend] Não foi possível validar tropas — prosseguindo com envio');
     }
 
     const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
@@ -586,10 +735,27 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  // === Normalize IDs antes do scheduler rodar ===
+  function normalizeAttackIds(list) {
+    let changed = false;
+    for (const a of list) {
+      if (!a._id) {
+        a._id = generateUniqueId();
+        changed = true;
+      }
+    }
+    if (changed) setList(list);
+    return changed;
+  }
+
   // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
-    
+
+    // garantir IDs antes de iniciar
+    const initialList = getList();
+    normalizeAttackIds(initialList);
+
     _schedulerInterval = setInterval(async () => {
       const list = getList();
       const now = Date.now();
@@ -597,13 +763,17 @@
       let hasChanges = false;
 
       const ataquesPorHorario = {};
+
+      // garantir IDs caso tenham sido adicionados externamente
+      normalizeAttackIds(list);
       
       for (const a of list) {
         if (a.done || a.locked) continue;
         
-        // ✅ PROTEÇÃO: Verificar BroadcastChannel
+        // ✅ PROTEÇÃO: Verificar BroadcastChannel / localStorage
         if (attackCoordinator.isBeingProcessed(a._id)) {
-          console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
+          // já está processando em outra aba
+          // console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
           continue;
         }
         
@@ -637,29 +807,30 @@
             console.log(`⏭️ Pulando ${a._id} (outra aba pegou)`);
             continue;
           }
-          
-          // ✅ Gerar ID se necessário
-          if (!a._id) {
-            a._id = generateUniqueId();
-            hasChanges = true;
+
+          // (2) Tentar lock cross-tab via localStorage
+          const locked = tryAcquireLock(a._id);
+          if (!locked) {
+            console.log(`⏭️ Pulando ${a._id} (falha ao adquirir lock)`);
+            continue;
           }
-          
-          // ✅ Notificar início via BroadcastChannel
+
+          // ✅ Notificar início via BroadcastChannel + localStorage
           attackCoordinator.notifyAttackStart(a._id);
-          
+
           a.locked = true;
           hasChanges = true;
           setList(list);
-          
+
           console.log(`🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
-          
+
           try {
             const success = await executeAttack(a);
             a.done = true;
             a.success = success;
             a.executedAt = new Date().toISOString();
             hasChanges = true;
-            
+
             console.log(`✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
           } catch (err) {
             a.error = err.message;
@@ -670,12 +841,15 @@
           } finally {
             // ✅ Notificar fim via BroadcastChannel
             attackCoordinator.notifyAttackEnd(a._id);
-            
+
+            // liberar lock localStorage
+            releaseLock(a._id);
+
             a.locked = false;
             hasChanges = true;
             console.log(`🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
-          
+
           if (i < ataques.length - 1) {
             console.log(`⏳ Aguardando 100ms antes do próximo...`);
             await sleep(100);
@@ -693,7 +867,7 @@
       }
     }, 1000);
     
-    console.log('[TWS_Backend] Scheduler iniciado com BroadcastChannel');
+    console.log('[TWS_Backend] Scheduler iniciado com sincronização de locks');
   }
 
   // === Importar de BBCode ===
@@ -719,7 +893,10 @@
         }
       }
       
-      const origemId = params.village || _villageMap[origem];
+      // CORREÇÃO: origemId seguro
+      const origemIdCandidate = params.village && /^\d+$/.test(params.village) ? params.village : null;
+      const origemId = origemIdCandidate || _villageMap[origem] || null;
+
       const uniqueId = generateUniqueId();
       
       const cfg = {
@@ -771,5 +948,5 @@
     }
   };
 
-  console.log('[TWS_Backend] ✅ Backend v3 carregado (BroadcastChannel)');
+  console.log('[TWS_Backend] ✅ Backend v3 patched (locks localStorage + BroadcastChannel)');
 })();
