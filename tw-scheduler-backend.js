@@ -4,217 +4,37 @@
   // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
-  const TIMESLOT_LOCK_KEY = 'tws_timeslot_locks';
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
-  
   let _villageMap = {};
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ SISTEMA DE LOCK POR TIMESLOT (HORÁRIO) - ANTI-DUPLICAÇÃO
-  class TimeslotCoordinator {
-    constructor() {
-      this.currentTabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      this.activeTimeslots = new Set();
-      this.useBroadcast = false;
-      this.channel = null;
-      
-      if (typeof BroadcastChannel !== 'undefined') {
-        try {
-          this.channel = new BroadcastChannel('tws_timeslots');
-          this.useBroadcast = true;
-          this.channel.onmessage = (event) => this.handleMessage(event.data);
-          console.log(`✅ [${this.currentTabId}] TimeslotCoordinator ativado`);
-        } catch (e) {
-          console.warn('⚠️ BroadcastChannel não disponível:', e);
-        }
-      }
-      
-      // Limpar locks expirados a cada 30s
-      setInterval(() => this.cleanupExpiredLocks(), 30000);
-      window.addEventListener('beforeunload', () => this.cleanup());
+  // ✅ PROTEÇÃO: Rastrear agendamentos em execução
+  const _executing = new Set();
+  
+  // ✅ PROTEÇÃO: Rastrear ataques já processados (evita reprocessamento)
+  const _processedAttacks = new Set();
+  
+  // ✅ NOVO: Contador global para IDs únicos
+  let _idCounter = Date.now(); // Inicia com timestamp para ser único entre sessões
+
+  // ✅ NOVO: Gerar ID único GARANTIDO (impossível colidir)
+  function generateUniqueId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
     }
-
-    // 🕒 Gerar chave de timeslot (segundo específico)
-    getTimeslotKey(datetimeStr) {
-      const timestamp = parseDateTimeToMs(datetimeStr);
-      if (isNaN(timestamp)) return null;
-      
-      // Arredonda para o segundo (remove milissegundos)
-      const timeslot = Math.floor(timestamp / 1000);
-      return `timeslot_${timeslot}`;
-    }
-
-    // 🔒 Tentar adquirir lock de um timeslot
-    async acquireTimeslotLock(timeslotKey, attackCount = 1) {
-      const now = Date.now();
-      
-      // ✅ Camada 1: Lock local (evita duplicata na mesma aba)
-      if (this.activeTimeslots.has(timeslotKey)) {
-        console.log(`⏭️ [Local] Timeslot ${timeslotKey} já está sendo processado`);
-        return false;
-      }
-
-      // ✅ Camada 2: Lock em localStorage (entre abas)
-      try {
-        const allLocks = this.getGlobalLocks();
-        const existingLock = allLocks[timeslotKey];
-        
-        if (existingLock) {
-          const lockAge = now - existingLock.timestamp;
-          
-          // Se lock é recente (< 30 segundos), não permitir
-          if (lockAge < 30000) {
-            console.log(`⏭️ [Global] Timeslot ${timeslotKey} travado por ${existingLock.tabId} (${Math.round(lockAge/1000)}s)`);
-            return false;
-          } else {
-            // Lock expirado, remover
-            console.log(`🧹 Removendo lock expirado: ${timeslotKey}`);
-            delete allLocks[timeslotKey];
-          }
-        }
-
-        // Adquirir lock
-        allLocks[timeslotKey] = {
-          tabId: this.currentTabId,
-          timestamp: now,
-          attackCount: attackCount,
-          acquiredAt: new Date().toISOString()
-        };
-        
-        localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        
-        // ✅ Camada 3: Notificar via BroadcastChannel
-        if (this.useBroadcast) {
-          this.channel.postMessage({
-            type: 'TIMESLOT_ACQUIRED',
-            timeslotKey,
-            tabId: this.currentTabId,
-            timestamp: now,
-            attackCount
-          });
-        }
-
-      } catch (e) {
-        console.warn('⚠️ Erro no lock global:', e);
-        return false;
-      }
-
-      // ✅ Adicionar ao controle local
-      this.activeTimeslots.add(timeslotKey);
-      console.log(`🔒 [${this.currentTabId}] Timeslot adquirido: ${timeslotKey} para ${attackCount} ataques`);
-      
-      return true;
-    }
-
-    // 🔓 Liberar lock do timeslot
-    releaseTimeslotLock(timeslotKey) {
-      // Remover localmente
-      this.activeTimeslots.delete(timeslotKey);
-      
-      // Remover do localStorage
-      try {
-        const allLocks = this.getGlobalLocks();
-        if (allLocks[timeslotKey]?.tabId === this.currentTabId) {
-          delete allLocks[timeslotKey];
-          localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        }
-      } catch (e) {
-        console.warn('⚠️ Erro ao liberar lock global:', e);
-      }
-      
-      // Notificar via Broadcast
-      if (this.useBroadcast) {
-        this.channel.postMessage({
-          type: 'TIMESLOT_RELEASED',
-          timeslotKey,
-          tabId: this.currentTabId,
-          timestamp: Date.now()
-        });
-      }
-      
-      console.log(`🔓 [${this.currentTabId}] Timeslot liberado: ${timeslotKey}`);
-    }
-
-    // 🧹 Limpar locks expirados
-    cleanupExpiredLocks() {
-      try {
-        const allLocks = this.getGlobalLocks();
-        const now = Date.now();
-        let changed = false;
-        
-        Object.keys(allLocks).forEach(timeslotKey => {
-          const lock = allLocks[timeslotKey];
-          if (now - lock.timestamp > 60000) { // 60 segundos
-            delete allLocks[timeslotKey];
-            changed = true;
-            console.log(`🧹 Limpando lock expirado: ${timeslotKey}`);
-          }
-        });
-        
-        if (changed) {
-          localStorage.setItem(TIMESLOT_LOCK_KEY, JSON.stringify(allLocks));
-        }
-      } catch (e) {
-        console.warn('⚠️ Erro ao limpar locks expirados:', e);
-      }
-    }
-
-    // 📋 Obter locks globais
-    getGlobalLocks() {
-      try {
-        return JSON.parse(localStorage.getItem(TIMESLOT_LOCK_KEY) || '{}');
-      } catch {
-        return {};
-      }
-    }
-
-    // 📥 Processar mensagens
-    handleMessage(data) {
-      const { type, timeslotKey, tabId, timestamp } = data;
-      
-      switch (type) {
-        case 'TIMESLOT_ACQUIRED':
-          console.log(`📥 Aba ${tabId} adquiriu timeslot: ${timeslotKey}`);
-          // Adicionar ao controle local para evitar conflitos
-          this.activeTimeslots.add(timeslotKey);
-          break;
-          
-        case 'TIMESLOT_RELEASED':
-          console.log(`📥 Aba ${tabId} liberou timeslot: ${timeslotKey}`);
-          this.activeTimeslots.delete(timeslotKey);
-          break;
-      }
-    }
-
-    // 🧹 Cleanup
-    cleanup() {
-      // Liberar todos os locks desta aba
-      this.activeTimeslots.forEach(timeslotKey => {
-        this.releaseTimeslotLock(timeslotKey);
-      });
-      
-      if (this.channel) {
-        this.channel.close();
-      }
-    }
-
-    // 📊 Estatísticas
-    getStats() {
-      const globalLocks = this.getGlobalLocks();
-      return {
-        tabId: this.currentTabId,
-        activeTimeslots: Array.from(this.activeTimeslots),
-        globalLocks: Object.keys(globalLocks).length,
-        useBroadcast: this.useBroadcast
-      };
-    }
+    // Fallback super seguro: timestamp + contador incremental + random + performance
+    const timestamp = Date.now();
+    const counter = ++_idCounter;
+    const random = Math.random().toString(36).substr(2, 9);
+    const perf = (typeof performance !== 'undefined' && performance.now) 
+      ? performance.now().toString(36) 
+      : Math.random().toString(36).substr(2, 5);
+    
+    return `${timestamp}_${counter}_${random}_${perf}`;
   }
-
-  // ✅ Instância global do TimeslotCoordinator
-  const timeslotCoordinator = new TimeslotCoordinator();
 
   // === Auto-confirm na página de confirmação ===
   try {
@@ -238,114 +58,249 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
-  /**
-   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
-   */
-  function parseCoord(s) {
-    if (!s) return null;
-    
-    const t = s.trim();
-    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    
-    if (!match) return null;
-    
-    const x = parseInt(match[1], 10);
-    const y = parseInt(match[2], 10);
-    
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
-      return null;
-    }
-    
-    return `${x}|${y}`;
-  }
+/**
+ * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
+ * Suporta todos os formatos: X|Y, XX|YY, XXX|YYY, XXXX|YYYY
+ */
 
-  function isValidCoord(s) {
-    return parseCoord(s) !== null;
+// ✅ Função melhorada para validar e normalizar coordenadas
+function parseCoord(s) {
+  if (!s) return null;
+  
+  const t = s.trim();
+  
+  // Padrão: permite 1-4 dígitos de cada lado do pipe
+  // Formatos válidos: 5|4, 52|43, 529|431, 5294|4312
+  const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+  
+  if (!match) return null;
+  
+  const x = parseInt(match[1], 10);
+  const y = parseInt(match[2], 10);
+  
+  // Validar limites do mapa (Tribal Wars: 0-499 em cada eixo)
+  if (x < 0 || x > 499 || y < 0 || y > 499) {
+    return null;
   }
+  
+  // Retornar em formato normalizado XXX|YYY
+  return `${x}|${y}`;
+}
 
-  function getCoordInfo(s) {
-    const normalized = parseCoord(s);
-    
-    if (!normalized) {
-      return {
-        valid: false,
-        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
-      };
-    }
-    
-    const [x, y] = normalized.split('|').map(Number);
-    
+// ✅ Função para validar sem normalizar (apenas verificar formato)
+function isValidCoord(s) {
+  return parseCoord(s) !== null;
+}
+
+// ✅ Função para obter info sobre a coordenada
+function getCoordInfo(s) {
+  const normalized = parseCoord(s);
+  
+  if (!normalized) {
     return {
-      valid: true,
-      original: s.trim(),
-      normalized,
-      x,
-      y,
-      mapSection: getMapSection(x, y),
-      distance: null
+      valid: false,
+      error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
     };
   }
+  
+  const [x, y] = normalized.split('|').map(Number);
+  
+  return {
+    valid: true,
+    original: s.trim(),
+    normalized,
+    x,
+    y,
+    mapSection: getMapSection(x, y),
+    distance: null // Pode ser calculado se houver coordenada de origem
+  };
+}
 
-  function getMapSection(x, y) {
-    const sections = [];
-    if (x < 250) sections.push('Oeste');
-    else if (x > 250) sections.push('Leste');
-    else sections.push('Centro');
-    
-    if (y < 250) sections.push('Norte');
-    else if (y > 250) sections.push('Sul');
-    else sections.push('Centro');
-    
-    return sections.join('-');
-  }
+// ✅ Função auxiliar: determinar seção do mapa
+function getMapSection(x, y) {
+  const sections = [];
+  if (x < 250) sections.push('Oeste');
+  else if (x > 250) sections.push('Leste');
+  else sections.push('Centro');
+  
+  if (y < 250) sections.push('Norte');
+  else if (y > 250) sections.push('Sul');
+  else sections.push('Centro');
+  
+  return sections.join('-');
+}
 
-  function getDistance(coord1, coord2) {
-    const c1 = parseCoord(coord1);
-    const c2 = parseCoord(coord2);
-    
-    if (!c1 || !c2) return null;
-    
-    const [x1, y1] = c1.split('|').map(Number);
-    const [x2, y2] = c2.split('|').map(Number);
-    
-    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-  }
+// ✅ Calcular distância entre coordenadas
+function getDistance(coord1, coord2) {
+  const c1 = parseCoord(coord1);
+  const c2 = parseCoord(coord2);
+  
+  if (!c1 || !c2) return null;
+  
+  const [x1, y1] = c1.split('|').map(Number);
+  const [x2, y2] = c2.split('|').map(Number);
+  
+  // Distância de Chebyshev (usada em Tribal Wars)
+  return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+}
 
-  function validateCoordList(coordStrings) {
-    return coordStrings.map((coord, idx) => ({
-      index: idx + 1,
-      input: coord,
-      valid: isValidCoord(coord),
-      normalized: parseCoord(coord),
-      error: !isValidCoord(coord) ? 'Formato inválido' : null
-    }));
-  }
+// ✅ Validar múltiplas coordenadas
+function validateCoordList(coordStrings) {
+  return coordStrings.map((coord, idx) => ({
+    index: idx + 1,
+    input: coord,
+    valid: isValidCoord(coord),
+    normalized: parseCoord(coord),
+    error: !isValidCoord(coord) ? 'Formato inválido' : null
+  }));
+}
 
-  function sanitizeCoordInput(input) {
-    if (!input) return null;
-    
-    let cleaned = input.trim().replace(/\s+/g, '');
-    cleaned = cleaned.replace(/-/g, '|');
-    cleaned = cleaned.replace(/[^\d|]/g, '');
-    
-    if (!cleaned) return null;
-    
-    return parseCoord(cleaned);
-  }
+// ✅ Função para limpar e validar input de usuário
+function sanitizeCoordInput(input) {
+  if (!input) return null;
+  
+  // Remover espaços extras
+  let cleaned = input.trim().replace(/\s+/g, '');
+  
+  // Aceitar também formato com hífen: 5-4 → 5|4
+  cleaned = cleaned.replace(/-/g, '|');
+  
+  // Remover caracteres inválidos
+  cleaned = cleaned.replace(/[^\d|]/g, '');
+  
+  // Se vazio após limpeza, retornar null
+  if (!cleaned) return null;
+  
+  return parseCoord(cleaned);
+}
 
-  // ✅ Gerar ID único
-  function generateUniqueId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
+// ═══════════════════════════════════════════════════════════════════
+// TESTES UNITÁRIOS
+// ═══════════════════════════════════════════════════════════════════
+
+function runCoordTests() {
+  const testCases = [
+    // Formatos válidos
+    { input: '5|4', expected: '5|4', name: 'Formato X|Y (válido)' },
+    { input: '52|43', expected: '52|43', name: 'Formato XX|YY (válido)' },
+    { input: '529|431', expected: '529|431', name: 'Formato XXX|YYY (válido)' },
+    { input: '5294|4312', expected: '5294|4312', name: 'Formato XXXX|YYYY (válido)' },
+    
+    // Com espaços
+    { input: ' 52 | 43 ', expected: '52|43', name: 'Formato com espaços' },
+    { input: '529 | 431', expected: '529|431', name: 'Formato com espaços múltiplos' },
+    
+    // Casos inválidos
+    { input: '5', expected: null, name: 'Apenas um número' },
+    { input: '5|', expected: null, name: 'Número faltando' },
+    { input: '|43', expected: null, name: 'Primeiro número faltando' },
+    { input: 'abc|def', expected: null, name: 'Letras em vez de números' },
+    { input: '500|250', expected: null, name: 'X fora do intervalo (500)' },
+    { input: '250|500', expected: null, name: 'Y fora do intervalo (500)' },
+    { input: '-5|43', expected: null, name: 'Número negativo' },
+    { input: '', expected: null, name: 'String vazia' },
+    { input: null, expected: null, name: 'null' },
+    { input: '5|4|2', expected: null, name: 'Mais de dois números' },
+    { input: '5.5|4.3', expected: null, name: 'Números decimais' },
+  ];
+
+  console.log('\n═══════════════════════════════════════════════════════');
+  console.log('🧪 TESTES DE VALIDAÇÃO DE COORDENADAS');
+  console.log('═══════════════════════════════════════════════════════\n');
+  
+  let passed = 0;
+  let failed = 0;
+
+  testCases.forEach((test, idx) => {
+    const result = parseCoord(test.input);
+    const success = result === test.expected;
+    
+    if (success) {
+      console.log(`✅ [${idx + 1}] ${test.name}`);
+      console.log(`   Input: "${test.input}" → Output: "${result}"\n`);
+      passed++;
+    } else {
+      console.log(`❌ [${idx + 1}] ${test.name}`);
+      console.log(`   Input: "${test.input}"`);
+      console.log(`   Esperado: ${test.expected}`);
+      console.log(`   Obtido: ${result}\n`);
+      failed++;
     }
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substr(2, 9);
-    const perf = (typeof performance !== 'undefined' && performance.now) 
-      ? performance.now().toString(36) 
-      : Math.random().toString(36).substr(2, 5);
-    
-    return `${timestamp}_${random}_${perf}`;
-  }
+  });
+
+  console.log('═══════════════════════════════════════════════════════');
+  console.log(`📊 RESULTADO: ${passed} aprovados, ${failed} reprovados`);
+  console.log('═══════════════════════════════════════════════════════\n');
+
+  return { passed, failed, total: testCases.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEMONSTRAÇÃO
+// ═══════════════════════════════════════════════════════════════════
+
+function demonstracao() {
+  console.log('\n🎯 EXEMPLOS DE USO\n');
+  
+  console.log('1️⃣ Validar coordenadas:');
+  console.log('   isValidCoord("529|431"):', isValidCoord('529|431'));
+  console.log('   isValidCoord("5|4"):', isValidCoord('5|4'));
+  console.log('   isValidCoord("999|999"):', isValidCoord('999|999'));
+  
+  console.log('\n2️⃣ Obter informações:');
+  const info = getCoordInfo('529|431');
+  console.log('   Coordenada: 529|431');
+  console.log('   Válida:', info.valid);
+  console.log('   Normalizada:', info.normalized);
+  console.log('   Posição:', `X=${info.x}, Y=${info.y}`);
+  console.log('   Seção do Mapa:', info.mapSection);
+  
+  console.log('\n3️⃣ Calcular distância:');
+  const dist = getDistance('0|0', '100|100');
+  console.log('   De (0|0) até (100|100):', dist, 'casas');
+  
+  console.log('\n4️⃣ Limpar input de usuário:');
+  console.log('   Input: " 52 - 43 "');
+  console.log('   Resultado:', sanitizeCoordInput(' 52 - 43 '));
+  
+  console.log('\n5️⃣ Validar lista:');
+  const lista = validateCoordList(['5|4', '999|999', '52|43']);
+  lista.forEach(item => {
+    console.log(`   [${item.index}] "${item.input}" → ${item.valid ? '✅' : '❌'}`);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORTAR PARA USO GLOBAL
+// ═══════════════════════════════════════════════════════════════════
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    parseCoord,
+    isValidCoord,
+    getCoordInfo,
+    getMapSection,
+    getDistance,
+    validateCoordList,
+    sanitizeCoordInput,
+    runCoordTests
+  };
+}
+
+// Executar testes se disponível no console
+if (typeof window !== 'undefined') {
+  window.CoordValidator = {
+    parseCoord,
+    isValidCoord,
+    getCoordInfo,
+    getMapSection,
+    getDistance,
+    validateCoordList,
+    sanitizeCoordInput,
+    runCoordTests
+  };
+  console.log('✅ CoordValidator disponível. Use: CoordValidator.runCoordTests()');
+}
 
   function getList() {
     try {
@@ -395,7 +350,7 @@
     }
   }
 
-  // === Busca tropas disponíveis ===
+  // === Busca tropas disponíveis em uma aldeia ===
   async function getVillageTroops(villageId) {
     try {
       const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
@@ -429,7 +384,7 @@
     }
   }
 
-  // === Valida tropas ===
+  // === Valida se há tropas suficientes ===
   function validateTroops(requested, available) {
     const errors = [];
     TROOP_LIST.forEach(u => {
@@ -442,7 +397,7 @@
     return errors;
   }
 
-  // === Verifica confirmação ===
+  // === Verifica se o ataque foi confirmado ===
   function isAttackConfirmed(htmlText) {
     if (/screen=info_command.*type=own/i.test(htmlText)) {
       return true;
@@ -453,9 +408,18 @@
     }
 
     const successPatterns = [
-      /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
-      /enfileirad/i, /A batalha começou/i, /march started/i, /comando enviado/i,
-      /tropas enviadas/i, /foi enfileirado/i, /command sent/i, /comando foi criado/i
+      /attack sent/i,
+      /attack in queue/i,
+      /enviado/i,
+      /ataque enviado/i,
+      /enfileirad/i,
+      /A batalha começou/i,
+      /march started/i,
+      /comando enviado/i,
+      /tropas enviadas/i,
+      /foi enfileirado/i,
+      /command sent/i,
+      /comando foi criado/i
     ];
 
     return successPatterns.some(p => p.test(htmlText));
@@ -471,6 +435,7 @@
       console.log('[TWScheduler]', msg);
     };
 
+    // Resolve origem
     const origemId = cfg.origemId || _villageMap[cfg.origem] || null;
     if (!origemId) {
       setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
@@ -483,6 +448,7 @@
       throw new Error('Alvo inválido');
     }
 
+    // Valida tropas disponíveis
     setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
     const availableTroops = await getVillageTroops(origemId);
     if (availableTroops) {
@@ -617,14 +583,15 @@
         
         const finalText = await confirmRes.text();
         
-        console.log('[TWS_Backend] Resposta final recebida');
+        console.log('[TWS_Backend] Resposta final recebida, verificando confirmação...');
         
         if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
-          console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
+          setStatus(`⚠️ Confirmação concluída, verifique manualmente se o ataque foi enfileirado`);
+          console.warn('[TWS_Backend] Resposta de confirmação não indicou sucesso claro');
+          console.log('[TWS_Backend] Início da resposta:', finalText.substring(0, 500));
           return false;
         }
       } else {
@@ -632,7 +599,8 @@
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus('⚠️ Resposta não indicou confirmação');
+          setStatus('⚠️ Resposta não indicou confirmação; verifique manualmente');
+          console.log('[TWS_Backend] Início da resposta:', postText.substring(0, 500));
           return false;
         }
       }
@@ -643,12 +611,17 @@
     }
   }
 
-  // ✅ Delay entre execuções
+  // ✅ NOVO: Delay entre execuções
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // === SCHEDULER COM ANTI-DUPLICAÇÃO POR TIMESLOT ===
+  // ✅ NOVO: Criar fingerprint único do ataque (para detectar duplicatas)
+  function getAttackFingerprint(a) {
+    return `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
+  }
+
+  // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -658,112 +631,123 @@
       const msgs = [];
       let hasChanges = false;
 
-      // 🎯 AGORA: Agrupar ataques por timeslot (segundo específico)
-      const attacksByTimeslot = {};
+      // ✅ PROTEÇÃO: Agrupar ataques por horário E fingerprint único
+      const ataquesPorHorario = {};
       
-      // Fase 1: Coletar ataques elegíveis por timeslot
-      for (const attack of list) {
-        if (attack.done || attack.locked) continue;
-        
-        const attackTime = parseDateTimeToMs(attack.datetime);
-        if (!attackTime || isNaN(attackTime)) continue;
-        
-        const timeDiff = attackTime - now;
-        
-        // ✅ Só considerar ataques entre -10s e +2s do horário
-        if (timeDiff <= 2000 && timeDiff >= -10000) {
-          const timeslotKey = timeslotCoordinator.getTimeslotKey(attack.datetime);
-          if (!timeslotKey) continue;
-          
-          if (!attacksByTimeslot[timeslotKey]) {
-            attacksByTimeslot[timeslotKey] = [];
-          }
-          
-          attacksByTimeslot[timeslotKey].push(attack);
-        } else if (timeDiff > 0) {
-          // Mostrar contagem regressiva
-          const seconds = Math.ceil(timeDiff / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          msgs.push(`🕒 ${attack.origem} → ${attack.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
-        }
-      }
-
-      // Fase 2: Processar UM timeslot de cada vez
-      for (const [timeslotKey, attacks] of Object.entries(attacksByTimeslot)) {
-        // 🔒 TENTAR ADQUIRIR LOCK DESTE TIMESLOT
-        const acquired = await timeslotCoordinator.acquireTimeslotLock(timeslotKey, attacks.length);
-        
-        if (!acquired) {
-          console.log(`⏭️ Pulando timeslot ${timeslotKey} (já está sendo processado)`);
+      for (const a of list) {
+        // ✅ PROTEÇÃO 0: Pular se já foi processado (mesmo que done=false)
+        const fingerprint = getAttackFingerprint(a);
+        if (_processedAttacks.has(fingerprint)) {
+          console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado anteriormente`);
           continue;
         }
-
-        console.log(`🚀 PROCESSANDO TIMESLOT: ${timeslotKey} com ${attacks.length} ataques`);
-        msgs.push(`🔥 Executando ${attacks.length} ataque(s) no horário...`);
-
-        // ✅ EXECUTAR ATAQUES DESTE TIMESLOT EM SEQUÊNCIA
-        for (let i = 0; i < attacks.length; i++) {
-          const attack = attacks[i];
-          
-          // Marcar como locked
-          attack.locked = true;
-          hasChanges = true;
-          setList(list);
-          
-          try {
-            console.log(`🎯 [${i + 1}/${attacks.length}] ${attack.origem} → ${attack.alvo}`);
-            
-            const success = await executeAttack(attack);
-            
-            attack.done = true;
-            attack.success = success;
-            attack.executedAt = new Date().toISOString();
-            hasChanges = true;
-            
-            console.log(`✅ [${i + 1}/${attacks.length}] Concluído`);
-            msgs.push(`✅ ${attack.origem} → ${attack.alvo}`);
-            
-          } catch (err) {
-            attack.error = err.message;
-            attack.done = true;
-            attack.success = false;
-            hasChanges = true;
-            
-            console.error(`❌ [${i + 1}/${attacks.length}] Erro:`, err);
-            msgs.push(`❌ ${attack.origem} → ${attack.alvo}: ${err.message}`);
-          } finally {
-            attack.locked = false;
-            hasChanges = true;
-          }
-          
-          // ⏳ Delay entre ataques do MESMO timeslot
-          if (i < attacks.length - 1) {
-            await sleep(400); // 400ms entre ataques
-          }
-        }
-
-        // 🔓 LIBERAR LOCK DO TIMESLOT
-        timeslotCoordinator.releaseTimeslotLock(timeslotKey);
-        console.log(`🏁 TIMESLOT ${timeslotKey} CONCLUÍDO`);
         
-        // ⏰ Aguardar antes do próximo timeslot (evita sobrecarga)
-        await sleep(200);
+        if (a.done || a.locked) continue;
+        
+        const t = parseDateTimeToMs(a.datetime);
+        if (!t || isNaN(t)) continue;
+        
+        const diff = t - now;
+        
+        // Agrupar ataques do mesmo horário
+        if (diff <= 0 && diff > -10000) {
+          if (!ataquesPorHorario[a.datetime]) {
+            ataquesPorHorario[a.datetime] = [];
+          }
+          ataquesPorHorario[a.datetime].push(a);
+        } else if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
+        }
       }
 
-      // Atualizar storage se necessário
+      // ✅ PROTEÇÃO: Processar cada grupo de horário com debounce
+      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+        console.log(`[TWScheduler] 🔥 Processando ${ataques.length} ataques do horário ${horario}`);
+        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
+        
+        // Processar sequencialmente com delay
+        for (let i = 0; i < ataques.length; i++) {
+          const a = ataques[i];
+          
+          // ✅ PROTEÇÃO 1: Criar fingerprint único
+          const fingerprint = getAttackFingerprint(a);
+          
+          // ✅ PROTEÇÃO 2: Verificar se já foi processado
+          if (_processedAttacks.has(fingerprint)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
+            continue;
+          }
+          
+          // ✅ PROTEÇÃO 3: Criar ID único se não existir
+          if (!a._id) {
+            a._id = generateUniqueId();
+            hasChanges = true;
+          }
+          
+          // ✅ PROTEÇÃO 4: Verificar se já está executando
+          if (_executing.has(a._id)) {
+            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
+            continue;
+          }
+          
+          // ✅ PROTEÇÃO 5: Marcar como processado IMEDIATAMENTE
+          _processedAttacks.add(fingerprint);
+          console.log(`[TWScheduler] 🔒 Marcando ${fingerprint} como processado`);
+          
+          // ✅ PROTEÇÃO 6: Lock imediato ANTES de executar
+          a.locked = true;
+          hasChanges = true;
+          setList(list); // Salvar ANTES de executar
+          
+          // ✅ PROTEÇÃO 7: Adicionar ao Set
+          _executing.add(a._id);
+          
+          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
+          
+          try {
+            const success = await executeAttack(a);
+            a.done = true;
+            a.success = success;
+            a.executedAt = new Date().toISOString();
+            hasChanges = true;
+            
+            console.log(`[TWScheduler] ✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
+          } catch (err) {
+            a.error = err.message;
+            a.done = true;
+            a.success = false;
+            hasChanges = true;
+            console.error(`[TWScheduler] ❌ [${i + 1}/${ataques.length}] Erro:`, err);
+          } finally {
+            // ✅ PROTEÇÃO 8: Remover lock e do Set
+            a.locked = false;
+            _executing.delete(a._id);
+            hasChanges = true;
+            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
+          }
+          
+          // ✅ PROTEÇÃO 9: Debounce entre ataques (100ms)
+          if (i < ataques.length - 1) {
+            console.log(`[TWScheduler] ⏳ Aguardando 200ms antes do próximo...`);
+            await sleep(100);
+          }
+        }
+      }
+
       if (hasChanges) {
         setList(list);
       }
 
-      // Atualizar status
       const status = document.getElementById('tws-status');
       if (status) {
         status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
       }
-    }, 1000); // Verificar a cada 1 segundo
+    }, 1000);
     
-    console.log('[TWS_Backend] ✅ SCHEDULER ANTI-DUPLICAÇÃO ATIVADO');
+    console.log('[TWS_Backend] Scheduler iniciado');
   }
 
   // === Importar de BBCode ===
@@ -790,10 +774,12 @@
       }
       
       const origemId = params.village || _villageMap[origem];
+      
+      // ✅ PROTEÇÃO: Gerar ID único ANTES de adicionar à lista
       const uniqueId = generateUniqueId();
       
       const cfg = {
-        _id: uniqueId,
+        _id: uniqueId, // ✅ ID único PRIMEIRO
         origem,
         origemId,
         alvo: destino,
@@ -812,6 +798,7 @@
     }
     
     console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
+    console.log(`[TWS_Backend] IDs gerados:`, agendamentos.map(a => a._id.substring(0, 30) + '...'));
     
     return agendamentos;
   }
@@ -829,7 +816,7 @@
     getVillageTroops,
     validateTroops,
     generateUniqueId,
-    timeslotCoordinator, // ✅ Exportando o novo coordenador
+    getAttackFingerprint, // ✅ NOVO
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
@@ -837,10 +824,12 @@
     _internal: {
       get villageMap() { return _villageMap; },
       get myVillages() { return _myVillages; },
-      get coordinatorStats() { return timeslotCoordinator.getStats(); } // ✅ Estatísticas do novo sistema
+      get executing() { return _executing; },
+      get processedAttacks() { return _processedAttacks; } // ✅ NOVO
     }
   };
 
-  console.log('[TWS_Backend] ✅ SISTEMA COMPLETO ANTI-DUPLICAÇÃO CARREGADO');
-  console.log('[TWS_Backend] 💡 AGORA: Apenas UMA aba processa cada horário específico!');
+  console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
+
