@@ -14,7 +14,9 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ NOVO: Gerenciador de Broadcast Channel + sincronização inicial com localStorage
+  // ============================
+  // AttackCoordinator (Broadcast + localStorage sync)
+  // ============================
   class AttackCoordinator {
     constructor() {
       this.processingAttacks = new Map(); // { attackId: timestamp }
@@ -50,13 +52,17 @@
             const id = key.replace(LOCK_PREFIX, '');
             const val = localStorage.getItem(key);
             if (!val) continue;
-            const [ts] = val.split('|');
-            const tsNum = Number(ts) || 0;
-            // respeitar TTL
-            if (Date.now() - tsNum < LOCK_TTL) {
-              this.processingAttacks.set(id, tsNum);
-            } else {
-              // lock expirado, remover
+            try {
+              const parsed = JSON.parse(val);
+              const tsNum = Number(parsed.ts) || 0;
+              if (Date.now() - tsNum < LOCK_TTL) {
+                this.processingAttacks.set(id, tsNum);
+              } else {
+                // lock expirado, remover
+                try { localStorage.removeItem(key); } catch (e) {}
+              }
+            } catch(e) {
+              // formato antigo ou inválido: remover para segurança
               try { localStorage.removeItem(key); } catch (e) {}
             }
           }
@@ -77,8 +83,12 @@
 
         const id = ev.key.replace(LOCK_PREFIX, '');
         if (ev.newValue) {
-          const [ts] = ev.newValue.split('|');
-          this.processingAttacks.set(id, Number(ts) || Date.now());
+          try {
+            const parsed = JSON.parse(ev.newValue);
+            this.processingAttacks.set(id, Number(parsed.ts) || Date.now());
+          } catch (e) {
+            // fallback: ignore
+          }
         } else {
           this.processingAttacks.delete(id);
         }
@@ -89,12 +99,13 @@
       return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    // 📤 Notificar que vou processar um ataque
+    // 📤 Notificar que vou processar um ataque (também grava lock JSON no localStorage)
     notifyAttackStart(attackId) {
       const now = Date.now();
       this.processingAttacks.set(attackId, now);
+      const payload = { ts: now, owner: this.currentTabId };
       try {
-        localStorage.setItem(`${LOCK_PREFIX}${attackId}`, `${now}|${this.currentTabId}`);
+        localStorage.setItem(`${LOCK_PREFIX}${attackId}`, JSON.stringify(payload));
       } catch (e) {
         console.warn('[AttackCoordinator] falha ao setar localStorage lock:', e);
       }
@@ -121,13 +132,18 @@
       try {
         const key = `${LOCK_PREFIX}${attackId}`;
         const val = localStorage.getItem(key);
-        // remove apenas se for nosso lock ou se expirado
         if (!val) {
           // nada
         } else {
-          const [ts, owner] = val.split('|');
-          const tsNum = Number(ts) || 0;
-          if (owner === this.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+          try {
+            const parsed = JSON.parse(val);
+            const tsNum = Number(parsed.ts) || 0;
+            const owner = parsed.owner;
+            if (owner === this.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+              try { localStorage.removeItem(key); } catch(e) {}
+            }
+          } catch (e) {
+            // se formato inesperado, remover para segurança
             try { localStorage.removeItem(key); } catch(e) {}
           }
         }
@@ -160,19 +176,26 @@
       // Se existir no Map e dentro do TTL
       if (timestamp && (now - timestamp) < LOCK_TTL) return true;
 
-      // Caso contrário verificar localStorage
+      // Caso contrário verificar localStorage (espera-se JSON)
       try {
         const key = `${LOCK_PREFIX}${attackId}`;
         const val = localStorage.getItem(key);
         if (val) {
-          const [ts] = val.split('|');
-          const tsNum = Number(ts) || 0;
-          if (now - tsNum < LOCK_TTL) {
-            // atualizar mapa local
-            this.processingAttacks.set(attackId, tsNum);
-            return true;
-          } else {
-            // expirado -> remover
+          try {
+            const parsed = JSON.parse(val);
+            const tsNum = Number(parsed.ts) || 0;
+            if (now - tsNum < LOCK_TTL) {
+              // atualizar mapa local
+              this.processingAttacks.set(attackId, tsNum);
+              return true;
+            } else {
+              // expirado -> remover
+              try { localStorage.removeItem(key); } catch (e) {}
+              this.processingAttacks.delete(attackId);
+              return false;
+            }
+          } catch (e) {
+            // formato inválido -> remover
             try { localStorage.removeItem(key); } catch (e) {}
             this.processingAttacks.delete(attackId);
             return false;
@@ -229,8 +252,13 @@
           const key = `${LOCK_PREFIX}${id}`;
           const val = localStorage.getItem(key);
           if (!val) return;
-          const [ts, owner] = val.split('|');
-          if (owner === this.currentTabId) {
+          try {
+            const parsed = JSON.parse(val);
+            const owner = parsed.owner;
+            if (owner === this.currentTabId) {
+              try { localStorage.removeItem(key); } catch(e) {}
+            }
+          } catch (e) {
             try { localStorage.removeItem(key); } catch(e) {}
           }
         });
@@ -402,46 +430,56 @@
     }
   }
 
-  // === Lock utility via localStorage (atomic-ish)
-  function tryAcquireLock(id) {
+  // === Lock utility via localStorage (atomic JSON)
+  function acquireAtomicLock(id) {
     try {
       const key = `${LOCK_PREFIX}${id}`;
       const now = Date.now();
-      const value = `${now}|${attackCoordinator.currentTabId}`;
 
-      // escrevemos e lemos - se o valor bater com o nosso, adquirimos
-      localStorage.setItem(key, value);
-      const stored = localStorage.getItem(key);
-      if (stored === value) return true;
-
-      // se não for nosso, verificar se expirou
-      const [ts] = (stored || '').split('|');
-      const tsNum = Number(ts) || 0;
-      if (Date.now() - tsNum > LOCK_TTL) {
-        // tentar "roubar" o lock
-        localStorage.setItem(key, value);
-        return localStorage.getItem(key) === value;
+      // checar existente
+      const existing = localStorage.getItem(key);
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          const tsNum = Number(parsed.ts) || 0;
+          if (now - tsNum < LOCK_TTL) {
+            return false; // ainda válido
+          }
+        } catch (e) {
+          // se formato inválido, iremos sobrescrever
+        }
       }
 
+      const payload = JSON.stringify({ ts: now, owner: attackCoordinator.currentTabId });
+      localStorage.setItem(key, payload);
+      const stored = localStorage.getItem(key);
+      if (stored === payload) return true;
+
+      // se outro sobrescreveu no meio, falha
       return false;
     } catch (e) {
-      console.warn('[tryAcquireLock] erro:', e);
+      console.warn('[acquireAtomicLock] erro:', e);
       return false;
     }
   }
 
-  function releaseLock(id) {
+  function releaseAtomicLock(id) {
     try {
       const key = `${LOCK_PREFIX}${id}`;
       const stored = localStorage.getItem(key);
       if (!stored) return;
-      const [ts, owner] = stored.split('|');
-      const tsNum = Number(ts) || 0;
-      if (owner === attackCoordinator.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+      try {
+        const parsed = JSON.parse(stored);
+        const owner = parsed.owner;
+        const tsNum = Number(parsed.ts) || 0;
+        if (owner === attackCoordinator.currentTabId || Date.now() - tsNum > LOCK_TTL) {
+          try { localStorage.removeItem(key); } catch (e) {}
+        }
+      } catch (e) {
         try { localStorage.removeItem(key); } catch (e) {}
       }
     } catch (e) {
-      console.warn('[releaseLock] erro:', e);
+      console.warn('[releaseAtomicLock] erro:', e);
     }
   }
 
@@ -773,7 +811,6 @@
         // ✅ PROTEÇÃO: Verificar BroadcastChannel / localStorage
         if (attackCoordinator.isBeingProcessed(a._id)) {
           // já está processando em outra aba
-          // console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
           continue;
         }
         
@@ -808,14 +845,14 @@
             continue;
           }
 
-          // (2) Tentar lock cross-tab via localStorage
-          const locked = tryAcquireLock(a._id);
+          // (2) Tentar lock cross-tab via atomic JSON localStorage
+          const locked = acquireAtomicLock(a._id);
           if (!locked) {
             console.log(`⏭️ Pulando ${a._id} (falha ao adquirir lock)`);
             continue;
           }
 
-          // ✅ Notificar início via BroadcastChannel + localStorage
+          // ✅ Notificar início via BroadcastChannel + grava lock (notify também grava)
           attackCoordinator.notifyAttackStart(a._id);
 
           a.locked = true;
@@ -842,8 +879,8 @@
             // ✅ Notificar fim via BroadcastChannel
             attackCoordinator.notifyAttackEnd(a._id);
 
-            // liberar lock localStorage
-            releaseLock(a._id);
+            // liberar lock localStorage (atomic)
+            releaseAtomicLock(a._id);
 
             a.locked = false;
             hasChanges = true;
@@ -948,5 +985,5 @@
     }
   };
 
-  console.log('[TWS_Backend] ✅ Backend v3 patched (locks localStorage + BroadcastChannel)');
+  console.log('[TWS_Backend] ✅ Backend v3 patched (locks JSON atômicos + BroadcastChannel)');
 })();
