@@ -272,85 +272,77 @@
     return { formHtml: formHtml, inputs: inputs };
   }
 
-  
-  //executeAttack
-executeAttack: async function (task) {
+  // ----------------- executeAttack (CORRIGIDA) -----------------
+  async function executeAttack(task) {
     try {
-        // 1. Abre a página de confirmação
-        const confirmUrl =
-            `/game.php?village=${task.source}` +
-            `&screen=place&try=confirm` +
-            `&target=${task.target}`;
-
-        const html = await fetch(confirmUrl, {
-            credentials: "include"
-        }).then(r => r.text());
-
-        // 2. Extrair o <form> inteiro sem DOMParser
-        const formMatch = html.match(/<form[^>]*>([\s\S]*?)<\/form>/i);
-        if (!formMatch) {
-            return { success: false, message: "Formulário não encontrado" };
+      // 1. Build confirmation URL with troops
+      let confirmUrl = `/game.php?village=${task.source}&screen=place&try=confirm&target=${task.target}`;
+      
+      // Add troop parameters
+      TROOP_LIST.forEach(troop => {
+        if (task[troop] && parseInt(task[troop]) > 0) {
+          confirmUrl += `&${troop}=${task[troop]}`;
         }
-        const formHtml = formMatch[1];
+      });
 
-        // 3. Extrair todos os inputs
-        const inputs = {};
-        const inputRegex = /<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/gi;
+      // 2. Fetch confirmation page
+      const response = await fetch(confirmUrl, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        return { success: false, message: "Failed to load confirmation page" };
+      }
 
-        let match;
-        while ((match = inputRegex.exec(formHtml)) !== null) {
-            inputs[match[1]] = match[2];
+      const html = await response.text();
+
+      // 3. Extract form inputs
+      const formData = extractFormInputsFromHtml(html);
+      if (!formData || !formData.inputs) {
+        return { success: false, message: "Could not extract form data" };
+      }
+
+      // 4. Prepare final POST request
+      const params = new URLSearchParams();
+      Object.keys(formData.inputs).forEach(key => {
+        params.append(key, formData.inputs[key]);
+      });
+
+      const finalUrl = `/game.php?village=${formData.inputs.village}&screen=place&action=command&h=${formData.inputs.h}`;
+
+      // 5. Send attack
+      const finalResponse = await fetch(finalUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: params.toString()
+      });
+
+      const resultHtml = await finalResponse.text();
+      const confirmed = isAttackConfirmed(resultHtml);
+
+      return {
+        success: confirmed,
+        message: confirmed ? "Attack sent successfully" : "Attack may have failed - check commands",
+        executedAt: Date.now(),
+        data: {
+          source: task.source,
+          target: task.target,
+          troops: task.troops,
+          finalUrl
         }
-
-        // 4. Gerar o body do POST final
-        const params = new URLSearchParams();
-
-        for (const key in inputs) {
-            params.append(key, inputs[key]);
-        }
-
-        const body = params.toString();
-
-        // 5. Montar a URL final
-        const finalUrl =
-            `/game.php?village=${inputs["village"]}` +
-            `&screen=place&action=command&h=${inputs["h"]}`;
-
-        // 6. Enviar o ataque
-        const resp = await fetch(finalUrl, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-            },
-            body
-        });
-
-        if (!resp.ok) {
-            return { success: false, message: "Erro no fetch final" };
-        }
-
-        return {
-            success: true,
-            message: "Ataque enviado",
-            executedAt: Date.now(),
-            data: {
-                source: task.source,
-                target: task.target,
-                troops: task.troops,
-                finalUrl
-            }
-        };
+      };
 
     } catch (error) {
-        return {
-            success: false,
-            message: "Erro interno no executeAttack",
-            error: String(error)
-        };
+      return {
+        success: false,
+        message: "Internal error in executeAttack",
+        error: String(error)
+      };
     }
-},
-
+  }
 
   // ----------------- Queue executor (single worker) -----------------
   async function queueWorker() {
@@ -423,4 +415,3 @@ executeAttack: async function (task) {
   console.log('[TWS_Backend] ✅ Backend v5 loaded (optimized scheduler + lightweight executeAttack)');
 
 })();
-
