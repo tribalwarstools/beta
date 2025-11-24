@@ -272,96 +272,107 @@
     return { formHtml: formHtml, inputs: inputs };
   }
 
-  // ----------------- executeAttack (CORRIGIDA) -----------------
-  async function executeAttack(task) {
+// ----------------- executeAttack (com logs de debug) -----------------
+async function executeAttack(task) {
+  try {
+    console.log('[Attack] Executing attack:', task);
+
+    // 1. Build confirmation URL with troops
+    let confirmUrl = `/game.php?village=${task.source}&screen=place&try=confirm&target=${task.target}`;
+    TROOP_LIST.forEach(troop => {
+      if (task[troop] && parseInt(task[troop]) > 0) {
+        confirmUrl += `&${troop}=${task[troop]}`;
+      }
+    });
+
+    // 2. Fetch confirmation page
+    const response = await fetch(confirmUrl, { credentials: 'include' });
+    if (!response.ok) {
+      console.error('[Attack] Failed to load confirmation page:', response.status);
+      return { success: false, message: "Failed to load confirmation page" };
+    }
+
+    const html = await response.text();
+    console.log('[Attack] Confirmation page loaded');
+
+    // 3. Extract form inputs
+    const formData = extractFormInputsFromHtml(html);
+    if (!formData || !formData.inputs) {
+      console.error('[Attack] Could not extract form data');
+      return { success: false, message: "Could not extract form data" };
+    }
+
+    // 4. Prepare final POST request
+    const params = new URLSearchParams();
+    Object.keys(formData.inputs).forEach(key => params.append(key, formData.inputs[key]));
+    const finalUrl = `/game.php?village=${formData.inputs.village}&screen=place&action=command&h=${formData.inputs.h}`;
+
+    // 5. Send attack
+    const finalResponse = await fetch(finalUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: params.toString()
+    });
+
+    const resultHtml = await finalResponse.text();
+    const confirmed = isAttackConfirmed(resultHtml);
+    console.log('[Attack] Attack result confirmed?', confirmed);
+
+    return {
+      success: confirmed,
+      message: confirmed ? "Attack sent successfully" : "Attack may have failed - check commands",
+      executedAt: Date.now(),
+      data: { source: task.source, target: task.target, troops: task.troops, finalUrl }
+    };
+
+  } catch (error) {
+    console.error('[Attack] executeAttack error', error);
+    return { success: false, message: "Internal error in executeAttack", error: String(error) };
+  }
+}
+
+// ----------------- Queue worker (corrigido) -----------------
+async function queueWorker() {
+  if (_queueRunning) return;
+  _queueRunning = true;
+
+  while (_execQueue.length > 0) {
+    const task = _execQueue.shift();
+    if (!task) continue;
+
+    const fingerprint = getAttackFingerprint(task);
+
+    // Ignorar se já processado ou em outra aba
+    if (_isProcessed(fingerprint)) continue;
+    if (attackCoordinator.isBeingProcessed(task._id)) continue;
+
+    _executing.add(task._id);
+    attackCoordinator.notifyAttackStart(task._id, fingerprint);
+
     try {
-      // 1. Build confirmation URL with troops
-      let confirmUrl = `/game.php?village=${task.source}&screen=place&try=confirm&target=${task.target}`;
-      
-      // Add troop parameters
-      TROOP_LIST.forEach(troop => {
-        if (task[troop] && parseInt(task[troop]) > 0) {
-          confirmUrl += `&${troop}=${task[troop]}`;
-        }
-      });
+      const res = await executeAttack(task);
 
-      // 2. Fetch confirmation page
-      const response = await fetch(confirmUrl, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        return { success: false, message: "Failed to load confirmation page" };
+      if (res.success) {
+        console.log('[Queue] Attack executed successfully:', task);
+        _persistedMarkProcessed(fingerprint); // marca apenas se enviado
+      } else {
+        console.warn('[Queue] Attack failed:', res.message, task);
       }
 
-      const html = await response.text();
-
-      // 3. Extract form inputs
-      const formData = extractFormInputsFromHtml(html);
-      if (!formData || !formData.inputs) {
-        return { success: false, message: "Could not extract form data" };
-      }
-
-      // 4. Prepare final POST request
-      const params = new URLSearchParams();
-      Object.keys(formData.inputs).forEach(key => {
-        params.append(key, formData.inputs[key]);
-      });
-
-      const finalUrl = `/game.php?village=${formData.inputs.village}&screen=place&action=command&h=${formData.inputs.h}`;
-
-      // 5. Send attack
-      const finalResponse = await fetch(finalUrl, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        body: params.toString()
-      });
-
-      const resultHtml = await finalResponse.text();
-      const confirmed = isAttackConfirmed(resultHtml);
-
-      return {
-        success: confirmed,
-        message: confirmed ? "Attack sent successfully" : "Attack may have failed - check commands",
-        executedAt: Date.now(),
-        data: {
-          source: task.source,
-          target: task.target,
-          troops: task.troops,
-          finalUrl
-        }
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        message: "Internal error in executeAttack",
-        error: String(error)
-      };
+    } catch (e) {
+      console.error('[Queue] executeAttack error:', e);
     }
+
+    attackCoordinator.notifyAttackEnd(task._id, fingerprint);
+    _executing.delete(task._id);
+
+    await new Promise(r => setTimeout(r, 80)); // throttle
   }
 
-  // ----------------- Queue executor (single worker) -----------------
-  async function queueWorker() {
-    if (_queueRunning) return;
-    _queueRunning = true;
-    while (_execQueue.length > 0) {
-      var task = _execQueue.shift(); if (!task) continue;
-      var fingerprint = getAttackFingerprint(task);
-      if (_isProcessed(fingerprint)) continue;
-      if (attackCoordinator.isBeingProcessed(task._id)) continue;
-      _executing.add(task._id);
-      attackCoordinator.notifyAttackStart(task._id, fingerprint);
-      try { await executeAttack(task); } catch(e){ console.error('queueWorker executeAttack error', e); }
-      attackCoordinator.notifyAttackEnd(task._id, fingerprint);
-      _executing.delete(task._id);
-      await new Promise(function(r){ setTimeout(r,80); });
-    }
-    _queueRunning = false;
-  }
+  _queueRunning = false;
+}
+
 
   // ----------------- Scheduler (master tab) -----------------
   function tryAcquireTabLock() {
@@ -415,3 +426,4 @@
   console.log('[TWS_Backend] ✅ Backend v5 loaded (optimized scheduler + lightweight executeAttack)');
 
 })();
+
