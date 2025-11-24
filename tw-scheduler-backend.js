@@ -835,3 +835,4 @@ function sleep(ms) {
 
   console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
 })();
+
