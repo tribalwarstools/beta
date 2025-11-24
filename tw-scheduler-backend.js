@@ -595,13 +595,15 @@ async function executeAttack(cfg) {
   //}
 //✅ NOVO: Delay entre execuções
   
-// ✅ PRECISÃO NANOSEGUNDOS (requer SharedArrayBuffer)
+// ✅ MAIS PRECISO para 0ms (execução no próximo tick)
 function sleep(ms) {
-  const sab = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
-  const ia = new Int32Array(sab);
-  Atomics.wait(ia, 0, 0, ms);
-  return Promise.resolve();
+  if (ms <= 0) {
+    return new Promise(resolve => queueMicrotask(resolve));
+  }
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// Uso: sleep(0) → executa no próximo ciclo de evento
 
   
   // === Scheduler ===
@@ -833,5 +835,6 @@ function sleep(ms) {
 
   console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
 })();
+
 
 
