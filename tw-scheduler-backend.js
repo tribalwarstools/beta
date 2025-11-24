@@ -415,26 +415,37 @@ executeAttack: async function (task) {
             credentials: "include"
         }).then(r => r.text());
 
-        // 2. Monta um DOM virtual
-        const dom = new DOMParser().parseFromString(html, "text/html");
-        const form = dom.querySelector("form");
-
-        if (!form) {
+        // 2. Extrair o <form> inteiro sem DOMParser
+        const formMatch = html.match(/<form[^>]*>([\s\S]*?)<\/form>/i);
+        if (!formMatch) {
             return { success: false, message: "Formulário não encontrado" };
         }
+        const formHtml = formMatch[1];
 
-        // 3. Extrai o FormData da página de confirmação
-        const dados = new FormData(form);
+        // 3. Extrair todos os inputs
+        const inputs = {};
+        const inputRegex = /<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/gi;
 
-        // 4. Monta o body do POST final
-        const body = new URLSearchParams(dados).toString();
+        let match;
+        while ((match = inputRegex.exec(formHtml)) !== null) {
+            inputs[match[1]] = match[2];
+        }
 
-        // 5. URL do envio final
+        // 4. Gerar o body do POST final
+        const params = new URLSearchParams();
+
+        for (const key in inputs) {
+            params.append(key, inputs[key]);
+        }
+
+        const body = params.toString();
+
+        // 5. Montar a URL final
         const finalUrl =
-            `/game.php?village=${dados.get("village")}` +
-            `&screen=place&action=command&h=${dados.get("h")}`;
+            `/game.php?village=${inputs["village"]}` +
+            `&screen=place&action=command&h=${inputs["h"]}`;
 
-        // 6. Envia o ataque
+        // 6. Enviar o ataque
         const resp = await fetch(finalUrl, {
             method: "POST",
             credentials: "include",
@@ -468,6 +479,7 @@ executeAttack: async function (task) {
         };
     }
 },
+
 
   
 // ✅ MAIS PRECISO para 0ms (execução no próximo tick)
@@ -710,6 +722,7 @@ function sleep(ms) {
 
   console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
 })();
+
 
 
 
