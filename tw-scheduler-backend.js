@@ -132,21 +132,36 @@
   }
 
   // === Troops ===
-  async function getVillageTroops(villageId) {
-    try {
-      const url = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Falha /place');
-      const html = await res.text();
-      const doc = new DOMParser().parseFromString(html,'text/html');
-      const troops = {};
-      TROOP_LIST.forEach(u => {
-        const el = doc.querySelector(`#units_entry_all_${u}, #units_home_${u}, [id*="${u}"][class*="unit"]`);
-        troops[u] = el ? parseInt(el.textContent.match(/\d+/)?.[0]||0,10) : 0;
-      });
-      return troops;
-    } catch { return null; }
+async function getVillageTroops(villageId) {
+  try {
+    const url = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place&ajax=units`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) throw new Error(`Falha ao buscar tropas: ${res.status}`);
+
+    const data = await res.json();
+
+    // data.units geralmente contém { spear: "10", sword: "5", ... } como string
+    const troops = {};
+    for (const t of ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob']) {
+      troops[t] = parseInt(data.units?.[t] || '0', 10);
+    }
+
+    console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
+    return troops;
+
+  } catch (err) {
+    console.error('[TWS_Backend] getVillageTroops error:', err);
+    return null;
   }
+}
+
 
   function validateTroops(requested, available) {
     return TROOP_LIST.map(u => {
@@ -305,3 +320,4 @@
 
   console.log('[TWS_Backend] ✅ Backend v4 headless pronto (BroadcastChannel + proteções)');
 })();
+
