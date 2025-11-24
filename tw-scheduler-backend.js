@@ -134,33 +134,36 @@
   // === Troops ===
 async function getVillageTroops(villageId) {
   try {
-    const url = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place&ajax=units`;
-    const res = await fetch(url, {
-      method: 'GET',
-      credentials: 'same-origin',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
+    const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
+    const res = await fetch(placeUrl, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(`Falha ao carregar /place: ${res.status}`);
+    
+    const html = await res.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
 
-    if (!res.ok) throw new Error(`Falha ao buscar tropas: ${res.status}`);
-
-    const data = await res.json();
-
-    // data.units geralmente contém { spear: "10", sword: "5", ... } como string
     const troops = {};
-    for (const t of ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob']) {
-      troops[t] = parseInt(data.units?.[t] || '0', 10);
-    }
+    TROOP_LIST.forEach(u => {
+      // procura elementos que exibem tropas disponíveis
+      const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
+                         doc.querySelector(`#units_home_${u}`) ||
+                         doc.querySelector(`[id*="${u}"][class*="unit"]`);
+      let available = 0;
+      if (availableEl) {
+        const match = availableEl.textContent.match(/\d+/);
+        available = match ? parseInt(match[0], 10) : 0;
+      }
+      troops[u] = available;
+    });
 
     console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
     return troops;
-
   } catch (err) {
     console.error('[TWS_Backend] getVillageTroops error:', err);
     return null;
   }
 }
+
 
 
   function validateTroops(requested, available) {
@@ -320,6 +323,7 @@ async function executeAttack(cfg) {
 
   console.log('[TWS_Backend] ✅ Backend v4 headless pronto (BroadcastChannel + proteções)');
 })();
+
 
 
 
