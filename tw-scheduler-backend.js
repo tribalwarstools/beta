@@ -1,729 +1,414 @@
+// === TW Scheduler Backend — Complete & Optimized ===
+// Integrated: BroadcastChannel, Tab-lock master, lightweight executeAttack (fetch),
+// persistent processed map, FIFO queue, robust scheduler.
+
 (function () {
   'use strict';
 
   // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
+  const PROCESSED_KEY = STORAGE_KEY + '_processed_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
-  
+
+  // Scheduler tuning
+  const SCHEDULER_TICK = 500; // ms
+  const EXEC_WINDOW = 1500; // ms
+
+  // Tab lock (master tab) settings
+  const TAB_LOCK_KEY = 'tws_tab_lock_v1';
+  const TAB_LOCK_TIMEOUT = 3000; // ms
+
+  // Internal state
   let _villageMap = {};
   let _myVillages = [];
   let _schedulerInterval = null;
-  
-  // ✅ PROTEÇÃO: Rastrear agendamentos em execução
-  const _executing = new Set();
-  
-  // ✅ PROTEÇÃO: Rastrear ataques já processados (evita reprocessamento)
-  const _processedAttacks = new Set();
-  
-  // ✅ NOVO: Contador global para IDs únicos
+
+  // Running sets
+  const _executing = new Set(); // attack._id currently executing in this tab
+  const _processedAttacks = new Map(); // fingerprint -> timestamp (persisted)
+
+  // queue for sequential execution (FIFO)
+  const _execQueue = [];
+  let _queueRunning = false;
+
+  // ID counter fallback
   let _idCounter = Date.now();
 
-  // ✅ NOVO: Gerenciador de Broadcast Channel
+  // ----------------- BroadcastChannel Coordinator -----------------
   class AttackCoordinator {
     constructor() {
-      this.processingAttacks = new Map(); // { attackId: timestamp }
+      this.processingAttacks = new Map(); // attackId -> ts
       this.currentTabId = this.generateTabId();
       this.useBroadcast = false;
       this.channel = null;
-      
-      // Tentar usar BroadcastChannel
+
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           this.channel = new BroadcastChannel('tws_attacks');
           this.useBroadcast = true;
-          
-          this.channel.onmessage = (event) => {
-            this.handleMessage(event.data);
-          };
-          
-          console.log(`✅ [${this.currentTabId}] BroadcastChannel ativado`);
+          this.channel.onmessage = (ev) => this.handleMessage(ev.data);
+          console.log('[' + this.currentTabId + '] BroadcastChannel ready');
         } catch (e) {
-          console.warn('⚠️ BroadcastChannel não disponível:', e);
-          this.useBroadcast = false;
+          console.warn('BroadcastChannel init failed', e);
         }
-      } else {
-        console.warn('⚠️ BroadcastChannel não suportado neste navegador');
       }
-      
-      // Limpar ao fechar aba
+
       window.addEventListener('beforeunload', () => {
         this.cleanup();
       });
     }
 
     generateTabId() {
-      return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return 'tab_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
     }
 
-    // 📤 Notificar que vou processar um ataque
-    notifyAttackStart(attackId) {
+    notifyAttackStart(attackId, fingerprint) {
       this.processingAttacks.set(attackId, Date.now());
-      
-      if (this.useBroadcast) {
-        this.channel.postMessage({
-          type: 'ATTACK_START',
-          attackId,
-          tabId: this.currentTabId,
-          timestamp: Date.now()
-        });
+      if (this.useBroadcast && this.channel) {
+        this.channel.postMessage({ type: 'ATTACK_START', attackId, fingerprint, tabId: this.currentTabId, ts: Date.now() });
       }
-      
-      console.log(`📤 [${this.currentTabId}] Iniciando: ${attackId}`);
     }
 
-    // 📥 Notificar que terminei de processar
-    notifyAttackEnd(attackId) {
+    notifyAttackEnd(attackId, fingerprint) {
       this.processingAttacks.delete(attackId);
-      
-      if (this.useBroadcast) {
-        this.channel.postMessage({
-          type: 'ATTACK_END',
-          attackId,
-          tabId: this.currentTabId,
-          timestamp: Date.now()
-        });
+      if (this.useBroadcast && this.channel) {
+        this.channel.postMessage({ type: 'ATTACK_END', attackId, fingerprint, tabId: this.currentTabId, ts: Date.now() });
       }
-      
-      console.log(`📤 [${this.currentTabId}] Finalizado: ${attackId}`);
     }
 
-    // ✅ Verificar se outro ataque já está processando
-    isBeingProcessed(attackId) {
-      const timestamp = this.processingAttacks.get(attackId);
-      
-      if (!timestamp) return false;
-      
-      const age = Date.now() - timestamp;
-      const TIMEOUT = 60000; // 60 segundos
-      
-      // Se processando há mais de 60s, considerar morto
-      if (age > TIMEOUT) {
-        console.warn(`⚠️ Ataque ${attackId} expirado (${age}ms), removendo lock`);
-        this.processingAttacks.delete(attackId);
-        return false;
+    handleMessage(msg) {
+      if (!msg || !msg.type) return;
+      var type = msg.type, attackId = msg.attackId, fingerprint = msg.fingerprint;
+      switch (type) {
+        case 'ATTACK_START':
+          if (fingerprint) _persistedMarkProcessed(fingerprint);
+          this.processingAttacks.set(attackId, msg.ts || Date.now());
+          break;
+        case 'ATTACK_END':
+          this.processingAttacks.delete(attackId);
+          break;
+        case 'CLEANUP':
+          (msg.attackIds || []).forEach(function(id){ this.processingAttacks.delete(id); }.bind(this));
+          break;
       }
-      
+    }
+
+    isBeingProcessed(attackId) {
+      const ts = this.processingAttacks.get(attackId);
+      if (!ts) return false;
+      if ((Date.now() - ts) > 60000) { this.processingAttacks.delete(attackId); return false; }
       return true;
     }
 
-    // 📋 Processar mensagens recebidas
-    handleMessage(data) {
-      const { type, attackId, tabId, timestamp } = data;
-      
-      switch (type) {
-        case 'ATTACK_START':
-          console.log(`📥 Aba ${tabId} iniciou: ${attackId}`);
-          this.processingAttacks.set(attackId, timestamp);
-          break;
-          
-        case 'ATTACK_END':
-          console.log(`📥 Aba ${tabId} finalizou: ${attackId}`);
-          this.processingAttacks.delete(attackId);
-          break;
-          
-        case 'CLEANUP':
-          console.log(`📥 Aba ${tabId} encerrada`);
-          data.attackIds?.forEach(id => this.processingAttacks.delete(id));
-          break;
-      }
-    }
-
-    // 🧹 Limpar ao fechar aba
     cleanup() {
-      const attackIds = Array.from(this.processingAttacks.keys());
-      
+      const ids = Array.from(this.processingAttacks.keys());
       if (this.useBroadcast && this.channel) {
-        this.channel.postMessage({
-          type: 'CLEANUP',
-          tabId: this.currentTabId,
-          attackIds
-        });
-      }
-      
-      console.log(`🧹 [${this.currentTabId}] Limpando ${attackIds.length} locks`);
-      
-      if (this.channel) {
+        this.channel.postMessage({ type: 'CLEANUP', tabId: this.currentTabId, attackIds: ids });
         this.channel.close();
       }
     }
 
-    // 📊 Obter estatísticas
-    getStats() {
-      return {
-        tabId: this.currentTabId,
-        processingCount: this.processingAttacks.size,
-        useBroadcast: this.useBroadcast
-      };
-    }
+    getStats() { return { tabId: this.currentTabId, processingCount: this.processingAttacks.size, useBroadcast: this.useBroadcast }; }
   }
 
-  // ✅ Instância global
   const attackCoordinator = new AttackCoordinator();
 
-  // === Utility functions ===
-  function parseDateTimeToMs(str) {
-    const m = str?.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
-    if (!m) return NaN;
-    const [, d, mo, y, hh, mm, ss] = m;
-    return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
-  }
-
-  /**
-   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
-   */
-  function parseCoord(s) {
-    if (!s) return null;
-    
-    const t = s.trim();
-    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    
-    if (!match) return null;
-    
-    const x = parseInt(match[1], 10);
-    const y = parseInt(match[2], 10);
-    
-    if (x < 0 || x > 499 || y < 0 || y > 499) {
-      return null;
-    }
-    
-    return `${x}|${y}`;
-  }
-
-  function isValidCoord(s) {
-    return parseCoord(s) !== null;
-  }
-
-  function getCoordInfo(s) {
-    const normalized = parseCoord(s);
-    
-    if (!normalized) {
-      return {
-        valid: false,
-        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
-      };
-    }
-    
-    const [x, y] = normalized.split('|').map(Number);
-    
-    return {
-      valid: true,
-      original: s.trim(),
-      normalized,
-      x,
-      y,
-      mapSection: getMapSection(x, y),
-      distance: null
-    };
-  }
-
-  function getMapSection(x, y) {
-    const sections = [];
-    if (x < 250) sections.push('Oeste');
-    else if (x > 250) sections.push('Leste');
-    else sections.push('Centro');
-    
-    if (y < 250) sections.push('Norte');
-    else if (y > 250) sections.push('Sul');
-    else sections.push('Centro');
-    
-    return sections.join('-');
-  }
-
-  function getDistance(coord1, coord2) {
-    const c1 = parseCoord(coord1);
-    const c2 = parseCoord(coord2);
-    
-    if (!c1 || !c2) return null;
-    
-    const [x1, y1] = c1.split('|').map(Number);
-    const [x2, y2] = c2.split('|').map(Number);
-    
-    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-  }
-
-  function validateCoordList(coordStrings) {
-    return coordStrings.map((coord, idx) => ({
-      index: idx + 1,
-      input: coord,
-      valid: isValidCoord(coord),
-      normalized: parseCoord(coord),
-      error: !isValidCoord(coord) ? 'Formato inválido' : null
-    }));
-  }
-
-  function sanitizeCoordInput(input) {
-    if (!input) return null;
-    
-    let cleaned = input.trim().replace(/\s+/g, '');
-    cleaned = cleaned.replace(/-/g, '|');
-    cleaned = cleaned.replace(/[^\d|]/g, '');
-    
-    if (!cleaned) return null;
-    
-    return parseCoord(cleaned);
-  }
-
-  // ✅ NOVO: Gerar ID único GARANTIDO (impossível colidir)
+  // ----------------- Utilities -----------------
   function generateUniqueId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    // Fallback super seguro: timestamp + contador incremental + random + performance
-    const timestamp = Date.now();
-    const counter = ++_idCounter;
-    const random = Math.random().toString(36).substr(2, 9);
-    const perf = (typeof performance !== 'undefined' && performance.now) 
-      ? performance.now().toString(36) 
-      : Math.random().toString(36).substr(2, 5);
-    
-    return `${timestamp}_${counter}_${random}_${perf}`;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    var ts = Date.now();
+    var c = ++_idCounter;
+    var rnd = Math.random().toString(36).slice(2,8);
+    return ts + '_' + c + '_' + rnd;
   }
 
-  // ✅ NOVO: Criar fingerprint único do ataque (para detectar duplicatas)
-  function getAttackFingerprint(a) {
-    return `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
+  function getAttackFingerprint(a) { return (a.origemId || a.origem) + '_' + a.alvo + '_' + a.datetime; }
+
+  function parseDateTimeToMs(str) {
+    if (!str) return NaN;
+    var m = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return NaN;
+    var d = +m[1], mo = +m[2], y = +m[3], hh = +m[4], mm = +m[5], ss = +m[6];
+    return new Date(y, mo-1, d, hh, mm, ss).getTime();
   }
 
-  function getList() {
+  // ----------------- Persist processed map (TTL capable) -----------------
+  function _loadProcessedMap() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch (e) {
-      console.error('[TWS_Backend] Erro ao ler lista:', e);
-      return [];
-    }
+      var raw = localStorage.getItem(PROCESSED_KEY);
+      if (!raw) return new Map();
+      var obj = JSON.parse(raw);
+      var m = new Map();
+      Object.keys(obj).forEach(function(k){ m.set(k, obj[k]); });
+      return m;
+    } catch (e) { return new Map(); }
   }
 
-  function setList(list) {
+  function _saveProcessedMap(map) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      if (window.renderTable) window.renderTable();
-    } catch (e) {
-      console.error('[TWS_Backend] Erro ao salvar lista:', e);
-    }
+      var obj = {};
+      map.forEach(function(v,k){ obj[k]=v; });
+      localStorage.setItem(PROCESSED_KEY, JSON.stringify(obj));
+    } catch (e) { console.error('saveProcessedMap', e); }
   }
 
-  // === Carrega village.txt ===
-  async function loadVillageTxt() {
-    try {
-      const res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Falha ao buscar village.txt: ' + res.status);
-      const text = await res.text();
-      const map = {};
-      const myVillages = [];
-      
-      for (const line of text.trim().split('\n')) {
-        const [id, name, x, y, playerId] = line.split(',');
-        const coord = `${x}|${y}`;
-        map[coord] = id;
-        
-        if (playerId === (window.game_data?.player?.id || '').toString()) {
-          const clean = decodeURIComponent((name || '').replace(/\+/g, ' '));
-          myVillages.push({ id, name: clean, coord });
-        }
-      }
-      
-      _villageMap = map;
-      _myVillages = myVillages;
-      console.log(`[TWS_Backend] Carregadas ${myVillages.length} aldeias próprias`);
-      return { map, myVillages };
-    } catch (err) {
-      console.error('[TWS_Backend] loadVillageTxt error:', err);
-      return { map: {}, myVillages: [] };
-    }
+  function _persistedMarkProcessed(fingerprint) {
+    var map = _loadProcessedMap();
+    map.set(fingerprint, Date.now());
+    _saveProcessedMap(map);
+    _processedAttacks.set(fingerprint, Date.now());
   }
 
-  // === Busca tropas disponíveis ===
-  async function getVillageTroops(villageId) {
-    try {
-      const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
-      const res = await fetch(placeUrl, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Falha ao carregar /place: ' + res.status);
-      
-      const html = await res.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
+  function _isProcessed(fingerprint) {
+    if (_processedAttacks.has(fingerprint)) return true;
+    var map = _loadProcessedMap();
+    if (map.has(fingerprint)) { _processedAttacks.set(fingerprint, map.get(fingerprint)); return true; }
+    return false;
+  }
 
-      const troops = {};
-      TROOP_LIST.forEach(u => {
-        const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
-                           doc.querySelector(`#units_home_${u}`) ||
-                           doc.querySelector(`[id*="${u}"][class*="unit"]`);
-        
-        let available = 0;
-        if (availableEl) {
-          const match = availableEl.textContent.match(/\d+/);
-          available = match ? parseInt(match[0], 10) : 0;
-        }
-        
-        troops[u] = available;
-      });
+  // cleanup TTL
+  (function(){
+    var map = _loadProcessedMap(); var now = Date.now(); var changed = false;
+    map.forEach(function(ts,k){ if ((now - ts) > 24*3600*1000) { map.delete(k); changed = true; } });
+    if (changed) _saveProcessedMap(map);
+  })();
 
-      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
+  // ----------------- Storage helpers -----------------
+  function getList(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch (e) { return []; } }
+  function setList(list){ try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); if (window.renderTable) window.renderTable(); } catch(e){ console.error(e); } }
+
+  // ----------------- Village.txt loader -----------------
+  async function loadVillageTxt(){
+    try{
+      var res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('village.txt fetch error');
+      var text = await res.text(); var map = {}; var my = [];
+      text.trim().split('\n').forEach(function(line){ var parts = line.split(','); var id=parts[0], name=parts[1], x=parts[2], y=parts[3], playerId=parts[4]; map[x+'|'+y]=id; if (playerId === (window.game_data?.player?.id||'').toString()) my.push({ id: id, name: decodeURIComponent((name||'').replace(/\+/g,' ')), coord: x+'|'+y }); });
+      _villageMap = map; _myVillages = my; return { map: map, myVillages: my };
+    } catch(err){ console.error('loadVillageTxt', err); return { map:{}, myVillages:[] }; }
+  }
+
+  // ----------------- getVillageTroops (uses DOMParser) -----------------
+  async function getVillageTroops(villageId){
+    try{
+      var placeUrl = location.protocol + '//' + location.host + '/game.php?village=' + villageId + '&screen=place';
+      var res = await fetch(placeUrl, { credentials: 'same-origin' }); if(!res.ok) throw new Error('GET /place failed');
+      var html = await res.text(); var parser = new DOMParser(); var doc = parser.parseFromString(html, 'text/html');
+      var troops = {};
+      TROOP_LIST.forEach(function(u){ var el = doc.querySelector('#units_entry_all_' + u) || doc.querySelector('#units_home_' + u) || doc.querySelector('[id*="' + u + '"][class*="unit"]'); var val = 0; if (el) { var mm = el.textContent.match(/\d+/); val = mm ? parseInt(mm[0],10) : 0; } troops[u] = val; });
       return troops;
-    } catch (err) {
-      console.error('[TWS_Backend] getVillageTroops error:', err);
-      return null;
+    } catch(err){ console.error('getVillageTroops', err); return null; }
+  }
+
+  // ----------------- Validation & helpers -----------------
+  function validateTroops(requested, available){ var errs=[]; TROOP_LIST.forEach(function(u){ var req = parseInt(requested[u]||0,10); var avail = parseInt(available[u]||0,10); if (req>avail) errs.push(u + ': ' + req + '>' + avail); }); return errs; }
+  function isAttackConfirmed(htmlText){ if (/screen=info_command.*type=own/i.test(htmlText)) return true; if (/<tr class=\"command-row\">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true; var pats = [/attack sent/i,/attack in queue/i,/enviado/i,/ataque enviado/i,/enfileirad/i,/march started/i,/tropas enviadas/i]; return pats.some(function(p){ return p.test(htmlText); }); }
+
+  // ----------------- Lightweight form extractor (string parsing) -----------------
+  function extractFormInputsFromHtml(html){
+    var idx = html.toLowerCase().indexOf('<form'); if (idx === -1) return null;
+    var start = html.indexOf('>', idx); if (start === -1) return null; // start of form content
+    var endTag = '</form>';
+    var end = html.toLowerCase().indexOf(endTag, start); if (end === -1) return null;
+    var formHtml = html.slice(idx, end + endTag.length);
+
+    var inputs = {};
+    // naive parse: find occurrences of name= then capture the enclosing value attribute if present
+    var pos = 0;
+    while (true) {
+      var nameIdx = formHtml.indexOf('name=', pos);
+      if (nameIdx === -1) break;
+      var nameStart = nameIdx + 5; // after name=
+      var quote = formHtml.charAt(nameStart);
+      var name = '';
+      if (quote === '"' || quote === "'") {
+        nameStart++;
+        var nameEnd = formHtml.indexOf(quote, nameStart);
+        if (nameEnd === -1) break;
+        name = formHtml.slice(nameStart, nameEnd);
+        pos = nameEnd + 1;
+      } else {
+        // unquoted
+        var m = formHtml.slice(nameStart).match(/^[^\s>]+/);
+        if (!m) break;
+        name = m[0];
+        pos = nameStart + name.length;
+      }
+
+      // look backwards in the same tag for value=
+      var tagStart = formHtml.lastIndexOf('<', nameIdx);
+      var tagEnd = formHtml.indexOf('>', nameIdx);
+      var tag = formHtml.slice(tagStart, tagEnd+1);
+      var val = '';
+      var vIdx = tag.indexOf('value=');
+      if (vIdx !== -1) {
+        var vStart = vIdx + 6; var vq = tag.charAt(vStart);
+        if (vq === '"' || vq === "'") { vStart++; var vEnd = tag.indexOf(vq, vStart); if (vEnd !== -1) val = tag.slice(vStart, vEnd); }
+        else { var mm2 = tag.slice(vStart).match(/^[^\s>]+/); if (mm2) val = mm2[0]; }
+      }
+      inputs[name] = val;
     }
-  }
 
-  // === Valida tropas ===
-  function validateTroops(requested, available) {
-    const errors = [];
-    TROOP_LIST.forEach(u => {
-      const req = parseInt(requested[u] || 0, 10);
-      const avail = parseInt(available[u] || 0, 10);
-      if (req > avail) {
-        errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
-      }
-    });
-    return errors;
-  }
-
-  // === Verifica confirmação ===
-  function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) {
-      return true;
+    // try selects: find <select ... name="..."> ... <option selected value="...">
+    var selPos = 0;
+    while (true) {
+      var sIdx = formHtml.toLowerCase().indexOf('<select', selPos);
+      if (sIdx === -1) break;
+      var sEnd = formHtml.indexOf('>', sIdx); if (sEnd === -1) break;
+      var selTag = formHtml.slice(sIdx, sEnd+1);
+      var nameMatch = selTag.match(/name=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+      var selName = nameMatch ? (nameMatch[1]||nameMatch[2]||nameMatch[3]) : null;
+      var closeIdx = formHtml.toLowerCase().indexOf('</select>', sEnd);
+      var selHtml = formHtml.slice(sEnd+1, closeIdx);
+      var optMatch = selHtml.match(/<option[^>]*selected[^>]*value=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i) || selHtml.match(/<option[^>]*value=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      var sval = optMatch ? (optMatch[1]||optMatch[2]||optMatch[3]||'') : '';
+      if (selName) inputs[selName] = sval;
+      selPos = closeIdx + 9;
     }
 
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
-      return true;
+    return { formHtml: formHtml, inputs: inputs };
+  }
+
+  // ----------------- Optimized executeAttack (no heavy DOMParser) -----------------
+  async function executeAttack(cfg) {
+    var statusEl = document.getElementById('tws-status');
+    function setStatus(msg){ try{ if (statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); }
+
+    var origemId = cfg.origemId || _villageMap[cfg.origem] || null;
+    if (!origemId) { setStatus('❌ Origem ' + (cfg.origem || cfg.origemId) + ' não encontrada!'); throw new Error('Origem não encontrada'); }
+
+    var xy = (cfg.alvo||'').split('|'); var x = xy[0], y = xy[1];
+    if (!x || !y) { setStatus('❌ Alvo inválido: ' + cfg.alvo); throw new Error('Alvo inválido'); }
+
+    setStatus('🔍 Verificando tropas em ' + cfg.origem + '...');
+    var available = await getVillageTroops(origemId);
+    if (available) {
+      var errs = validateTroops(cfg, available);
+      if (errs.length) { setStatus('❌ Tropas insuficientes: ' + errs.join(', ')); throw new Error('Tropas insuficientes'); }
     }
 
-    const successPatterns = [
-      /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
-      /enfileirad/i, /A batalha começou/i, /march started/i, /comando enviado/i,
-      /tropas enviadas/i, /foi enfileirado/i, /command sent/i, /comando foi criado/i
-    ];
+    var confirmUrl = location.protocol + '//' + location.host + '/game.php?village=' + origemId + '&screen=place';
+    setStatus('📤 Preparando ataque: ' + cfg.origem + ' → ' + cfg.alvo + '...');
 
-    return successPatterns.some(p => p.test(htmlText));
-  }
+    var pageRes = await fetch(confirmUrl, { credentials: 'same-origin' }); if (!pageRes.ok) throw new Error('Falha ao carregar /place');
+    var pageHtml = await pageRes.text();
 
-// === Execute attack ===
+    var extracted = extractFormInputsFromHtml(pageHtml);
+    if (!extracted) throw new Error('Formulário de envio não encontrado');
 
-executeAttack: async function (task) {
-    try {
-        // 1. Abre a página de confirmação
-        const confirmUrl =
-            `/game.php?village=${task.source}` +
-            `&screen=place&try=confirm` +
-            `&target=${task.target}`;
+    var payload = {};
+    Object.keys(extracted.inputs).forEach(function(k){ payload[k] = extracted.inputs[k]; });
 
-        const html = await fetch(confirmUrl, {
-            credentials: "include"
-        }).then(r => r.text());
+    payload['x'] = String(x); payload['y'] = String(y);
+    TROOP_LIST.forEach(function(u){ payload[u] = String(cfg[u] !== undefined ? cfg[u] : '0'); });
+    if (!payload['attack']) payload['attack'] = 'true';
 
-        // 2. Extrair o <form> inteiro sem DOMParser
-        const formMatch = html.match(/<form[^>]*>([\s\S]*?)<\/form>/i);
-        if (!formMatch) {
-            return { success: false, message: "Formulário não encontrado" };
-        }
-        const formHtml = formMatch[1];
+    var body = Object.keys(payload).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]); }).join('&');
 
-        // 3. Extrair todos os inputs
-        const inputs = {};
-        const inputRegex = /<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/gi;
+    var finalUrl = location.protocol + '//' + location.host + '/game.php?village=' + (payload['village'] || origemId) + '&screen=place&action=command&h=' + (payload['h'] || '');
 
-        let match;
-        while ((match = inputRegex.exec(formHtml)) !== null) {
-            inputs[match[1]] = match[2];
-        }
+    setStatus('⏳ Enviando comando (fetch)...');
+    var postRes = await fetch(finalUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' }, body: body });
+    if (!postRes.ok) throw new Error('POST inicial falhou: HTTP ' + postRes.status);
+    var postText = await postRes.text();
 
-        // 4. Gerar o body do POST final
-        const params = new URLSearchParams();
+    var confirmMatchIndex = postText.toLowerCase().indexOf('try=confirm');
+    if (confirmMatchIndex !== -1) {
+      var confirmFormStart = postText.lastIndexOf('<form', confirmMatchIndex);
+      var confirmFormEnd = postText.indexOf('</form>', confirmMatchIndex);
+      var confirmFormHtml = (confirmFormStart !== -1 && confirmFormEnd !== -1) ? postText.slice(confirmFormStart, confirmFormEnd + 7) : null;
+      var cExtract = confirmFormHtml ? extractFormInputsFromHtml(confirmFormHtml) : null;
+      var confirmPayload = cExtract ? Object.assign({}, cExtract.inputs) : {};
+      confirmPayload['x'] = payload['x']; confirmPayload['y'] = payload['y'];
+      TROOP_LIST.forEach(function(u){ confirmPayload[u] = payload[u]; });
 
-        for (const key in inputs) {
-            params.append(key, inputs[key]);
-        }
+      var confirmBody = Object.keys(confirmPayload).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(confirmPayload[k]); }).join('&');
+      var confirmUrl = (cExtract && cExtract.inputs && cExtract.inputs.action) ? cExtract.inputs.action : postRes.url || finalUrl;
+      if (confirmUrl && confirmUrl.indexOf('/') === 0) confirmUrl = location.protocol + '//' + location.host + confirmUrl;
 
-        const body = params.toString();
-
-        // 5. Montar a URL final
-        const finalUrl =
-            `/game.php?village=${inputs["village"]}` +
-            `&screen=place&action=command&h=${inputs["h"]}`;
-
-        // 6. Enviar o ataque
-        const resp = await fetch(finalUrl, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-            },
-            body
-        });
-
-        if (!resp.ok) {
-            return { success: false, message: "Erro no fetch final" };
-        }
-
-        return {
-            success: true,
-            message: "Ataque enviado",
-            executedAt: Date.now(),
-            data: {
-                source: task.source,
-                target: task.target,
-                troops: task.troops,
-                finalUrl
-            }
-        };
-
-    } catch (error) {
-        return {
-            success: false,
-            message: "Erro interno no executeAttack",
-            error: String(error)
-        };
+      setStatus('⏳ Confirmando (fetch)...');
+      var confirmRes = await fetch(confirmUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' }, body: confirmBody });
+      if (!confirmRes.ok) throw new Error('POST confirmação falhou: HTTP ' + confirmRes.status);
+      var finalText = await confirmRes.text();
+      if (isAttackConfirmed(finalText)) { setStatus('✅ Ataque enviado: ' + cfg.origem + ' → ' + cfg.alvo); _persistedMarkProcessed(getAttackFingerprint(cfg)); return true; }
+      setStatus('⚠️ Confirmação inconclusiva. Verifique manualmente.'); return false;
     }
-},
 
-
-  
-// ✅ MAIS PRECISO para 0ms (execução no próximo tick)
-function sleep(ms) {
-  if (ms <= 0) {
-    return new Promise(resolve => queueMicrotask(resolve));
-  }
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Uso: sleep(0) → executa no próximo ciclo de evento
-
-  
-  // === Scheduler ===
-  function startScheduler() {
-    if (_schedulerInterval) clearInterval(_schedulerInterval);
-    
-    _schedulerInterval = setInterval(async () => {
-      const list = getList();
-      const now = Date.now();
-      const msgs = [];
-      let hasChanges = false;
-
-      // ✅ PROTEÇÃO: Agrupar ataques por horário E fingerprint único
-      const ataquesPorHorario = {};
-      
-      for (const a of list) {
-        // ✅ PROTEÇÃO 0: Pular se já foi processado (mesmo que done=false)
-        const fingerprint = getAttackFingerprint(a);
-        if (_processedAttacks.has(fingerprint)) {
-          console.log(`[TWScheduler] ⏭️ Ataque ${fingerprint} já foi processado anteriormente`);
-          continue;
-        }
-        
-        if (a.done || a.locked) continue;
-        
-        // ✅ PROTEÇÃO: Verificar BroadcastChannel
-        if (attackCoordinator.isBeingProcessed(a._id)) {
-          console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
-          continue;
-        }
-        
-        const t = parseDateTimeToMs(a.datetime);
-        if (!t || isNaN(t)) continue;
-        
-        const diff = t - now;
-        
-        if (diff <= 0 && diff > -10000) {
-          if (!ataquesPorHorario[a.datetime]) {
-            ataquesPorHorario[a.datetime] = [];
-          }
-          ataquesPorHorario[a.datetime].push(a);
-        } else if (diff > 0) {
-          const seconds = Math.ceil(diff / 1000);
-          const minutes = Math.floor(seconds / 60);
-          const secs = seconds % 60;
-          msgs.push(`🕒 ${a.origem} → ${a.alvo} em ${minutes}:${secs.toString().padStart(2, '0')}`);
-        }
-      }
-
-      // ✅ PROTEÇÃO: Processar cada grupo de horário com debounce
-      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-        console.log(`[TWScheduler] 🔥 Processando ${ataques.length} ataques do horário ${horario}`);
-        msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
-        
-        // Processar sequencialmente com delay
-        for (let i = 0; i < ataques.length; i++) {
-          const a = ataques[i];
-          
-          // ✅ PROTEÇÃO 1: Criar fingerprint único
-          const fingerprint = getAttackFingerprint(a);
-          
-          // ✅ PROTEÇÃO 2: Verificar se já foi processado
-          if (_processedAttacks.has(fingerprint)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${fingerprint} (já processado)`);
-            continue;
-          }
-          
-          // ✅ PROTEÇÃO 3: Verificação dupla com BroadcastChannel
-          if (attackCoordinator.isBeingProcessed(a._id)) {
-            console.log(`⏭️ Pulando ${a._id} (outra aba pegou)`);
-            continue;
-          }
-          
-          // ✅ PROTEÇÃO 4: Criar ID único se não existir
-          if (!a._id) {
-            a._id = generateUniqueId();
-            hasChanges = true;
-          }
-          
-          // ✅ PROTEÇÃO 5: Verificar se já está executando
-          if (_executing.has(a._id)) {
-            console.log(`[TWScheduler] ⏭️ Pulando ${a._id} (já em execução)`);
-            continue;
-          }
-          
-          // ✅ PROTEÇÃO 6: Marcar como processado IMEDIATAMENTE
-          _processedAttacks.add(fingerprint);
-          console.log(`[TWScheduler] 🔒 Marcando ${fingerprint} como processado`);
-          
-          // ✅ PROTEÇÃO 7: Notificar início via BroadcastChannel
-          attackCoordinator.notifyAttackStart(a._id);
-          
-          // ✅ PROTEÇÃO 8: Lock imediato ANTES de executar
-          a.locked = true;
-          hasChanges = true;
-          setList(list); // Salvar ANTES de executar
-          
-          // ✅ PROTEÇÃO 9: Adicionar ao Set
-          _executing.add(a._id);
-          
-          console.log(`[TWScheduler] 🚀 [${i + 1}/${ataques.length}] Executando ${a._id}`);
-          
-          try {
-            const success = await executeAttack(a);
-            a.done = true;
-            a.success = success;
-            a.executedAt = new Date().toISOString();
-            hasChanges = true;
-            
-            console.log(`[TWScheduler] ✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
-          } catch (err) {
-            a.error = err.message;
-            a.done = true;
-            a.success = false;
-            hasChanges = true;
-            console.error(`[TWScheduler] ❌ [${i + 1}/${ataques.length}] Erro:`, err);
-          } finally {
-            // ✅ PROTEÇÃO 10: Notificar fim via BroadcastChannel
-            attackCoordinator.notifyAttackEnd(a._id);
-            
-            // ✅ PROTEÇÃO 11: Remover lock e do Set
-            a.locked = false;
-            _executing.delete(a._id);
-            hasChanges = true;
-            console.log(`[TWScheduler] 🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
-          }
-          
-          // ✅ PROTEÇÃO 12: Debounce entre ataques (100ms)
-          if (i < ataques.length - 1) {
-            console.log(`[TWScheduler] ⏳ Aguardando 100ms antes do próximo...`);
-            await sleep(100);
-          }
-        }
-      }
-
-      if (hasChanges) {
-        setList(list);
-      }
-
-      const status = document.getElementById('tws-status');
-      if (status) {
-        status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
-      }
-    }, 1000);
-    
-    console.log('[TWS_Backend] Scheduler iniciado com TODAS as proteções anti-duplicação');
+    if (isAttackConfirmed(postText)) { setStatus('✅ Ataque enviado: ' + cfg.origem + ' → ' + cfg.alvo); _persistedMarkProcessed(getAttackFingerprint(cfg)); return true; }
+    setStatus('⚠️ Resposta não indicou confirmação.'); return false;
   }
 
-  // === Importar de BBCode ===
-  function importarDeBBCode(bbcode) {
-    const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
-    const agendamentos = [];
-    
-    for (const linha of linhas) {
-      const coords = linha.match(/(\d{3}\|\d{3})/g) || [];
-      const origem = coords[0] || '';
-      const destino = coords[1] || '';
-      const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)?.[1] || '';
-      const url = linha.match(/\[url=(.*?)\]/)?.[1] || '';
-      
-      const params = {};
-      if (url) {
-        const query = url.split('?')[1];
-        if (query) {
-          query.split('&').forEach(p => {
-            const [k, v] = p.split('=');
-            params[k] = decodeURIComponent(v || '');
-          });
-        }
-      }
-      
-      const origemId = params.village || _villageMap[origem];
-      
-      // ✅ PROTEÇÃO: Gerar ID único ANTES de adicionar à lista
-      const uniqueId = generateUniqueId();
-      
-      const cfg = {
-        _id: uniqueId, // ✅ ID único PRIMEIRO
-        origem,
-        origemId,
-        alvo: destino,
-        datetime: dataHora,
-        done: false,
-        locked: false
-      };
-      
-      TROOP_LIST.forEach(u => {
-        cfg[u] = params['att_' + u] || 0;
-      });
-      
-      if (origem && destino && dataHora) {
-        agendamentos.push(cfg);
-      }
+  // ----------------- Queue executor (single worker) -----------------
+  async function queueWorker() {
+    if (_queueRunning) return;
+    _queueRunning = true;
+    while (_execQueue.length > 0) {
+      var task = _execQueue.shift(); if (!task) continue;
+      var fingerprint = getAttackFingerprint(task);
+      if (_isProcessed(fingerprint)) continue;
+      if (attackCoordinator.isBeingProcessed(task._id)) continue;
+      _executing.add(task._id);
+      attackCoordinator.notifyAttackStart(task._id, fingerprint);
+      try { await executeAttack(task); } catch(e){ console.error('queueWorker executeAttack error', e); }
+      attackCoordinator.notifyAttackEnd(task._id, fingerprint);
+      _executing.delete(task._id);
+      await new Promise(function(r){ setTimeout(r,80); });
     }
-    
-    console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
-    console.log(`[TWS_Backend] IDs gerados:`, agendamentos.map(a => a._id.substring(0, 30) + '...'));
-    
-    return agendamentos;
+    _queueRunning = false;
   }
 
-  // === Exportar API ===
+  // ----------------- Scheduler (master tab) -----------------
+  function tryAcquireTabLock() {
+    var now = Date.now();
+    var lock = JSON.parse(localStorage.getItem(TAB_LOCK_KEY) || 'null');
+    if (!lock || (now - lock.ts) > TAB_LOCK_TIMEOUT) { localStorage.setItem(TAB_LOCK_KEY, JSON.stringify({ ts: now })); return true; }
+    return false;
+  }
+  function refreshTabLock(){ localStorage.setItem(TAB_LOCK_KEY, JSON.stringify({ ts: Date.now() })); }
+  function isTabMaster(){ var lock = JSON.parse(localStorage.getItem(TAB_LOCK_KEY) || 'null'); return lock && (Date.now() - lock.ts) < TAB_LOCK_TIMEOUT; }
+
+  async function schedulerTick() {
+    if (!tryAcquireTabLock()) return;
+    refreshTabLock();
+    var now = Date.now(); var list = getList(); var dirty = false; var buckets = {};
+    for (var i=0;i<list.length;i++){ var a = list[i]; if (a.done) continue; var fp = getAttackFingerprint(a); if (_isProcessed(fp)) continue; if (attackCoordinator.isBeingProcessed(a._id)) continue; var t = parseDateTimeToMs(a.datetime); if (!t || isNaN(t)) continue; var diff = t - now; if (diff <= 0 && diff > -10000) { (buckets[a.datetime] = buckets[a.datetime] || []).push(a); } }
+    var keys = Object.keys(buckets).sort(); for (var j=0;j<keys.length;j++){ var dt = keys[j]; var arr = buckets[dt]; for (var k=0;k<arr.length;k++){ var task = arr[k]; var fp2 = getAttackFingerprint(task); _persistedMarkProcessed(fp2); if (!task._id) task._id = generateUniqueId(); _execQueue.push(task); dirty = true; } }
+    if (dirty) { setList(list); queueWorker(); }
+  }
+
+  // ----------------- Other utilities -----------------
+  function importarDeBBCode(bbcode){ var linhas = bbcode.split('[*]').filter(function(l){ return l.trim()!== ''; }); var ag = []; linhas.forEach(function(linha){ var coords = linha.match(/(\d{1,3}\|\d{1,3})/g) || []; var origem = coords[0]||''; var destino = coords[1]||''; var dt = (linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}:\d{2})/)||[])[1]||''; var url = (linha.match(/\[url=(.*?)\]/)||[])[1]||''; var params={}; if (url){ var q = (url.split('?')[1]||''); q.split('&').forEach(function(p){ var sp = p.split('='); params[sp[0]] = decodeURIComponent(sp[1]||''); }); } var origemId = params.village || _villageMap[origem]; var id = generateUniqueId(); var cfg = { _id:id, origem:origem, origemId:origemId, alvo:destino, datetime:dt, done:false, locked:false }; TROOP_LIST.forEach(function(u){ cfg[u] = params['att_'+u]||0; }); if (origem && destino && dt) ag.push(cfg); }); return ag; }
+
+  // ----------------- Public API export -----------------
   window.TWS_Backend = {
-    loadVillageTxt,
-    parseDateTimeToMs,
-    parseCoord,
-    getList,
-    setList,
-    startScheduler,
-    importarDeBBCode,
-    executeAttack,
-    getVillageTroops,
-    validateTroops,
-    generateUniqueId,
-    getAttackFingerprint, // ✅ NOVO
-    attackCoordinator,
-    TROOP_LIST,
-    STORAGE_KEY,
-    PANEL_STATE_KEY,
-    
+    loadVillageTxt: loadVillageTxt,
+    parseDateTimeToMs: parseDateTimeToMs,
+    parseCoord: function(s){ if(!s) return null; var m = s.trim().match(/^(\d{1,4})\|(\d{1,4})$/); if(!m) return null; var x=+m[1], y=+m[2]; if(x<0||x>499||y<0||y>499) return null; return x+'|'+y; },
+    getList: getList,
+    setList: setList,
+    startScheduler: function(){ if (_schedulerInterval) clearInterval(_schedulerInterval); _schedulerInterval = setInterval(schedulerTick, SCHEDULER_TICK); console.log('Scheduler started'); },
+    importarDeBBCode: importarDeBBCode,
+    executeAttack: executeAttack,
+    getVillageTroops: getVillageTroops,
+    validateTroops: validateTroops,
+    generateUniqueId: generateUniqueId,
+    getAttackFingerprint: getAttackFingerprint,
+    attackCoordinator: attackCoordinator,
+    TROOP_LIST: TROOP_LIST,
+    STORAGE_KEY: STORAGE_KEY,
+    PANEL_STATE_KEY: PANEL_STATE_KEY,
     _internal: {
-      get villageMap() { return _villageMap; },
-      get myVillages() { return _myVillages; },
-      get executing() { return _executing; },
-      get processedAttacks() { return _processedAttacks; },
-      get coordinatorStats() { return attackCoordinator.getStats(); }
+      get villageMap(){ return _villageMap; },
+      get myVillages(){ return _myVillages; },
+      get executing(){ return _executing; },
+      get processedAttacks(){ return _processedAttacks; },
+      get coordinatorStats(){ return attackCoordinator.getStats(); }
     }
   };
 
-  console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
+  console.log('[TWS_Backend] ✅ Backend v5 loaded (optimized scheduler + lightweight executeAttack)');
+
 })();
-
-
-
-
-
