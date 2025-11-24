@@ -207,16 +207,10 @@ async function executeAttack(cfg) {
   setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
 
   try {
-    // Montar payload direto para POST
-    const payload = {
-      x: String(x),
-      y: String(y),
-      ajax: 'confirm'
-    };
-
+    // Payload direto
+    const payload = { x, y, ajax: 'confirm' };
     TROOP_LIST.forEach(u => payload[u] = String(cfg[u] || 0));
 
-    // POST para tentar enviar e confirmar ataque
     const postUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place&try=confirm`;
     const body = Object.entries(payload)
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
@@ -240,12 +234,12 @@ async function executeAttack(cfg) {
       setStatus('⚠️ Confirmação não detectada, verifique manualmente');
       return false;
     }
-
   } catch (err) {
     setStatus(`❌ Erro: ${err.message}`);
     throw err;
   }
 }
+
 
 
   // === Scheduler ===
@@ -326,5 +320,6 @@ async function executeAttack(cfg) {
 
   console.log('[TWS_Backend] ✅ Backend v4 headless pronto (BroadcastChannel + proteções)');
 })();
+
 
 
