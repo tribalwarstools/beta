@@ -1,10 +1,9 @@
 (function () {
   'use strict';
 
-  // === Configs ===
+  // === Configs / Constantes ===
   const STORAGE_KEY = 'tw_scheduler_multi_v1';
   const PANEL_STATE_KEY = 'tws_panel_state';
-  const PROCESSED_ATTACKS_KEY = 'tw_scheduler_processed'; // ✅ NOVO
   const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
   const world = location.hostname.split('.')[0];
   const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
@@ -13,17 +12,15 @@
   let _myVillages = [];
   let _schedulerInterval = null;
   
-  // ✅ NOVA: Set em memória para detecção rápida
-  const _executingNow = new Set();
-  
-  // ✅ HYBRID: Gerenciador com 3 camadas de proteção
+  // ✅ NOVO: Gerenciador de Broadcast Channel
   class AttackCoordinator {
     constructor() {
-      this.processingAttacks = new Map(); // BroadcastChannel
+      this.processingAttacks = new Map(); // { attackId: timestamp }
       this.currentTabId = this.generateTabId();
       this.useBroadcast = false;
       this.channel = null;
       
+      // Tentar usar BroadcastChannel
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           this.channel = new BroadcastChannel('tws_attacks');
@@ -33,13 +30,16 @@
             this.handleMessage(event.data);
           };
           
-          console.log(`✅ BroadcastChannel ativado`);
+          console.log(`✅ [${this.currentTabId}] BroadcastChannel ativado`);
         } catch (e) {
-          console.warn('⚠️ BroadcastChannel não disponível');
+          console.warn('⚠️ BroadcastChannel não disponível:', e);
           this.useBroadcast = false;
         }
+      } else {
+        console.warn('⚠️ BroadcastChannel não suportado neste navegador');
       }
       
+      // Limpar ao fechar aba
       window.addEventListener('beforeunload', () => {
         this.cleanup();
       });
@@ -49,66 +49,14 @@
       return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    // ✅ CAMADA 1: Gerar fingerprint para detecção
-    getFingerprint(attackId, origem, alvo, datetime) {
-      return `${origem}_${alvo}_${datetime}`;
-    }
-
-    // ✅ CAMADA 2: Verificar se já foi processado (persistente)
-    wasAlreadyProcessed(fingerprint) {
-      try {
-        const processed = JSON.parse(localStorage.getItem(PROCESSED_ATTACKS_KEY) || '[]');
-        return processed.includes(fingerprint);
-      } catch (e) {
-        console.warn('Erro ao verificar processed:', e);
-        return false;
-      }
-    }
-
-    // ✅ CAMADA 2: Marcar como processado (persistente)
-    markAsProcessed(fingerprint) {
-      try {
-        const processed = JSON.parse(localStorage.getItem(PROCESSED_ATTACKS_KEY) || '[]');
-        if (!processed.includes(fingerprint)) {
-          processed.push(fingerprint);
-          // Manter apenas últimos 1000
-          if (processed.length > 1000) {
-            processed.shift();
-          }
-          localStorage.setItem(PROCESSED_ATTACKS_KEY, JSON.stringify(processed));
-        }
-      } catch (e) {
-        console.error('Erro ao marcar processado:', e);
-      }
-    }
-
-    // ✅ CAMADA 3: Verificar se está executando AGORA (em memória)
-    isExecutingNow(attackId) {
-      return _executingNow.has(attackId);
-    }
-
-    // ✅ CAMADA 3: Marcar como executando AGORA
-    markExecuting(attackId) {
-      _executingNow.add(attackId);
-    }
-
-    // ✅ CAMADA 3: Remover de executando
-    unmarkExecuting(attackId) {
-      _executingNow.delete(attackId);
-    }
-
-    // ✅ BroadcastChannel: Notificar início
-    notifyAttackStart(attackId, fingerprint) {
-      this.processingAttacks.set(attackId, {
-        timestamp: Date.now(),
-        fingerprint
-      });
+    // 📤 Notificar que vou processar um ataque
+    notifyAttackStart(attackId) {
+      this.processingAttacks.set(attackId, Date.now());
       
       if (this.useBroadcast) {
         this.channel.postMessage({
           type: 'ATTACK_START',
           attackId,
-          fingerprint,
           tabId: this.currentTabId,
           timestamp: Date.now()
         });
@@ -117,7 +65,7 @@
       console.log(`📤 [${this.currentTabId}] Iniciando: ${attackId}`);
     }
 
-    // ✅ BroadcastChannel: Notificar fim
+    // 📥 Notificar que terminei de processar
     notifyAttackEnd(attackId) {
       this.processingAttacks.delete(attackId);
       
@@ -133,62 +81,48 @@
       console.log(`📤 [${this.currentTabId}] Finalizado: ${attackId}`);
     }
 
-    // ✅ VERIFICAÇÃO TRIPLA (camadas combinadas)
-    isBeingProcessed(attackId, fingerprint) {
-      // CAMADA 1: Já foi processado? (localStorage)
-      if (this.wasAlreadyProcessed(fingerprint)) {
-        console.log(`🛑 CAMADA 1: ${attackId} já foi processado (fingerprint)`);
-        return true;
+    // ✅ Verificar se outro ataque já está processando
+    isBeingProcessed(attackId) {
+      const timestamp = this.processingAttacks.get(attackId);
+      
+      if (!timestamp) return false;
+      
+      const age = Date.now() - timestamp;
+      const TIMEOUT = 60000; // 60 segundos
+      
+      // Se processando há mais de 60s, considerar morto
+      if (age > TIMEOUT) {
+        console.warn(`⚠️ Ataque ${attackId} expirado (${age}ms), removendo lock`);
+        this.processingAttacks.delete(attackId);
+        return false;
       }
       
-      // CAMADA 2: Está executando agora? (memória local)
-      if (this.isExecutingNow(attackId)) {
-        console.log(`🛑 CAMADA 2: ${attackId} está executando agora`);
-        return true;
-      }
-      
-      // CAMADA 3: Outra aba está processando? (BroadcastChannel)
-      const data = this.processingAttacks.get(attackId);
-      if (data) {
-        const age = Date.now() - data.timestamp;
-        const TIMEOUT = 120000; // 120 segundos
-        
-        if (age > TIMEOUT) {
-          console.warn(`⚠️ CAMADA 3: ${attackId} expirado (${age}ms), removendo`);
-          this.processingAttacks.delete(attackId);
-          return false;
-        }
-        
-        console.log(`🛑 CAMADA 3: ${attackId} sendo processado por outra aba`);
-        return true;
-      }
-      
-      return false;
+      return true;
     }
 
-    // ✅ Processar mensagens BroadcastChannel
+    // 📋 Processar mensagens recebidas
     handleMessage(data) {
-      const { type, attackId, fingerprint, tabId, timestamp } = data;
+      const { type, attackId, tabId, timestamp } = data;
       
       switch (type) {
         case 'ATTACK_START':
-          console.log(`📥 [${tabId}] Iniciou: ${attackId}`);
-          this.processingAttacks.set(attackId, { timestamp, fingerprint });
+          console.log(`📥 Aba ${tabId} iniciou: ${attackId}`);
+          this.processingAttacks.set(attackId, timestamp);
           break;
           
         case 'ATTACK_END':
-          console.log(`📥 [${tabId}] Finalizou: ${attackId}`);
+          console.log(`📥 Aba ${tabId} finalizou: ${attackId}`);
           this.processingAttacks.delete(attackId);
           break;
           
         case 'CLEANUP':
-          console.log(`📥 [${tabId}] Limpou ${data.attackIds?.length || 0} locks`);
+          console.log(`📥 Aba ${tabId} encerrada`);
           data.attackIds?.forEach(id => this.processingAttacks.delete(id));
           break;
       }
     }
 
-    // ✅ Limpeza ao fechar aba
+    // 🧹 Limpar ao fechar aba
     cleanup() {
       const attackIds = Array.from(this.processingAttacks.keys());
       
@@ -200,33 +134,27 @@
         });
       }
       
-      console.log(`🧹 Limpando ${attackIds.length} locks`);
-      if (this.channel) this.channel.close();
+      console.log(`🧹 [${this.currentTabId}] Limpando ${attackIds.length} locks`);
+      
+      if (this.channel) {
+        this.channel.close();
+      }
     }
 
-    // ✅ Stats
+    // 📊 Obter estatísticas
     getStats() {
       return {
         tabId: this.currentTabId,
         processingCount: this.processingAttacks.size,
-        executingNow: _executingNow.size,
         useBroadcast: this.useBroadcast
       };
-    }
-
-    // ✅ DEBUG: Limpar processados
-    debugClearProcessed() {
-      localStorage.removeItem(PROCESSED_ATTACKS_KEY);
-      this.processingAttacks.clear();
-      _executingNow.clear();
-      console.log('🧹 Todos os locks limpos (DEBUG)');
     }
   }
 
   // ✅ Instância global
   const attackCoordinator = new AttackCoordinator();
 
-  // === Auto-confirm ===
+  // === Auto-confirm na página de confirmação ===
   try {
     if (location.href.includes('screen=place&try=confirm')) {
       const btn = document.querySelector('#troop_confirm_submit') || 
@@ -248,15 +176,23 @@
     return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
   }
 
+  /**
+   * VALIDADOR DE COORDENADAS - Tribal Wars Scheduler
+   */
   function parseCoord(s) {
     if (!s) return null;
+    
     const t = s.trim();
     const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    
     if (!match) return null;
     
     const x = parseInt(match[1], 10);
     const y = parseInt(match[2], 10);
-    if (x < 0 || x > 9999 || y < 0 || y > 9999) return null;
+    
+    if (x < 0 || x > 499 || y < 0 || y > 499) {
+      return null;
+    }
     
     return `${x}|${y}`;
   }
@@ -267,16 +203,24 @@
 
   function getCoordInfo(s) {
     const normalized = parseCoord(s);
+    
     if (!normalized) {
-      return { valid: false, error: 'Formato inválido' };
+      return {
+        valid: false,
+        error: 'Formato inválido. Use X|Y (ex: 5|4, 52|43, 529|431)'
+      };
     }
+    
     const [x, y] = normalized.split('|').map(Number);
+    
     return {
       valid: true,
       original: s.trim(),
       normalized,
-      x, y,
-      mapSection: getMapSection(x, y)
+      x,
+      y,
+      mapSection: getMapSection(x, y),
+      distance: null
     };
   }
 
@@ -285,28 +229,60 @@
     if (x < 250) sections.push('Oeste');
     else if (x > 250) sections.push('Leste');
     else sections.push('Centro');
+    
     if (y < 250) sections.push('Norte');
     else if (y > 250) sections.push('Sul');
     else sections.push('Centro');
+    
     return sections.join('-');
   }
 
   function getDistance(coord1, coord2) {
     const c1 = parseCoord(coord1);
     const c2 = parseCoord(coord2);
+    
     if (!c1 || !c2) return null;
+    
     const [x1, y1] = c1.split('|').map(Number);
     const [x2, y2] = c2.split('|').map(Number);
+    
     return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
   }
 
+  function validateCoordList(coordStrings) {
+    return coordStrings.map((coord, idx) => ({
+      index: idx + 1,
+      input: coord,
+      valid: isValidCoord(coord),
+      normalized: parseCoord(coord),
+      error: !isValidCoord(coord) ? 'Formato inválido' : null
+    }));
+  }
+
+  function sanitizeCoordInput(input) {
+    if (!input) return null;
+    
+    let cleaned = input.trim().replace(/\s+/g, '');
+    cleaned = cleaned.replace(/-/g, '|');
+    cleaned = cleaned.replace(/[^\d|]/g, '');
+    
+    if (!cleaned) return null;
+    
+    return parseCoord(cleaned);
+  }
+
+  // ✅ Gerar ID único
   function generateUniqueId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
     const timestamp = Date.now();
     const random = Math.random().toString(36).substr(2, 9);
-    return `${timestamp}_${random}`;
+    const perf = (typeof performance !== 'undefined' && performance.now) 
+      ? performance.now().toString(36) 
+      : Math.random().toString(36).substr(2, 5);
+    
+    return `${timestamp}_${random}_${perf}`;
   }
 
   function getList() {
@@ -357,6 +333,7 @@
     }
   }
 
+  // === Busca tropas disponíveis ===
   async function getVillageTroops(villageId) {
     try {
       const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
@@ -372,14 +349,17 @@
         const availableEl = doc.querySelector(`#units_entry_all_${u}`) || 
                            doc.querySelector(`#units_home_${u}`) ||
                            doc.querySelector(`[id*="${u}"][class*="unit"]`);
+        
         let available = 0;
         if (availableEl) {
           const match = availableEl.textContent.match(/\d+/);
           available = match ? parseInt(match[0], 10) : 0;
         }
+        
         troops[u] = available;
       });
 
+      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
       return troops;
     } catch (err) {
       console.error('[TWS_Backend] getVillageTroops error:', err);
@@ -387,6 +367,7 @@
     }
   }
 
+  // === Valida tropas ===
   function validateTroops(requested, available) {
     const errors = [];
     TROOP_LIST.forEach(u => {
@@ -399,9 +380,15 @@
     return errors;
   }
 
+  // === Verifica confirmação ===
   function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
+    if (/screen=info_command.*type=own/i.test(htmlText)) {
+      return true;
+    }
+
+    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) {
+      return true;
+    }
 
     const successPatterns = [
       /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
@@ -434,20 +421,21 @@
       throw new Error('Alvo inválido');
     }
 
-    setStatus(`🔍 Verificando tropas...`);
+    setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
     const availableTroops = await getVillageTroops(origemId);
     if (availableTroops) {
       const errors = validateTroops(cfg, availableTroops);
       if (errors.length > 0) {
-        setStatus(`❌ Tropas insuficientes`);
+        setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
         throw new Error('Tropas insuficientes');
       }
     }
 
     const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
-    setStatus(`📤 Enviando: ${cfg.origem} → ${cfg.alvo}...`);
+    setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
 
     try {
+      // 1) GET /place
       const getRes = await fetch(placeUrl, { credentials: 'same-origin' });
       if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
       
@@ -455,18 +443,21 @@
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
 
+      // 2) Localizar form
       let form = Array.from(doc.querySelectorAll('form')).find(f => 
         (f.action && f.action.includes('screen=place')) || 
         f.querySelector('input[name="x"]') ||
         TROOP_LIST.some(u => f.querySelector(`input[name="${u}"]`))
       );
       
-      if (!form) throw new Error('Form não encontrado');
+      if (!form) throw new Error('Form de envio não encontrado');
 
+      // 3) Construir payload
       const payloadObj = {};
       Array.from(form.querySelectorAll('input, select, textarea')).forEach(inp => {
         const name = inp.getAttribute('name');
         if (!name) return;
+        
         if (inp.type === 'checkbox' || inp.type === 'radio') {
           if (inp.checked) payloadObj[name] = inp.value || 'on';
         } else {
@@ -474,12 +465,14 @@
         }
       });
 
+      // 4) Sobrescrever destino e tropas
       payloadObj['x'] = String(x);
       payloadObj['y'] = String(y);
       TROOP_LIST.forEach(u => {
         payloadObj[u] = String(cfg[u] !== undefined ? cfg[u] : '0');
       });
 
+      // 5) Submit button
       const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
       if (submitBtn) {
         const n = submitBtn.getAttribute('name');
@@ -487,16 +480,19 @@
         if (n) payloadObj[n] = v;
       }
 
+      // 6) URL encode
       const urlEncoded = Object.entries(payloadObj)
         .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
         .join('&');
 
+      // 7) POST URL
       let postUrl = form.getAttribute('action') || placeUrl;
       if (postUrl.startsWith('/')) {
         postUrl = `${location.protocol}//${location.host}${postUrl}`;
       }
       if (!postUrl.includes('screen=place')) postUrl = placeUrl;
 
+      // 8) POST inicial
       setStatus(`⏳ Enviando comando...`);
       const postRes = await fetch(postUrl, {
         method: 'POST',
@@ -505,9 +501,10 @@
         body: urlEncoded
       });
       
-      if (!postRes.ok) throw new Error(`POST falhou: HTTP ${postRes.status}`);
+      if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
       const postText = await postRes.text();
 
+      // 9) Procurar form de confirmação
       const postDoc = parser.parseFromString(postText, 'text/html');
       let confirmForm = Array.from(postDoc.querySelectorAll('form')).find(f => 
         (f.action && f.action.includes('try=confirm')) || 
@@ -520,6 +517,7 @@
         Array.from(confirmForm.querySelectorAll('input, select, textarea')).forEach(inp => {
           const name = inp.getAttribute('name');
           if (!name) return;
+          
           if (inp.type === 'checkbox' || inp.type === 'radio') {
             if (inp.checked) confirmPayload[name] = inp.value || 'on';
           } else {
@@ -545,7 +543,7 @@
           confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
         }
 
-        setStatus('⏳ Confirmando...');
+        setStatus('⏳ Confirmando ataque...');
         const confirmRes = await fetch(confirmUrl, {
           method: 'POST',
           credentials: 'same-origin',
@@ -553,14 +551,18 @@
           body: confirmBody
         });
 
-        if (!confirmRes.ok) throw new Error(`POST confirmação falhou`);
+        if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
+        
         const finalText = await confirmRes.text();
+        
+        console.log('[TWS_Backend] Resposta final recebida');
         
         if (isAttackConfirmed(finalText)) {
           setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
           return true;
         } else {
-          setStatus(`⚠️ Verifique manualmente`);
+          setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
+          console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
           return false;
         }
       } else {
@@ -579,11 +581,12 @@
     }
   }
 
+  // ✅ Delay entre execuções
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // === Scheduler com 3 camadas ===
+  // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
     
@@ -598,12 +601,9 @@
       for (const a of list) {
         if (a.done || a.locked) continue;
         
-        // ✅ GERAR FINGERPRINT
-        const fingerprint = attackCoordinator.getFingerprint(a._id, a.origem, a.alvo, a.datetime);
-        
-        // ✅ VERIFICAÇÃO TRIPLA
-        if (attackCoordinator.isBeingProcessed(a._id, fingerprint)) {
-          console.log(`⏭️ Pulando ${a._id} (duplicação detectada em camadas)`);
+        // ✅ PROTEÇÃO: Verificar BroadcastChannel
+        if (attackCoordinator.isBeingProcessed(a._id)) {
+          console.log(`⏳ [BroadcastChannel] Ataque ${a._id} já está sendo processado`);
           continue;
         }
         
@@ -632,31 +632,21 @@
         for (let i = 0; i < ataques.length; i++) {
           const a = ataques[i];
           
-          // ✅ GERAR FINGERPRINT NOVAMENTE (antes de executar)
-          const fingerprint = attackCoordinator.getFingerprint(a._id, a.origem, a.alvo, a.datetime);
-          
-          // ✅ VERIFICAÇÃO FINAL (antes de tudo)
-          if (attackCoordinator.isBeingProcessed(a._id, fingerprint)) {
-            console.log(`⏭️ Pulando ${a._id} (verificação final)`);
+          // ✅ Verificação dupla
+          if (attackCoordinator.isBeingProcessed(a._id)) {
+            console.log(`⏭️ Pulando ${a._id} (outra aba pegou)`);
             continue;
           }
           
-          // ✅ GERAR ID SE NECESSÁRIO
+          // ✅ Gerar ID se necessário
           if (!a._id) {
             a._id = generateUniqueId();
             hasChanges = true;
           }
           
-          // ✅ MARCAR FINGERPRINT COMO PROCESSADO (IMEDIATAMENTE)
-          attackCoordinator.markAsProcessed(fingerprint);
+          // ✅ Notificar início via BroadcastChannel
+          attackCoordinator.notifyAttackStart(a._id);
           
-          // ✅ MARCAR COMO EXECUTANDO AGORA (memória)
-          attackCoordinator.markExecuting(a._id);
-          
-          // ✅ NOTIFICAR VIA BROADCASTCHANNEL
-          attackCoordinator.notifyAttackStart(a._id, fingerprint);
-          
-          // ✅ LOCK NO BANCO DE DADOS
           a.locked = true;
           hasChanges = true;
           setList(list);
@@ -669,7 +659,8 @@
             a.success = success;
             a.executedAt = new Date().toISOString();
             hasChanges = true;
-            console.log(`✅ [${i + 1}/${ataques.length}] Concluído`);
+            
+            console.log(`✅ [${i + 1}/${ataques.length}] Concluído: ${a._id}`);
           } catch (err) {
             a.error = err.message;
             a.done = true;
@@ -677,20 +668,17 @@
             hasChanges = true;
             console.error(`❌ [${i + 1}/${ataques.length}] Erro:`, err);
           } finally {
-            // ✅ REMOVER DE EXECUTANDO
-            attackCoordinator.unmarkExecuting(a._id);
-            
-            // ✅ NOTIFICAR FIM
+            // ✅ Notificar fim via BroadcastChannel
             attackCoordinator.notifyAttackEnd(a._id);
             
             a.locked = false;
             hasChanges = true;
-            console.log(`🏁 Finalizando ${a._id}`);
+            console.log(`🏁 [${i + 1}/${ataques.length}] Finalizando ${a._id}`);
           }
           
           if (i < ataques.length - 1) {
-            console.log(`⏳ Aguardando 200ms...`);
-            await sleep(200);
+            console.log(`⏳ Aguardando 100ms antes do próximo...`);
+            await sleep(100);
           }
         }
       }
@@ -705,9 +693,10 @@
       }
     }, 1000);
     
-    console.log('[TWS_Backend] Scheduler iniciado (Hybrid: localStorage + BroadcastChannel + memória)');
+    console.log('[TWS_Backend] Scheduler iniciado com BroadcastChannel');
   }
 
+  // === Importar de BBCode ===
   function importarDeBBCode(bbcode) {
     const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
     const agendamentos = [];
@@ -753,6 +742,7 @@
     }
     
     console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
+    
     return agendamentos;
   }
 
@@ -781,5 +771,5 @@
     }
   };
 
-  console.log('[TWS_Backend] ✅ v3.1 HYBRID Carregado (localStorage + BroadcastChannel + memória)');
+  console.log('[TWS_Backend] ✅ Backend v3 carregado (BroadcastChannel)');
 })();
