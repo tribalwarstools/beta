@@ -37,18 +37,77 @@
   }
 
   // === Auto-confirm na página de confirmação ===
-  try {
-    if (location.href.includes('screen=place&try=confirm')) {
-      const btn = document.querySelector('#troop_confirm_submit') || 
-                   document.querySelector('button[name="submit"], input[name="submit"]');
-      if (btn) {
-        console.log('[TWS_Backend] Auto-confirmando ataque...');
-        setTimeout(() => btn.click(), 300);
+// === Auto-confirm via FETCH (sem clicar no botão) ===
+try {
+  if (location.href.includes('screen=place&try=confirm')) {
+    console.log('[TWS_Backend] Auto-confirm via FETCH iniciado...');
+
+    setTimeout(async () => {
+      try {
+        const form = document.querySelector('form[action*="try=confirm"], form');
+
+        if (!form) {
+          console.warn('[TWS_Backend] Form de confirmação não encontrado.');
+          return;
+        }
+
+        // Montar payload analisando TODOS os inputs
+        const payload = {};
+        form.querySelectorAll('input, select, textarea').forEach(inp => {
+          const name = inp.name;
+          if (!name) return;
+
+          if (inp.type === 'checkbox' || inp.type === 'radio') {
+            if (inp.checked) payload[name] = inp.value || 'on';
+          } else {
+            payload[name] = inp.value || '';
+          }
+        });
+
+        // Descobrir botão de submit (se existir)
+        const submitBtn = form.querySelector('#troop_confirm_submit, button[type="submit"], input[type="submit"]');
+        if (submitBtn) {
+          const n = submitBtn.getAttribute('name');
+          const v = submitBtn.getAttribute('value') || '';
+          if (n) payload[n] = v;
+        }
+
+        // Transformar payload em URL-encoded
+        const encoded = Object.entries(payload)
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+          .join('&');
+
+        // Resolver URL do form
+        let action = form.getAttribute('action');
+        if (!action) action = location.href;
+        if (action.startsWith('/'))
+          action = `${location.protocol}//${location.host}${action}`;
+
+        console.log('[TWS_Backend] Enviando confirmação via fetch:', action);
+
+        const res = await fetch(action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+          body: encoded
+        });
+
+        const finalUrl = res.url || location.href;
+
+        console.log('[TWS_Backend] Confirmação enviada. Redirecionando...', finalUrl);
+
+        // Redirecionar para o resultado final
+        location.href = finalUrl;
+
+      } catch (err) {
+        console.error('[TWS_Backend] Erro no auto-confirm via fetch:', err);
       }
-    }
-  } catch (e) {
-    console.error('[TWS_Backend] Erro no auto-confirm:', e);
+    }, 200);
   }
+} catch (e) {
+  console.error('[TWS_Backend] Erro no bloco auto-confirm fetch:', e);
+}
+
 
   // === Utility functions ===
   function parseDateTimeToMs(str) {
@@ -831,5 +890,6 @@ if (typeof window !== 'undefined') {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
 
