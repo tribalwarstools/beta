@@ -402,198 +402,73 @@
   }
 
 // === Execute attack ===
-async function executeAttack(cfg) {
-  const statusEl = document.getElementById('tws-status');
-  const setStatus = (msg) => {
+
+executeAttack: async function (task) {
     try {
-      if (statusEl) statusEl.innerHTML = msg;
-    } catch {}
-    console.log('[TWScheduler]', msg);
-  };
+        // 1. Abre a página de confirmação
+        const confirmUrl =
+            `/game.php?village=${task.source}` +
+            `&screen=place&try=confirm` +
+            `&target=${task.target}`;
 
-  const origemId = cfg.origemId || _villageMap[cfg.origem] || null;
-  if (!origemId) {
-    setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
-    throw new Error('Origem não encontrada');
-  }
+        const html = await fetch(confirmUrl, {
+            credentials: "include"
+        }).then(r => r.text());
 
-  const [x, y] = (cfg.alvo || '').split('|');
-  if (!x || !y) {
-    setStatus(`❌ Alvo inválido: ${cfg.alvo}`);
-    throw new Error('Alvo inválido');
-  }
+        // 2. Monta um DOM virtual
+        const dom = new DOMParser().parseFromString(html, "text/html");
+        const form = dom.querySelector("form");
 
-  setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
-  const availableTroops = await getVillageTroops(origemId);
-  if (availableTroops) {
-    const errors = validateTroops(cfg, availableTroops);
-    if (errors.length > 0) {
-      setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
-      throw new Error('Tropas insuficientes');
-    }
-  }
-
-  const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
-  setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
-
-  try {
-    // 1) GET /place
-    const getRes = await fetch(placeUrl, { credentials: 'same-origin' });
-    if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
-    
-    const html = await getRes.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-
-    // 2) Localizar form
-    let form = Array.from(doc.querySelectorAll('form')).find(f => 
-      (f.action && f.action.includes('screen=place')) || 
-      f.querySelector('input[name="x"]') ||
-      TROOP_LIST.some(u => f.querySelector(`input[name="${u}"]`))
-    );
-    
-    if (!form) throw new Error('Form de envio não encontrado');
-
-    // 3) Construir payload
-    const payloadObj = {};
-    Array.from(form.querySelectorAll('input, select, textarea')).forEach(inp => {
-      const name = inp.getAttribute('name');
-      if (!name) return;
-      
-      if (inp.type === 'checkbox' || inp.type === 'radio') {
-        if (inp.checked) payloadObj[name] = inp.value || 'on';
-      } else {
-        payloadObj[name] = inp.value || '';
-      }
-    });
-
-    // 4) Sobrescrever destino e tropas
-    payloadObj['x'] = String(x);
-    payloadObj['y'] = String(y);
-    TROOP_LIST.forEach(u => {
-      payloadObj[u] = String(cfg[u] !== undefined ? cfg[u] : '0');
-    });
-
-    // 5) Submit button
-    const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
-    if (submitBtn) {
-      const n = submitBtn.getAttribute('name');
-      const v = submitBtn.getAttribute('value') || '';
-      if (n) payloadObj[n] = v;
-    }
-
-    // 6) URL encode
-    const urlEncoded = Object.entries(payloadObj)
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join('&');
-
-    // 7) POST URL
-    let postUrl = form.getAttribute('action') || placeUrl;
-    if (postUrl.startsWith('/')) {
-      postUrl = `${location.protocol}//${location.host}${postUrl}`;
-    }
-    if (!postUrl.includes('screen=place')) postUrl = placeUrl;
-
-    // 8) POST inicial
-    setStatus(`⏳ Enviando comando...`);
-    const postRes = await fetch(postUrl, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: urlEncoded
-    });
-    
-    if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
-    const postText = await postRes.text();
-
-    // 9) ✅ NOVO: AUTO-CONFIRM VIA FETCH (RÁPIDO!)
-    const postDoc = parser.parseFromString(postText, 'text/html');
-    let confirmForm = Array.from(postDoc.querySelectorAll('form')).find(f => 
-      (f.action && f.action.includes('try=confirm')) || 
-      f.querySelector('#troop_confirm_submit') ||
-      /confirm/i.test(f.outerHTML)
-    );
-
-    if (confirmForm) {
-      console.log('[TWS_Backend] ✅ Auto-confirmando via FETCH (10ms)...');
-      
-      const confirmPayload = {};
-      Array.from(confirmForm.querySelectorAll('input, select, textarea')).forEach(inp => {
-        const name = inp.getAttribute('name');
-        if (!name) return;
-        
-        if (inp.type === 'checkbox' || inp.type === 'radio') {
-          if (inp.checked) confirmPayload[name] = inp.value || 'on';
-        } else {
-          confirmPayload[name] = inp.value || '';
+        if (!form) {
+            return { success: false, message: "Formulário não encontrado" };
         }
-      });
 
-      const confirmBtn = confirmForm.querySelector(
-        'button[type="submit"], input[type="submit"], #troop_confirm_submit'
-      );
-      if (confirmBtn) {
-        const n = confirmBtn.getAttribute('name');
-        const v = confirmBtn.getAttribute('value') || '';
-        if (n) confirmPayload[n] = v;
-      }
+        // 3. Extrai o FormData da página de confirmação
+        const dados = new FormData(form);
 
-      const confirmBody = Object.entries(confirmPayload)
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join('&');
-      
-      let confirmUrl = confirmForm.getAttribute('action') || postRes.url || placeUrl;
-      if (confirmUrl.startsWith('/')) {
-        confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
-      }
+        // 4. Monta o body do POST final
+        const body = new URLSearchParams(dados).toString();
 
-      setStatus('⏳ Confirmando ataque...');
-      
-      // ✅ FETCH RÁPIDO - quase instantâneo!
-      const confirmRes = await fetch(confirmUrl, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-        body: confirmBody
-      });
+        // 5. URL do envio final
+        const finalUrl =
+            `/game.php?village=${dados.get("village")}` +
+            `&screen=place&action=command&h=${dados.get("h")}`;
 
-      if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
-      
-      const finalText = await confirmRes.text();
-      
-      console.log('[TWS_Backend] ✅ Confirmação via fetch concluída');
-      
-      if (isAttackConfirmed(finalText)) {
-        setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-        return true;
-      } else {
-        setStatus(`⚠️ Confirmação concluída, verifique manualmente`);
-        console.warn('[TWS_Backend] Resposta não indicou sucesso claro');
-        return false;
-      }
-    } else {
-      // Se não encontrou form de confirmação, verifica se já foi confirmado
-      if (isAttackConfirmed(postText)) {
-        setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-        return true;
-      } else {
-        setStatus('⚠️ Resposta não indicou confirmação');
-        return false;
-      }
+        // 6. Envia o ataque
+        const resp = await fetch(finalUrl, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            body
+        });
+
+        if (!resp.ok) {
+            return { success: false, message: "Erro no fetch final" };
+        }
+
+        return {
+            success: true,
+            message: "Ataque enviado",
+            executedAt: Date.now(),
+            data: {
+                source: task.source,
+                target: task.target,
+                troops: task.troops,
+                finalUrl
+            }
+        };
+
+    } catch (error) {
+        return {
+            success: false,
+            message: "Erro interno no executeAttack",
+            error: String(error)
+        };
     }
-  } catch (err) {
-    console.error('[TWScheduler] Erro executeAttack:', err);
-    setStatus(`❌ Erro: ${err.message}`);
-    throw err;
-  }
-}
-  
+},
 
-  // ✅ NOVO: Delay entre execuções
-  //function sleep(ms) {
-    //return new Promise(resolve => setTimeout(resolve, ms));
-  //}
-//✅ NOVO: Delay entre execuções
   
 // ✅ MAIS PRECISO para 0ms (execução no próximo tick)
 function sleep(ms) {
@@ -835,6 +710,7 @@ function sleep(ms) {
 
   console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
 })();
+
 
 
 
