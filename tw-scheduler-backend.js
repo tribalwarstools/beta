@@ -401,8 +401,6 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
-  // === Execute attack ===
-
 // === Execute attack ===
 async function executeAttack(cfg) {
   const statusEl = document.getElementById('tws-status');
@@ -592,10 +590,20 @@ async function executeAttack(cfg) {
   
 
   // ✅ NOVO: Delay entre execuções
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  //function sleep(ms) {
+    //return new Promise(resolve => setTimeout(resolve, ms));
+  //}
+//✅ NOVO: Delay entre execuções
+  
+// ✅ PRECISÃO NANOSEGUNDOS (requer SharedArrayBuffer)
+function sleep(ms) {
+  const sab = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+  const ia = new Int32Array(sab);
+  Atomics.wait(ia, 0, 0, ms);
+  return Promise.resolve();
+}
 
+  
   // === Scheduler ===
   function startScheduler() {
     if (_schedulerInterval) clearInterval(_schedulerInterval);
@@ -825,4 +833,5 @@ async function executeAttack(cfg) {
 
   console.log('[TWS_Backend] ✅ Backend v4 carregado (BroadcastChannel + TODAS proteções anti-duplicação)');
 })();
+
 
