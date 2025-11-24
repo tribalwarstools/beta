@@ -102,7 +102,7 @@ try {
       } catch (err) {
         console.error('[TWS_Backend] Erro no auto-confirm via fetch:', err);
       }
-    }, 200);
+    }, 0);
   }
 } catch (e) {
   console.error('[TWS_Backend] Erro no bloco auto-confirm fetch:', e);
@@ -890,6 +890,7 @@ if (typeof window !== 'undefined') {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
 
 
