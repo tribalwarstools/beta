@@ -361,7 +361,7 @@
     panelEl.innerHTML = `
       <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h2 style="margin:0;color:#8B4513">⚔️ Agendador TW (5.1)</h2>
+          <h2 style="margin:0;color:#8B4513">⚔️ Agendador TW (5.2)</h2>
           <div style="display:flex;gap:8px;flex-wrap:wrap"></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -483,3 +483,4 @@
   }, 150);
 
 })();
+
