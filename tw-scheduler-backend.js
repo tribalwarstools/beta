@@ -175,72 +175,78 @@ async function getVillageTroops(villageId) {
   }
 
   // === Execute attack ===
-  async function executeAttack(cfg) {
-    const statusEl = document.getElementById('tws-status');
-    const setStatus = msg => { if(statusEl) statusEl.innerHTML = msg; console.log('[TWScheduler]', msg); };
+async function executeAttack(cfg) {
+  const statusEl = document.getElementById('tws-status');
+  const setStatus = msg => {
+    if (statusEl) statusEl.innerHTML = msg;
+    console.log('[TWScheduler]', msg);
+  };
 
-    const origemId = cfg.origemId || _villageMap[cfg.origem];
-    if(!origemId) { setStatus(`❌ Origem ${cfg.origem||cfg.origemId} não encontrada`); throw new Error('Origem inválida'); }
-    const [x,y] = (cfg.alvo||'').split('|'); 
-    if(!x||!y) { setStatus(`❌ Alvo inválido: ${cfg.alvo}`); throw new Error('Alvo inválido'); }
-
-    setStatus(`🔍 Verificando tropas em ${cfg.origem}...`);
-    const available = await getVillageTroops(origemId);
-    const errors = available ? validateTroops(cfg,available) : [];
-    if(errors.length){ setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`); throw new Error('Tropas insuficientes'); }
-
-    const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
-    setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
-
-    try {
-      const getRes = await fetch(placeUrl,{credentials:'same-origin'});
-      const html = await getRes.text();
-      const doc = new DOMParser().parseFromString(html,'text/html');
-      const form = Array.from(doc.forms).find(f => f.action?.includes('screen=place') || TROOP_LIST.some(u=>f.querySelector(`input[name="${u}"]`)));
-      if(!form) throw new Error('Form não encontrado');
-
-      const payload = {};
-      Array.from(form.elements).forEach(inp=>{
-        const n=inp.name; if(!n) return;
-        if(inp.type==='checkbox'||inp.type==='radio'){ if(inp.checked) payload[n]=inp.value||'on'; } 
-        else payload[n]=inp.value||'';
-      });
-      payload['x']=x; payload['y']=y;
-      TROOP_LIST.forEach(u=>payload[u]=cfg[u]||0);
-
-      const submitBtn=form.querySelector('button[type="submit"], input[type="submit"]');
-      if(submitBtn){ const n=submitBtn.name,v=submitBtn.value||''; if(n) payload[n]=v; }
-
-      const body = Object.entries(payload).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-      let postUrl=form.action||placeUrl; if(postUrl.startsWith('/')) postUrl=`${location.protocol}//${location.host}${postUrl}`;
-
-      setStatus('⏳ Enviando comando...');
-      const postRes = await fetch(postUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-      const postText = await postRes.text();
-      const postDoc = new DOMParser().parseFromString(postText,'text/html');
-      const confirmForm = Array.from(postDoc.forms).find(f=>f.action?.includes('try=confirm')||/confirm/i.test(f.outerHTML));
-
-      if(confirmForm){
-        const cPayload={};
-        Array.from(confirmForm.elements).forEach(inp=>{
-          const n=inp.name; if(!n) return;
-          if(inp.type==='checkbox'||inp.type==='radio'){ if(inp.checked)cPayload[n]=inp.value||'on'; } 
-          else cPayload[n]=inp.value||'';
-        });
-        const cBtn=confirmForm.querySelector('button[type="submit"], input[type="submit"], #troop_confirm_submit');
-        if(cBtn){ const n=cBtn.name,v=cBtn.value||''; if(n)cPayload[n]=v; }
-        const cBody=Object.entries(cPayload).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-        let cUrl=confirmForm.action||postRes.url||placeUrl; if(cUrl.startsWith('/')) cUrl=`${location.protocol}//${location.host}${cUrl}`;
-        setStatus('⏳ Confirmando ataque...');
-        const cRes = await fetch(cUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:cBody});
-        const finalText = await cRes.text();
-        if(isAttackConfirmed(finalText)){ setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`); return true; }
-        else { setStatus('⚠️ Confirmação concluída, verifique manualmente'); return false; }
-      } else if(isAttackConfirmed(postText)){ setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`); return true; }
-      else { setStatus('⚠️ Resposta não indicou confirmação'); return false; }
-
-    } catch(err){ setStatus(`❌ Erro: ${err.message}`); throw err; }
+  const origemId = cfg.origemId || _villageMap[cfg.origem];
+  if (!origemId) {
+    setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada`);
+    throw new Error('Origem inválida');
   }
+
+  const [x, y] = (cfg.alvo || '').split('|');
+  if (!x || !y) {
+    setStatus(`❌ Alvo inválido: ${cfg.alvo}`);
+    throw new Error('Alvo inválido');
+  }
+
+  setStatus(`🔍 Verificando tropas em ${cfg.origem}...`);
+  const available = await getVillageTroops(origemId);
+  if (!available) throw new Error('Falha ao obter tropas');
+
+  const errors = validateTroops(cfg, available);
+  if (errors.length) {
+    setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
+    throw new Error('Tropas insuficientes');
+  }
+
+  setStatus(`📤 Enviando ataque: ${cfg.origem} → ${cfg.alvo}...`);
+
+  try {
+    // Montar payload direto para POST
+    const payload = {
+      x: String(x),
+      y: String(y),
+      ajax: 'confirm'
+    };
+
+    TROOP_LIST.forEach(u => payload[u] = String(cfg[u] || 0));
+
+    // POST para tentar enviar e confirmar ataque
+    const postUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place&try=confirm`;
+    const body = Object.entries(payload)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+
+    setStatus('⏳ Enviando comando...');
+    const res = await fetch(postUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body
+    });
+
+    if (!res.ok) throw new Error(`POST falhou: HTTP ${res.status}`);
+    const text = await res.text();
+
+    if (/attack sent|enfileirad|tropas enviadas/i.test(text)) {
+      setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+      return true;
+    } else {
+      setStatus('⚠️ Confirmação não detectada, verifique manualmente');
+      return false;
+    }
+
+  } catch (err) {
+    setStatus(`❌ Erro: ${err.message}`);
+    throw err;
+  }
+}
+
 
   // === Scheduler ===
   function startScheduler() {
@@ -320,4 +326,5 @@ async function getVillageTroops(villageId) {
 
   console.log('[TWS_Backend] ✅ Backend v4 headless pronto (BroadcastChannel + proteções)');
 })();
+
 
