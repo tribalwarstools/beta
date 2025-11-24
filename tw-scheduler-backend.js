@@ -272,65 +272,70 @@
     return { formHtml: formHtml, inputs: inputs };
   }
 
-// ----------------- executeAttack (com logs de debug) -----------------
 async function executeAttack(task) {
-  try {
-    console.log('[Attack] Executing attack:', task);
+    try {
+        // 1. Monta a URL da página de confirmação do ataque
+        const url = `/game.php?village=${task.source}&screen=place&target=${task.target}`;
 
-    // 1. Build confirmation URL with troops
-    let confirmUrl = `/game.php?village=${task.source}&screen=place&try=confirm&target=${task.target}`;
-    TROOP_LIST.forEach(troop => {
-      if (task[troop] && parseInt(task[troop]) > 0) {
-        confirmUrl += `&${troop}=${task[troop]}`;
-      }
-    });
+        // 2. Primeira requisição → busca a página para extrair os campos do form
+        const response = await fetch(url, { credentials: 'include' });
+        const html = await response.text();
 
-    // 2. Fetch confirmation page
-    const response = await fetch(confirmUrl, { credentials: 'include' });
-    if (!response.ok) {
-      console.error('[Attack] Failed to load confirmation page:', response.status);
-      return { success: false, message: "Failed to load confirmation page" };
+        // 3. Parseia o HTML com DOMParser
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        // 4. Localiza o formulário que contém o botão "Atacar" (action=command)
+        const form = doc.querySelector('form[action*="action=command"]');
+
+        if (!form) {
+            console.error("[ERRO] Formulário de ataque não encontrado.");
+            return;
+        }
+
+        // 5. Extrai TODOS os inputs automaticamente
+        const params = new URLSearchParams();
+
+        form.querySelectorAll("input, select").forEach(el => {
+            if (el.name) params.append(el.name, el.value || "");
+        });
+
+        // 6. Insere as tropas definidas na tarefa
+        Object.keys(task.troops).forEach(type => {
+            params.set(type, task.troops[type]); // substitui os valores do formulário
+        });
+
+        // 7. Monta a URL de envio (action=command)
+        const finalUrl = form.getAttribute("action");
+
+        // 8. Envia o ataque de fato
+        const sendResponse = await fetch(finalUrl, {
+            method: "POST",
+            body: params,
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            }
+        });
+
+        const sendHtml = await sendResponse.text();
+
+        // 9. Verifica se o ataque foi confirmado (busca "O ataque foi enviado!" ou similar)
+        const confirmed = sendHtml.includes("comando foi enviado") ||
+                          sendHtml.includes("O ataque foi enviado") ||
+                          sendHtml.includes("command-confirm");
+
+        if (confirmed) {
+            console.log("✓ ATAQUE ENVIADO COM SUCESSO:", task);
+        } else {
+            console.warn("⚠ Ataque NÃO foi confirmado pelo servidor:", task);
+        }
+
+    } catch (err) {
+        console.error("Erro ao executar ataque:", err);
     }
-
-    const html = await response.text();
-    console.log('[Attack] Confirmation page loaded');
-
-    // 3. Extract form inputs
-    const formData = extractFormInputsFromHtml(html);
-    if (!formData || !formData.inputs) {
-      console.error('[Attack] Could not extract form data');
-      return { success: false, message: "Could not extract form data" };
-    }
-
-    // 4. Prepare final POST request
-    const params = new URLSearchParams();
-    Object.keys(formData.inputs).forEach(key => params.append(key, formData.inputs[key]));
-    const finalUrl = `/game.php?village=${formData.inputs.village}&screen=place&action=command&h=${formData.inputs.h}`;
-
-    // 5. Send attack
-    const finalResponse = await fetch(finalUrl, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: params.toString()
-    });
-
-    const resultHtml = await finalResponse.text();
-    const confirmed = isAttackConfirmed(resultHtml);
-    console.log('[Attack] Attack result confirmed?', confirmed);
-
-    return {
-      success: confirmed,
-      message: confirmed ? "Attack sent successfully" : "Attack may have failed - check commands",
-      executedAt: Date.now(),
-      data: { source: task.source, target: task.target, troops: task.troops, finalUrl }
-    };
-
-  } catch (error) {
-    console.error('[Attack] executeAttack error', error);
-    return { success: false, message: "Internal error in executeAttack", error: String(error) };
-  }
 }
+
 
 // ----------------- Queue worker (corrigido) -----------------
 async function queueWorker() {
@@ -426,4 +431,5 @@ async function queueWorker() {
   console.log('[TWS_Backend] ✅ Backend v5 loaded (optimized scheduler + lightweight executeAttack)');
 
 })();
+
 
