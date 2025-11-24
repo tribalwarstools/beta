@@ -272,74 +272,85 @@
     return { formHtml: formHtml, inputs: inputs };
   }
 
-  // ----------------- Optimized executeAttack (no heavy DOMParser) -----------------
-  async function executeAttack(cfg) {
-    var statusEl = document.getElementById('tws-status');
-    function setStatus(msg){ try{ if (statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); }
+  
+  //executeAttack
+executeAttack: async function (task) {
+    try {
+        // 1. Abre a página de confirmação
+        const confirmUrl =
+            `/game.php?village=${task.source}` +
+            `&screen=place&try=confirm` +
+            `&target=${task.target}`;
 
-    var origemId = cfg.origemId || _villageMap[cfg.origem] || null;
-    if (!origemId) { setStatus('❌ Origem ' + (cfg.origem || cfg.origemId) + ' não encontrada!'); throw new Error('Origem não encontrada'); }
+        const html = await fetch(confirmUrl, {
+            credentials: "include"
+        }).then(r => r.text());
 
-    var xy = (cfg.alvo||'').split('|'); var x = xy[0], y = xy[1];
-    if (!x || !y) { setStatus('❌ Alvo inválido: ' + cfg.alvo); throw new Error('Alvo inválido'); }
+        // 2. Extrair o <form> inteiro sem DOMParser
+        const formMatch = html.match(/<form[^>]*>([\s\S]*?)<\/form>/i);
+        if (!formMatch) {
+            return { success: false, message: "Formulário não encontrado" };
+        }
+        const formHtml = formMatch[1];
 
-    setStatus('🔍 Verificando tropas em ' + cfg.origem + '...');
-    var available = await getVillageTroops(origemId);
-    if (available) {
-      var errs = validateTroops(cfg, available);
-      if (errs.length) { setStatus('❌ Tropas insuficientes: ' + errs.join(', ')); throw new Error('Tropas insuficientes'); }
+        // 3. Extrair todos os inputs
+        const inputs = {};
+        const inputRegex = /<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/gi;
+
+        let match;
+        while ((match = inputRegex.exec(formHtml)) !== null) {
+            inputs[match[1]] = match[2];
+        }
+
+        // 4. Gerar o body do POST final
+        const params = new URLSearchParams();
+
+        for (const key in inputs) {
+            params.append(key, inputs[key]);
+        }
+
+        const body = params.toString();
+
+        // 5. Montar a URL final
+        const finalUrl =
+            `/game.php?village=${inputs["village"]}` +
+            `&screen=place&action=command&h=${inputs["h"]}`;
+
+        // 6. Enviar o ataque
+        const resp = await fetch(finalUrl, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            body
+        });
+
+        if (!resp.ok) {
+            return { success: false, message: "Erro no fetch final" };
+        }
+
+        return {
+            success: true,
+            message: "Ataque enviado",
+            executedAt: Date.now(),
+            data: {
+                source: task.source,
+                target: task.target,
+                troops: task.troops,
+                finalUrl
+            }
+        };
+
+    } catch (error) {
+        return {
+            success: false,
+            message: "Erro interno no executeAttack",
+            error: String(error)
+        };
     }
+},
 
-    var confirmUrl = location.protocol + '//' + location.host + '/game.php?village=' + origemId + '&screen=place';
-    setStatus('📤 Preparando ataque: ' + cfg.origem + ' → ' + cfg.alvo + '...');
-
-    var pageRes = await fetch(confirmUrl, { credentials: 'same-origin' }); if (!pageRes.ok) throw new Error('Falha ao carregar /place');
-    var pageHtml = await pageRes.text();
-
-    var extracted = extractFormInputsFromHtml(pageHtml);
-    if (!extracted) throw new Error('Formulário de envio não encontrado');
-
-    var payload = {};
-    Object.keys(extracted.inputs).forEach(function(k){ payload[k] = extracted.inputs[k]; });
-
-    payload['x'] = String(x); payload['y'] = String(y);
-    TROOP_LIST.forEach(function(u){ payload[u] = String(cfg[u] !== undefined ? cfg[u] : '0'); });
-    if (!payload['attack']) payload['attack'] = 'true';
-
-    var body = Object.keys(payload).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]); }).join('&');
-
-    var finalUrl = location.protocol + '//' + location.host + '/game.php?village=' + (payload['village'] || origemId) + '&screen=place&action=command&h=' + (payload['h'] || '');
-
-    setStatus('⏳ Enviando comando (fetch)...');
-    var postRes = await fetch(finalUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' }, body: body });
-    if (!postRes.ok) throw new Error('POST inicial falhou: HTTP ' + postRes.status);
-    var postText = await postRes.text();
-
-    var confirmMatchIndex = postText.toLowerCase().indexOf('try=confirm');
-    if (confirmMatchIndex !== -1) {
-      var confirmFormStart = postText.lastIndexOf('<form', confirmMatchIndex);
-      var confirmFormEnd = postText.indexOf('</form>', confirmMatchIndex);
-      var confirmFormHtml = (confirmFormStart !== -1 && confirmFormEnd !== -1) ? postText.slice(confirmFormStart, confirmFormEnd + 7) : null;
-      var cExtract = confirmFormHtml ? extractFormInputsFromHtml(confirmFormHtml) : null;
-      var confirmPayload = cExtract ? Object.assign({}, cExtract.inputs) : {};
-      confirmPayload['x'] = payload['x']; confirmPayload['y'] = payload['y'];
-      TROOP_LIST.forEach(function(u){ confirmPayload[u] = payload[u]; });
-
-      var confirmBody = Object.keys(confirmPayload).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(confirmPayload[k]); }).join('&');
-      var confirmUrl = (cExtract && cExtract.inputs && cExtract.inputs.action) ? cExtract.inputs.action : postRes.url || finalUrl;
-      if (confirmUrl && confirmUrl.indexOf('/') === 0) confirmUrl = location.protocol + '//' + location.host + confirmUrl;
-
-      setStatus('⏳ Confirmando (fetch)...');
-      var confirmRes = await fetch(confirmUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' }, body: confirmBody });
-      if (!confirmRes.ok) throw new Error('POST confirmação falhou: HTTP ' + confirmRes.status);
-      var finalText = await confirmRes.text();
-      if (isAttackConfirmed(finalText)) { setStatus('✅ Ataque enviado: ' + cfg.origem + ' → ' + cfg.alvo); _persistedMarkProcessed(getAttackFingerprint(cfg)); return true; }
-      setStatus('⚠️ Confirmação inconclusiva. Verifique manualmente.'); return false;
-    }
-
-    if (isAttackConfirmed(postText)) { setStatus('✅ Ataque enviado: ' + cfg.origem + ' → ' + cfg.alvo); _persistedMarkProcessed(getAttackFingerprint(cfg)); return true; }
-    setStatus('⚠️ Resposta não indicou confirmação.'); return false;
-  }
 
   // ----------------- Queue executor (single worker) -----------------
   async function queueWorker() {
@@ -412,3 +423,4 @@
   console.log('[TWS_Backend] ✅ Backend v5 loaded (optimized scheduler + lightweight executeAttack)');
 
 })();
+
