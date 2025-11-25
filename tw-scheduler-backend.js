@@ -36,77 +36,9 @@
     return `${timestamp}_${counter}_${random}_${perf}`;
   }
 
-  // === Auto-confirm na página de confirmação ===
+// === Auto-confirm na página de confirmação ===
 // === Auto-confirm via FETCH (sem clicar no botão) ===
-try {
-  if (location.href.includes('screen=place&try=confirm')) {
-    console.log('[TWS_Backend] Auto-confirm via FETCH iniciado...');
-
-    setTimeout(async () => {
-      try {
-        const form = document.querySelector('form[action*="try=confirm"], form');
-
-        if (!form) {
-          console.warn('[TWS_Backend] Form de confirmação não encontrado.');
-          return;
-        }
-
-        // Montar payload analisando TODOS os inputs
-        const payload = {};
-        form.querySelectorAll('input, select, textarea').forEach(inp => {
-          const name = inp.name;
-          if (!name) return;
-
-          if (inp.type === 'checkbox' || inp.type === 'radio') {
-            if (inp.checked) payload[name] = inp.value || 'on';
-          } else {
-            payload[name] = inp.value || '';
-          }
-        });
-
-        // Descobrir botão de submit (se existir)
-        const submitBtn = form.querySelector('#troop_confirm_submit, button[type="submit"], input[type="submit"]');
-        if (submitBtn) {
-          const n = submitBtn.getAttribute('name');
-          const v = submitBtn.getAttribute('value') || '';
-          if (n) payload[n] = v;
-        }
-
-        // Transformar payload em URL-encoded
-        const encoded = Object.entries(payload)
-          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-          .join('&');
-
-        // Resolver URL do form
-        let action = form.getAttribute('action');
-        if (!action) action = location.href;
-        if (action.startsWith('/'))
-          action = `${location.protocol}//${location.host}${action}`;
-
-        console.log('[TWS_Backend] Enviando confirmação via fetch:', action);
-
-        const res = await fetch(action, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-          body: encoded
-        });
-
-        const finalUrl = res.url || location.href;
-
-        console.log('[TWS_Backend] Confirmação enviada. Redirecionando...', finalUrl);
-
-        // Redirecionar para o resultado final
-        location.href = finalUrl;
-
-      } catch (err) {
-        console.error('[TWS_Backend] Erro no auto-confirm via fetch:', err);
-      }
-    }, 0);
-  }
-} catch (e) {
-  console.error('[TWS_Backend] Erro no bloco auto-confirm fetch:', e);
-}
+//REMOVIDO 
 
 
   // === Utility functions ===
@@ -652,83 +584,88 @@ if (typeof window !== 'undefined') {
     // 4) Form de confirmação → POST FINAL
     // ============================================================
 
-    let confirmForm =
-      postDoc.querySelector('form[action*="try=confirm"]') ||
-      postDoc.querySelector('#command-data-form') ||
-      postDoc.forms[0];
+// ============================================================
+// 4) Form de confirmação → POST FINAL (AUTO-CONFIRM INTEGRADO)
+// ============================================================
 
-    if (confirmForm) {
-      const confirmPayload = {};
-      confirmForm.querySelectorAll('input, select, textarea').forEach(inp => {
-        const name = inp.name;
-        if (!name) return;
+let confirmForm =
+  postDoc.querySelector('form[action*="try=confirm"]') ||
+  postDoc.querySelector('#command-data-form') ||
+  postDoc.forms[0];
 
-        if (inp.type === 'checkbox' || inp.type === 'radio') {
-          if (inp.checked) confirmPayload[name] = inp.value || 'on';
-        } else {
-          confirmPayload[name] = inp.value || '';
-        }
-      });
+if (confirmForm) {
+  const confirmPayload = {};
 
-      const btn = confirmForm.querySelector(
-        '#troop_confirm_submit, button[type="submit"], input[type="submit"]'
-      );
-      if (btn) {
-        const n = btn.name;
-        const v = btn.value || '';
-        if (n) confirmPayload[n] = v;
-      }
+  confirmForm.querySelectorAll('input, select, textarea').forEach(inp => {
+    const name = inp.name;
+    if (!name) return;
 
-      // Validação
-      if (Object.keys(confirmPayload).length < 5)
-        throw new Error('Confirm payload incompleto.');
-
-      const confirmBody = Object.entries(confirmPayload)
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join('&');
-
-      let confirmUrl =
-        confirmForm.getAttribute('action') ||
-        postRes.url ||
-        placeUrl;
-
-      if (confirmUrl.startsWith('/'))
-        confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
-
-      setStatus('⏳ Confirmando ataque...');
-
-      const { controller: c3, timeout: t3 } = safeTimeout();
-      const confirmRes = await safeFetch(
-        confirmUrl,
-        {
-          method: 'POST',
-          credentials: 'same-origin',
-          signal: c3.signal,
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Cache-Control': 'no-cache'
-          },
-          body: confirmBody
-        },
-        1
-      );
-      clearTimeout(t3);
-
-      if (!confirmRes.ok)
-        throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
-
-      const finalText = await confirmRes.text();
-
-      if (isAttackConfirmed(finalText)) {
-        setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-        return true;
-      } else {
-        setStatus(`⚠️ Confirmação concluída, mas sem padrão claro.`);
-        return false;
-      }
+    if (inp.type === 'checkbox' || inp.type === 'radio') {
+      if (inp.checked) confirmPayload[name] = inp.value || 'on';
+    } else {
+      confirmPayload[name] = inp.value || '';
     }
+  });
+
+  const btn = confirmForm.querySelector(
+    '#troop_confirm_submit, button[type="submit"], input[type="submit"]'
+  );
+  if (btn) {
+    const n = btn.name;
+    const v = btn.value || '';
+    if (n) confirmPayload[n] = v;
+  }
+
+  if (Object.keys(confirmPayload).length < 5)
+    throw new Error('Confirm payload incompleto.');
+
+  const confirmEncoded = Object.entries(confirmPayload)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+
+  let confirmUrl =
+    confirmForm.getAttribute('action') ||
+    postRes.url ||
+    placeUrl;
+
+  if (confirmUrl.startsWith('/'))
+    confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
+
+  setStatus('⏳ Confirmando ataque (auto-fetch)...');
+
+  const { controller: c3, timeout: t3 } = safeTimeout();
+  const confirmRes = await safeFetch(
+    confirmUrl,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: c3.signal,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Cache-Control': 'no-cache'
+      },
+      body: confirmEncoded
+    },
+    1
+  );
+  clearTimeout(t3);
+
+  if (!confirmRes.ok)
+    throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
+
+  const finalText = await confirmRes.text();
+
+  if (isAttackConfirmed(finalText)) {
+    setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+    return true;
+  } else {
+    setStatus(`⚠️ Confirmação concluída, mas sem padrão claro.`);
+    return false;
+  }
+}
+
 
     // Se não houve form de confirmação
     if (isAttackConfirmed(postText)) {
@@ -967,6 +904,7 @@ if (typeof window !== 'undefined') {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
 
 
