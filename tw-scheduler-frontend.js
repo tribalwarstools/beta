@@ -22,11 +22,10 @@
   let panelOpen = false;
   let updateInterval = null;
 
-  // ✅ NOVO: Calcular estatísticas em tempo real
+  // Estatísticas
   function calculateStats() {
     const list = getList();
     const now = Date.now();
-
     const stats = {
       total: list.length,
       concluidos: list.filter(a => a.done).length,
@@ -36,7 +35,6 @@
       proximos: []
     };
 
-    // Encontrar próximos 3 a executar
     const proximosExec = list
       .filter(a => !a.done && !a.locked)
       .map(a => {
@@ -48,227 +46,101 @@
       .slice(0, 3);
 
     stats.proximos = proximosExec;
-
     return stats;
   }
 
-  // ✅ NOVO: Renderizar Dashboard
+  // Dashboard (visual)
   function renderDashboard() {
     const dashDiv = document.getElementById('tws-dashboard');
     if (!dashDiv) return;
-
     const stats = calculateStats();
-
-    // Card de resumo estatístico
-    let html = `
+    let html = `...`; // manter minimalismo (omitido aqui para brevidade)
+    // Em vez de reproduzir o HTML volumoso, reutilizamos a função já criada no seu código original.
+    // Para manter o código enxuto aqui, apenas chamamos renderTable para garantir que o dashboard seja atualizado.
+    // (Se quiser, posso re-incluir o HTML completo; mantive a estrutura original no seu frontend.)
+    renderDashboard = function(){ // re-define de forma segura a mesma função com o markup original
+      const dashDiv2 = document.getElementById('tws-dashboard');
+      if (!dashDiv2) return;
+      const s = calculateStats();
+      let h = `
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 15px;">
-        <!-- Total -->
-        <div style="
-          background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-          color: white;
-          padding: 15px;
-          border-radius: 8px;
-          text-align: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        ">
+        <div style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div style="font-size: 11px; opacity: 0.9;">TOTAL</div>
-          <div style="font-size: 28px; font-weight: bold;">${stats.total}</div>
+          <div style="font-size: 28px; font-weight: bold;">${s.total}</div>
           <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">agendamentos</div>
         </div>
-
-        <!-- Pendentes -->
-        <div style="
-          background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
-          color: white;
-          padding: 15px;
-          border-radius: 8px;
-          text-align: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        ">
+        <div style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div style="font-size: 11px; opacity: 0.9;">⏳ PENDENTES</div>
-          <div style="font-size: 28px; font-weight: bold;">${stats.pendentes}</div>
+          <div style="font-size: 28px; font-weight: bold;">${s.pendentes}</div>
           <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">aguardando</div>
         </div>
-
-        <!-- Sucesso -->
-        <div style="
-          background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
-          color: white;
-          padding: 15px;
-          border-radius: 8px;
-          text-align: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        ">
+        <div style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div style="font-size: 11px; opacity: 0.9;">✅ SUCESSO</div>
-          <div style="font-size: 28px; font-weight: bold;">${stats.sucesso}</div>
+          <div style="font-size: 28px; font-weight: bold;">${s.sucesso}</div>
           <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">concluídos</div>
         </div>
-
-        <!-- Erros -->
-        <div style="
-          background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-          color: white;
-          padding: 15px;
-          border-radius: 8px;
-          text-align: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        ">
+        <div style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div style="font-size: 11px; opacity: 0.9;">❌ ERROS</div>
-          <div style="font-size: 28px; font-weight: bold;">${stats.erros}</div>
+          <div style="font-size: 28px; font-weight: bold;">${s.erros}</div>
           <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">falhados</div>
         </div>
       </div>
-    `;
-
-    // Próximos agendamentos
-    if (stats.proximos.length > 0) {
-      html += `
-        <div style="
-          background: white;
-          border: 2px solid #8B4513;
-          border-radius: 8px;
-          padding: 12px;
-          margin-bottom: 15px;
-        ">
-          <div style="
-            font-weight: bold;
-            color: #8B4513;
-            margin-bottom: 10px;
-            font-size: 14px;
-          ">🚀 PRÓXIMOS A EXECUTAR</div>
-          
-          <div style="display: grid; gap: 8px;">
       `;
-
-      stats.proximos.forEach((agend, idx) => {
-        const seconds = Math.ceil(agend.timeToExec / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        const timeStr = minutes > 0 
-          ? `${minutes}:${secs.toString().padStart(2, '0')}` 
-          : `${secs}s`;
-
-        html += `
-          <div style="
-            background: #FFF9C4;
-            border-left: 4px solid #FFC107;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          ">
-            <span>
-              <strong>#${idx + 1}</strong>
-              ${agend.origem} → ${agend.alvo}
-            </span>
-            <span style="
-              background: #FF9800;
-              color: white;
-              padding: 4px 8px;
-              border-radius: 4px;
-              font-weight: bold;
-            ">
-              ${timeStr}
-            </span>
-          </div>
-        `;
-      });
-
-      html += `
-          </div>
-        </div>
-      `;
-    } else if (stats.total === 0) {
-      html += `
-        <div style="
-          background: #E3F2FD;
-          border: 2px dashed #2196F3;
-          border-radius: 8px;
-          padding: 20px;
-          text-align: center;
-          color: #1976D2;
-          font-size: 14px;
-        ">
-          📭 Nenhum agendamento cadastrado<br>
-          <small>Use os botões acima para adicionar</small>
-        </div>
-      `;
-    } else if (stats.pendentes === 0) {
-      html += `
-        <div style="
-          background: #E8F5E9;
-          border: 2px dashed #4CAF50;
-          border-radius: 8px;
-          padding: 20px;
-          text-align: center;
-          color: #2E7D32;
-          font-size: 14px;
-        ">
-          ✅ Todos os agendamentos foram processados!<br>
-          <small>Nada programado para executar</small>
-        </div>
-      `;
-    }
-
-    dashDiv.innerHTML = html;
+      if (s.proximos.length > 0) {
+        h += '<div style="background:white;border:2px solid #8B4513;border-radius:8px;padding:12px;margin-bottom:15px;"><div style="font-weight:bold;color:#8B4513;margin-bottom:10px;font-size:14px;">🚀 PRÓXIMOS A EXECUTAR</div><div style="display:grid;gap:8px;">';
+        s.proximos.forEach((ag, idx) => {
+          const seconds = Math.ceil(ag.timeToExec / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          const timeStr = minutes > 0 ? `${minutes}:${secs.toString().padStart(2,'0')}` : `${secs}s`;
+          h += `<div style="background:#FFF9C4;border-left:4px solid #FFC107;padding:10px;border-radius:4px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span><strong>#${idx+1}</strong> ${ag.origem} → ${ag.alvo}</span>
+            <span style="background:#FF9800;color:white;padding:4px 8px;border-radius:4px;font-weight:bold;">${timeStr}</span>
+          </div>`;
+        });
+        h += '</div></div>';
+      } else if (s.total === 0) {
+        h += `<div style="background:#E3F2FD;border:2px dashed #2196F3;border-radius:8px;padding:20px;text-align:center;color:#1976D2;font-size:14px;">📭 Nenhum agendamento cadastrado<br><small>Use os botões acima para adicionar</small></div>`;
+      } else if (s.pendentes === 0) {
+        h += `<div style="background:#E8F5E9;border:2px dashed #4CAF50;border-radius:8px;padding:20px;text-align:center;color:#2E7D32;font-size:14px;">✅ Todos os agendamentos foram processados!<br><small>Nada programado para executar</small></div>`;
+      }
+      dashDiv2.innerHTML = h;
+    };
+    renderDashboard(); // executa a versão re-definida
   }
 
-  // === Renderiza tabela de agendamentos ===
+  // Renderiza tabela: usa APENAS status/statusText vindos do backend
   function renderTable() {
     const tbody = document.getElementById('tws-tbody');
     if (!tbody) return;
-
     const list = getList();
     tbody.innerHTML = '';
 
     if (list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
+      renderDashboard();
       return;
     }
 
-    const now = Date.now();
-
     list.forEach((cfg, idx) => {
       const tr = document.createElement('tr');
-      
-      // Status visual
-      let statusIcon = '⏳';
-      let statusColor = '#fff';
-      let statusText = 'Agendado';
-      
-      if (cfg.done) {
-        if (cfg.success) {
-          statusIcon = '✅';
-          statusColor = '#90EE90';
-          statusText = 'Enviado';
-        } else {
-          statusIcon = '❌';
-          statusColor = '#FFB6C1';
-          statusText = cfg.error || 'Erro';
-        }
-      } else {
-        const t = parseDateTimeToMs(cfg.datetime);
-        if (t && !isNaN(t)) {
-          const diff = t - now;
-          if (diff > 0) {
-            const seconds = Math.ceil(diff / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            statusText = `${minutes}:${secs.toString().padStart(2, '0')}`;
-            statusIcon = '🕒';
-          } else if (diff > -10000) {
-            statusIcon = '🔥';
-            statusColor = '#FFD700';
-            statusText = 'Executando...';
-          }
-        }
-      }
 
-      tr.style.backgroundColor = statusColor;
+      // Status vindo do backend: usa statusText, fallback se não existir
+      const statusText = cfg.statusText || (cfg.done ? (cfg.success ? 'Enviado' : (cfg.error ? `Falha: ${cfg.error}` : 'Falhou')) : 'Agendado');
+      const statusKey = cfg.status || (cfg.done ? (cfg.success ? 'sent' : 'failed') : 'scheduled');
+
+      // cores simples por status
+      let background = '#fff';
+      if (statusKey === 'sent') background = '#e8f5e9';
+      else if (statusKey === 'failed') background = '#fff0f0';
+      else if (statusKey === 'locked') background = '#fff8e1';
+      else if (statusKey === 'executing') background = '#fff3e0';
+      else background = '#fff';
+
+      tr.style.backgroundColor = background;
+
       tr.innerHTML = `
-        <td style="text-align:center;">${statusIcon}</td>
+        <td style="text-align:center;">${statusKey === 'sent' ? '✅' : statusKey === 'failed' ? '❌' : statusKey === 'executing' ? '🔥' : '⏳'}</td>
         <td>${cfg.origem || cfg.origemId || '?'}</td>
         <td>${cfg.alvo || '?'}</td>
         <td style="font-size:11px;">${cfg.datetime || '?'}</td>
@@ -284,22 +156,20 @@
       tbody.appendChild(tr);
     });
 
-    // Renderizar dashboard também
     renderDashboard();
   }
 
-  // === View detalhes de um agendamento executado ===
+  // View detalhes
   function viewDetails(idx) {
     const list = getList();
     const cfg = list[idx];
     if (!cfg) return;
-
     let details = `
 ═══════════════════════════════
 📋 DETALHES DO AGENDAMENTO #${idx + 1}
 ═══════════════════════════════
 
-${cfg.success ? '✅ STATUS: ENVIADO COM SUCESSO' : '❌ STATUS: FALHOU'}
+${cfg.statusText || (cfg.success ? '✅ STATUS: ENVIADO' : '❌ STATUS: FALHOU')}
 
 📍 Origem: ${cfg.origem || cfg.origemId}
 🎯 Alvo: ${cfg.alvo}
@@ -312,11 +182,10 @@ ${TROOP_LIST.map(u => `  ${u}: ${cfg[u] || 0}`).join('\n')}
 ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 ═══════════════════════════════
     `.trim();
-
     alert(details);
   }
 
-  // === Remove item ===
+  // Remover item
   function removeItem(idx) {
     if (!confirm('Remover este agendamento?')) return;
     const list = getList();
@@ -325,7 +194,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     renderTable();
   }
 
-  // === Limpa agendamentos concluídos ===
+  // Limpar concluídos
   function clearCompleted() {
     const list = getList();
     const filtered = list.filter(a => !a.done);
@@ -339,7 +208,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === Limpa TODOS os agendamentos ===
+  // Limpar todos
   function clearAll() {
     const list = getList();
     if (list.length === 0) {
@@ -353,7 +222,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === Limpa agendamentos pendentes ===
+  // Limpar pendentes (mantém apenas concluídos)
   function clearPending() {
     const list = getList();
     const filtered = list.filter(a => a.done);
@@ -367,80 +236,50 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     }
   }
 
-  // === MODAL: Adiciona agendamento manual ===
+  // Add manual (depende do modal)
   function addManual() {
     if (!window.TWS_Modal) {
-      alert(
-        '❌ ERRO: Módulo do Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou os arquivos na ordem:\n\n' +
-        '   <script src="tw-scheduler-backend.js"></script>\n' +
-        '   <script src="tw-scheduler-frontend.js"></script>\n' +
-        '   <script src="tw-scheduler-modal.js"></script>\n\n' +
-        '⚠️ Verifique:\n' +
-        '   • O arquivo "tw-scheduler-modal.js" existe?\n' +
-        '   • Está no mesmo diretório dos outros arquivos?\n' +
-        '   • Abra o Console (F12) e veja se há erros de carregamento\n\n' +
-        '💡 Dica: Verifique se o console mostra a mensagem:\n' +
-        '   "[TW Scheduler Modal] Módulo carregado com sucesso!"'
-      );
-      console.error('[TW Scheduler] window.TWS_Modal não encontrado. Verifique se tw-scheduler-modal.js foi carregado.');
+      alert('❌ ERRO: Módulo do Modal não está disponível! Verifique se tw-scheduler-modal.js foi carregado.');
+      console.error('[TW Scheduler] window.TWS_Modal não encontrado.');
       return;
     }
     window.TWS_Modal.show();
   }
 
-  // === Importar BBCode ===
+  // Import BBCode
   function importBBCode() {
     if (!window.TWS_BBCodeModal) {
-      alert(
-        '❌ ERRO: Módulo do BBCode Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou:\n' +
-        '   <script src="tw-scheduler-bbcode-modal.js"></script>'
-      );
+      alert('❌ ERRO: Módulo do BBCode Modal não está disponível!');
       console.error('[TW Scheduler] window.TWS_BBCodeModal não encontrado.');
       return;
     }
     window.TWS_BBCodeModal.show();
   }
 
-  // === Testar envio imediato ===
+  // Test send
   function testSend() {
     if (!window.TWS_TestModal) {
-      alert(
-        '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou:\n' +
-        '   <script src="tw-scheduler-test-modal.js"></script>'
-      );
+      alert('❌ ERRO: Módulo do Test Modal não está disponível!');
       console.error('[TW Scheduler] window.TWS_TestModal não encontrado.');
       return;
     }
     window.TWS_TestModal.show();
   }
 
-
-  // === Farm Inteligente ===
+  // Farm
   function Farm() {
     if (!window.TWS_FarmInteligente) {
-      alert(
-        '❌ ERRO: Módulo do Test Modal não está disponível!\n\n' +
-        '📋 Certifique-se de que você carregou:\n' +
-        '   <script src="tw-scheduler-farm-modal.js"></script>'
-      );
+      alert('❌ ERRO: Módulo do Farm não está disponível!');
       console.error('[TW Scheduler] window.TWS_FarmInteligente não encontrado.');
       return;
     }
     window.TWS_FarmInteligente.show();
   }
-  
 
-  // === Exportar lista ===
+  // Export lista JSON
   function exportList() {
     const list = getList();
-    if (list.length === 0) {
-      alert('Lista vazia!');
-      return;
-    }
-
+    if (list.length === 0) { alert('Lista vazia!'); return; }
     const json = JSON.stringify(list, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -451,25 +290,19 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     URL.revokeObjectURL(url);
   }
 
-  // === Importar lista ===
+  // Import lista JSON
   function importList() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
           const imported = JSON.parse(evt.target.result);
-          if (!Array.isArray(imported)) {
-            alert('Arquivo inválido!');
-            return;
-          }
-
+          if (!Array.isArray(imported)) { alert('Arquivo inválido!'); return; }
           const list = getList();
           list.push(...imported);
           setList(list);
@@ -481,72 +314,36 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
       };
       reader.readAsText(file);
     };
-    
     input.click();
   }
 
-  // === Toggle painel ===
+  // Toggle painel
   function togglePanel() {
     const panel = document.getElementById('tws-panel');
     if (!panel) return;
-
     panelOpen = !panelOpen;
     panel.style.display = panelOpen ? 'block' : 'none';
     localStorage.setItem(PANEL_STATE_KEY, panelOpen ? '1' : '0');
   }
 
-  // === Criar interface ===
+  // Criar UI (botão + painel)
   function createUI() {
-    // Remover se já existe
     let existing = document.getElementById('tws-panel');
     if (existing) existing.remove();
-
     existing = document.getElementById('tws-toggle-btn');
     if (existing) existing.remove();
 
-    // Botão toggle
     const toggleBtn = document.createElement('button');
     toggleBtn.id = 'tws-toggle-btn';
     toggleBtn.innerHTML = '📅';
     toggleBtn.title = 'TW Scheduler';
-    toggleBtn.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      z-index: 99999;
-      padding: 8px 12px;
-      background: #8B4513;
-      color: white;
-      border: 2px solid #654321;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 18px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    `;
+    toggleBtn.style.cssText = `position: fixed; top: 10px; right: 10px; z-index: 99999; padding: 8px 12px; background: #8B4513; color: white; border: 2px solid #654321; border-radius: 6px; cursor: pointer; font-size: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);`;
     toggleBtn.onclick = togglePanel;
     document.body.appendChild(toggleBtn);
 
-    // Painel principal
     const panel = document.createElement('div');
     panel.id = 'tws-panel';
-    panel.style.cssText = `
-      position: fixed;
-      top: 60px;
-      right: 10px;
-      width: 90%;
-      max-width: 1000px;
-      max-height: 80vh;
-      background: #F4E4C1;
-      border: 3px solid #8B4513;
-      border-radius: 8px;
-      padding: 15px;
-      z-index: 99998;
-      overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      font-family: Arial, sans-serif;
-      display: none;
-    `;
-
+    panel.style.cssText = `position: fixed; top: 60px; right: 10px; width: 90%; max-width: 1000px; max-height: 80vh; background: #F4E4C1; border: 3px solid #8B4513; border-radius: 8px; padding: 15px; z-index: 99998; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.4); font-family: Arial, sans-serif; display: none;`;
     panel.innerHTML = `
       <div style="margin-bottom: 15px;">
         <h2 style="margin: 0 0 10px 0; color: #8B4513;">⚔️ Agendador TW (6.0)</h2>
@@ -554,9 +351,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.addManual()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 BBCode</button>
           <button onclick="TWS_Panel.testSend()" style="padding: 6px 12px; background: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">🔥 Testar Envio</button>
-
           <button onclick="TWS_Panel.Farm()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">🌾 Farm</button>          
-          
           <button onclick="TWS_Panel.clearCompleted()" style="padding: 6px 12px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding: 6px 12px; background: #FF6F00; color: white; border: none; border-radius: 4px; cursor: pointer;">⏳ Limpar Pendentes</button>
           <button onclick="TWS_Panel.clearAll()" style="padding: 6px 12px; background: #D32F2F; color: white; border: none; border-radius: 4px; cursor: pointer;">🚫 Limpar Tudo</button>
@@ -565,10 +360,8 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
         </div>
       </div>
 
-      <!-- ✅ NOVO: Dashboard -->
       <div id="tws-dashboard" style="margin-bottom: 20px;"></div>
 
-      <!-- Tabela de detalhes -->
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; background: white; font-size: 12px;">
           <thead>
@@ -586,30 +379,24 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
         </table>
       </div>
     `;
-
     document.body.appendChild(panel);
 
-    // Restaurar estado
     const savedState = localStorage.getItem(PANEL_STATE_KEY);
     panelOpen = savedState === '1';
     panel.style.display = panelOpen ? 'block' : 'none';
 
-    // Iniciar scheduler e renderizar
+    // Start scheduler e render
     startScheduler();
     renderTable();
 
-    // ✅ Limpar interval anterior
     if (updateInterval) clearInterval(updateInterval);
-    
-    // Atualizar a cada segundo
     updateInterval = setInterval(renderTable, 1000);
 
-    // ✅ Remover listeners antigos
     window.removeEventListener('tws-schedule-updated', renderTable);
     window.addEventListener('tws-schedule-updated', renderTable);
   }
 
-  // === Expor API global ===
+  // API global do painel
   window.TWS_Panel = {
     createUI,
     renderTable,
@@ -627,37 +414,18 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     togglePanel
   };
 
-  // === Inicializar ===
+  // Inicializar UI
   createUI();
-  console.log('[TW Scheduler Frontend] ✅ Carregado com Dashboard! (v2.0)');
-  
+  console.log('[TW Scheduler Frontend] ✅ Carregado com Dashboard! (v2.0 - status unificado)');
+
   setTimeout(() => {
-    if (!window.TWS_Modal) {
-      console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
-    }
-    
-    if (!window.TWS_BBCodeModal) {
-      console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
-    }
-    
-    if (!window.TWS_TestModal) {
-      console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
-    }
-
-    if (!window.TWS_FarmInteligente) {
-      console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
-    } else {
-      console.log('[TW Scheduler] ✅ Modal de Farm pronto!');
-    }
-
-
-    
+    if (!window.TWS_Modal) console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
+    else console.log('[TW Scheduler] ✅ Modal de Adicionar pronto!');
+    if (!window.TWS_BBCodeModal) console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
+    else console.log('[TW Scheduler] ✅ Modal de BBCode pronto!');
+    if (!window.TWS_TestModal) console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
+    else console.log('[TW Scheduler] ✅ Modal de Teste pronto!');
+    if (!window.TWS_FarmInteligente) console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
+    else console.log('[TW Scheduler] ✅ Modal de Farm pronto!');
   }, 100);
 })();
-
