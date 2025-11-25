@@ -216,78 +216,85 @@
   }
 
   // === Renderiza tabela de agendamentos ===
-  function renderTable() {
-    const tbody = document.getElementById('tws-tbody');
-    if (!tbody) return;
 
-    const list = getList();
-    tbody.innerHTML = '';
+function renderTable() {
+  const tbody = document.getElementById('tws-tbody');
+  if (!tbody) return;
 
-    if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
-      return;
-    }
+  const list = getList();
+  tbody.innerHTML = '';
 
-    const now = Date.now();
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
+    renderDashboard();
+    return;
+  }
 
-    list.forEach((cfg, idx) => {
-      const tr = document.createElement('tr');
-      
-      // Status visual
-      let statusIcon = '⏳';
-      let statusColor = '#fff';
-      let statusText = 'Agendado';
-      
-      if (cfg.done) {
-        if (cfg.success) {
+  const now = Date.now();
+
+  list.forEach((cfg, idx) => {
+    const tr = document.createElement('tr');
+
+    // Status visual atualizado
+    let statusIcon = '⏳';
+    let statusColor = '#fff';
+    let statusText = cfg.info || 'Agendado';
+
+    if (cfg.done) {
+      if (cfg.success) {
+        statusIcon = '✅';
+        statusColor = '#90EE90';
+      } else {
+        statusIcon = '❌';
+        statusColor = '#FFB6C1';
+        statusText = cfg.info || cfg.error || 'Falha';
+      }
+    } else {
+      const t = parseDateTimeToMs(cfg.datetime);
+      if (t && !isNaN(t)) {
+        const diff = t - now;
+        if (diff > 0) {
+          const seconds = Math.ceil(diff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          statusText = `${minutes}:${secs.toString().padStart(2,'0')}`;
+          statusIcon = '🕒';
+          statusColor = '#FFF9C4';
+        } else if (diff > -10000) {
+          statusIcon = '🔥';
+          statusColor = '#FFD700';
+          statusText = 'Executando...';
+        } else if (cfg.info === 'Enviado') {
           statusIcon = '✅';
           statusColor = '#90EE90';
           statusText = 'Enviado';
-        } else {
-          statusIcon = '❌';
-          statusColor = '#FFB6C1';
-          statusText = cfg.error || 'Erro';
-        }
-      } else {
-        const t = parseDateTimeToMs(cfg.datetime);
-        if (t && !isNaN(t)) {
-          const diff = t - now;
-          if (diff > 0) {
-            const seconds = Math.ceil(diff / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            statusText = `${minutes}:${secs.toString().padStart(2, '0')}`;
-            statusIcon = '🕒';
-          } else if (diff > -10000) {
-            statusIcon = '🔥';
-            statusColor = '#FFD700';
-            statusText = 'Executando...';
-          }
         }
       }
+    }
 
-      tr.style.backgroundColor = statusColor;
-      tr.innerHTML = `
-        <td style="text-align:center;">${statusIcon}</td>
-        <td>${cfg.origem || cfg.origemId || '?'}</td>
-        <td>${cfg.alvo || '?'}</td>
-        <td style="font-size:11px;">${cfg.datetime || '?'}</td>
-        <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u] || 0}`).join(' ')}</td>
-        <td style="text-align:center;font-size:11px;">${statusText}</td>
-        <td style="text-align:center;">
-          ${cfg.done ? 
-            `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
-            `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`
-          }
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
+    tr.style.backgroundColor = statusColor;
+    tr.innerHTML = `
+      <td style="text-align:center;">${statusIcon}</td>
+      <td>${cfg.origem || cfg.origemId || '?'}</td>
+      <td>${cfg.alvo || '?'}</td>
+      <td style="font-size:11px;">${cfg.datetime || '?'}</td>
+      <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u] || 0}`).join(' ')}</td>
+      <td style="text-align:center;font-size:11px;">${statusText}</td>
+      <td style="text-align:center;">
+        ${cfg.done ? 
+          `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
+          `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`
+        }
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 
-    // Renderizar dashboard também
-    renderDashboard();
-  }
+  renderDashboard();
+}
 
+
+  
   // === View detalhes de um agendamento executado ===
   function viewDetails(idx) {
     const list = getList();
@@ -660,6 +667,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     
   }, 100);
 })();
+
 
 
 
