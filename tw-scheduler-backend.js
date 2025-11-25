@@ -416,6 +416,7 @@ function startScheduler() {
     let hasChanges = false;
     const ataquesPorHorario = {};
 
+    // Agrupa ataques por horário que já devem ser disparados
     for (const a of list) {
       // Atualizar status finalizado
       if (a.done && a.success && a.status !== 'sent') {
@@ -437,41 +438,42 @@ function startScheduler() {
       if (!t || isNaN(t)) continue;
       const diff = t - now;
 
-      if (diff <= 0 && diff > -10000) {
+      if (diff <= 0 && diff > -10000) { // até 10s de atraso
         if (!ataquesPorHorario[a.datetime]) ataquesPorHorario[a.datetime] = [];
         ataquesPorHorario[a.datetime].push(a);
       }
     }
 
-    // Processar ataques por horário
+    // Processa ataques por horário
     for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      for (let i = 0; i < ataques.length; i++) {
-        const a = ataques[i];
+      // === MARCA TODOS COMO ENVIADOS IMEDIATAMENTE ===
+      ataques.forEach(a => {
         const fingerprint = getAttackFingerprint(a);
+        if (!a._id) a._id = generateUniqueId();
+        if (_executing.has(a._id) || _processedAttacks.has(fingerprint)) return;
 
-        if (_processedAttacks.has(fingerprint)) continue;
-        if (!a._id) { a._id = generateUniqueId(); hasChanges = true; }
-        if (_executing.has(a._id)) continue;
-
-        // === MARCA IMEDIATAMENTE COMO ENVIADO ===
         a.locked = true;
         a.status = 'executing';
         a.statusText = 'Enviado';
         a.executedAt = new Date().toISOString();
-        a.done = true; // marca como processado no frontend
+        a.done = true;
         _executing.add(a._id);
         hasChanges = true;
-        setList(list);
+      });
+      if (hasChanges) setList(list); // atualiza o frontend de uma vez
+
+      // Processa individualmente cada ataque
+      for (let i = 0; i < ataques.length; i++) {
+        const a = ataques[i];
+        const fingerprint = getAttackFingerprint(a);
 
         try {
           const success = await executeAttack(a);
 
           if (success) {
-            // ataque foi confirmado pelo jogo
             a.success = true;
-            _processedAttacks.add(fingerprint); // evita reenvio
+            _processedAttacks.add(fingerprint);
           } else {
-            // se falhar, corrige o status
             a.success = false;
             a.status = 'failed';
             a.statusText = 'Falhou (verificar manualmente)';
@@ -490,7 +492,7 @@ function startScheduler() {
           setList(list); // salva após cada tentativa
         }
 
-        // delay curto entre múltiplos ataques do mesmo horário
+        // Delay curto entre múltiplos ataques do mesmo horário
         if (i < ataques.length - 1) await sleep(250);
       }
     }
@@ -528,4 +530,5 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
