@@ -69,8 +69,8 @@ function parseCoord(s) {
   const x = parseInt(match[1], 10);
   const y = parseInt(match[2], 10);
   
-  // Validar limites do mapa (Tribal Wars: 0-499 em cada eixo)
-  if (x < 0 || x > 499 || y < 0 || y > 499) {
+  // Validar limites do mapa (Tribal Wars: 0-999 em cada eixo)
+  if (x < 0 || x > 999 || y < 0 || y > 999) {
     return null;
   }
   
@@ -878,6 +878,7 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
 
 
