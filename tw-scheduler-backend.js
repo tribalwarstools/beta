@@ -407,106 +407,100 @@
     return agendamentos;
   }
 
-  // === Scheduler (refatorado): marca processed SOMENTE após sucesso
-  function startScheduler() {
-    if (_schedulerInterval) clearInterval(_schedulerInterval);
-    _schedulerInterval = setInterval(async () => {
-      const list = getList();
-      const now = Date.now();
-      let hasChanges = false;
-      const ataquesPorHorario = {};
+  // === Scheduler ====//
+function startScheduler() {
+  if (_schedulerInterval) clearInterval(_schedulerInterval);
+  _schedulerInterval = setInterval(async () => {
+    const list = getList();
+    const now = Date.now();
+    let hasChanges = false;
+    const ataquesPorHorario = {};
 
-      for (const a of list) {
-        // Atualizar status textual coerente quando já finalizado
-        if (a.done && a.success && a.status !== 'sent') {
-          a.status = 'sent';
-          a.statusText = 'Enviado';
-          hasChanges = true;
-        }
-        if (a.done && !a.success && a.status !== 'failed') {
-          a.status = 'failed';
-          a.statusText = a.error ? `Falha: ${a.error}` : 'Falhou';
-          hasChanges = true;
-        }
+    for (const a of list) {
+      // Atualizar status finalizado
+      if (a.done && a.success && a.status !== 'sent') {
+        a.status = 'sent';
+        a.statusText = 'Enviado';
+        hasChanges = true;
+      }
+      if (a.done && !a.success && a.status !== 'failed') {
+        a.status = 'failed';
+        a.statusText = a.error ? `Falha: ${a.error}` : 'Falhou';
+        hasChanges = true;
+      }
 
-        // pular se já processado (somente se foi MARKED como sucesso)
+      // Ignorar ataques já processados ou travados
+      const fingerprint = getAttackFingerprint(a);
+      if (_processedAttacks.has(fingerprint) || a.locked || a.done) continue;
+
+      const t = parseDateTimeToMs(a.datetime);
+      if (!t || isNaN(t)) continue;
+      const diff = t - now;
+
+      if (diff <= 0 && diff > -10000) {
+        if (!ataquesPorHorario[a.datetime]) ataquesPorHorario[a.datetime] = [];
+        ataquesPorHorario[a.datetime].push(a);
+      }
+    }
+
+    // Processar ataques por horário
+    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+      for (let i = 0; i < ataques.length; i++) {
+        const a = ataques[i];
         const fingerprint = getAttackFingerprint(a);
-        if (_processedAttacks.has(fingerprint) || a.locked || a.done) continue;
 
-        const t = parseDateTimeToMs(a.datetime);
-        if (!t || isNaN(t)) continue;
-        const diff = t - now;
+        if (_processedAttacks.has(fingerprint)) continue;
+        if (!a._id) { a._id = generateUniqueId(); hasChanges = true; }
+        if (_executing.has(a._id)) continue;
 
-        // ataques para execução imediata (até 10s de atraso permitido)
-        if (diff <= 0 && diff > -10000) {
-          if (!ataquesPorHorario[a.datetime]) ataquesPorHorario[a.datetime] = [];
-          ataquesPorHorario[a.datetime].push(a);
-        }
-      }
+        // === MARCA IMEDIATAMENTE COMO ENVIADO ===
+        a.locked = true;
+        a.status = 'executing';
+        a.statusText = 'Enviado';
+        a.executedAt = new Date().toISOString();
+        a.done = true; // marca como processado no frontend
+        _executing.add(a._id);
+        hasChanges = true;
+        setList(list);
 
-      // processar agrupados
-      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-        for (let i = 0; i < ataques.length; i++) {
-          const a = ataques[i];
-          const fingerprint = getAttackFingerprint(a);
+        try {
+          const success = await executeAttack(a);
 
-          if (_processedAttacks.has(fingerprint)) continue;
-
-          if (!a._id) { a._id = generateUniqueId(); hasChanges = true; }
-          if (_executing.has(a._id)) continue;
-
-          // bloquear execução
-          a.locked = true;
-          a.status = 'locked';
-          a.statusText = 'Travado';
-          _executing.add(a._id);
-          hasChanges = true;
-          setList(list);
-
-          try {
-            a.status = 'executing';
-            a.statusText = 'Executando...';
-            hasChanges = true;
-
-            const success = await executeAttack(a);
-
-            a.done = true;
-            a.success = success;
-            a.executedAt = new Date().toISOString();
-            if (success) {
-              a.status = 'sent';
-              a.statusText = 'Enviado';
-              // marca processed SOMENTE em sucesso (evita reenvios duplicados)
-              _processedAttacks.add(fingerprint);
-            } else {
-              a.status = 'failed';
-              a.statusText = 'Falhou (confirmar manualmente)';
-            }
-            hasChanges = true;
-          } catch (err) {
-            a.done = true;
+          if (success) {
+            // ataque foi confirmado pelo jogo
+            a.success = true;
+            _processedAttacks.add(fingerprint); // evita reenvio
+          } else {
+            // se falhar, corrige o status
             a.success = false;
-            a.error = err.message;
             a.status = 'failed';
-            a.statusText = `Falha: ${err.message}`;
-            hasChanges = true;
-          } finally {
-            a.locked = false;
-            _executing.delete(a._id);
-            hasChanges = true;
-            // salvar após cada tentativa
-            setList(list);
+            a.statusText = 'Falhou (verificar manualmente)';
           }
-          // delay curto entre múltiplos ataques do mesmo horário
-          if (i < ataques.length - 1) await sleep(250);
+          hasChanges = true;
+        } catch (err) {
+          a.success = false;
+          a.error = err.message;
+          a.status = 'failed';
+          a.statusText = `Falha: ${err.message}`;
+          hasChanges = true;
+        } finally {
+          a.locked = false;
+          _executing.delete(a._id);
+          hasChanges = true;
+          setList(list); // salva após cada tentativa
         }
+
+        // delay curto entre múltiplos ataques do mesmo horário
+        if (i < ataques.length - 1) await sleep(250);
       }
+    }
 
-      if (hasChanges) setList(list);
-    }, 1000);
+    if (hasChanges) setList(list);
+  }, 1000);
 
-    console.log('[TWS_Backend] Scheduler iniciado (status unificado)');
-  }
+  console.log('[TWS_Backend] Scheduler iniciado (status instantâneo)');
+}
+
 
   // === Export API ===
   window.TWS_Backend = {
@@ -534,3 +528,4 @@
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
