@@ -418,7 +418,7 @@ function startScheduler() {
 
     // Agrupa ataques por horário que já devem ser disparados
     for (const a of list) {
-      // Atualizar status finalizado
+      // Atualizar status finalizado (ataques confirmados)
       if (a.done && a.success && a.status !== 'sent') {
         a.status = 'sent';
         a.statusText = 'Enviado';
@@ -446,23 +446,22 @@ function startScheduler() {
 
     // Processa ataques por horário
     for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      // === MARCA TODOS COMO ENVIADOS IMEDIATAMENTE ===
+      // Marca todos como "Enviado" no frontend imediatamente
       ataques.forEach(a => {
-        const fingerprint = getAttackFingerprint(a);
         if (!a._id) a._id = generateUniqueId();
+        const fingerprint = getAttackFingerprint(a);
         if (_executing.has(a._id) || _processedAttacks.has(fingerprint)) return;
 
         a.locked = true;
         a.status = 'executing';
         a.statusText = 'Enviado';
         a.executedAt = new Date().toISOString();
-        a.done = true;
         _executing.add(a._id);
         hasChanges = true;
       });
-      if (hasChanges) setList(list); // atualiza o frontend de uma vez
+      if (hasChanges) setList(list);
 
-      // Processa individualmente cada ataque
+      // Executa ataques individualmente e atualiza com sucesso ou falha
       for (let i = 0; i < ataques.length; i++) {
         const a = ataques[i];
         const fingerprint = getAttackFingerprint(a);
@@ -470,9 +469,12 @@ function startScheduler() {
         try {
           const success = await executeAttack(a);
 
+          a.done = true; // só marca como processado após execução
           if (success) {
             a.success = true;
             _processedAttacks.add(fingerprint);
+            a.status = 'sent';
+            a.statusText = 'Enviado';
           } else {
             a.success = false;
             a.status = 'failed';
@@ -480,6 +482,7 @@ function startScheduler() {
           }
           hasChanges = true;
         } catch (err) {
+          a.done = true;
           a.success = false;
           a.error = err.message;
           a.status = 'failed';
@@ -502,6 +505,7 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Scheduler iniciado (status instantâneo)');
 }
+
 
 
   // === Export API ===
@@ -530,5 +534,6 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
