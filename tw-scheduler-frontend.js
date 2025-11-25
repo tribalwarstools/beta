@@ -107,65 +107,69 @@
   // =========================
   // TABELA
   // =========================
+
   function renderTable() {
-    const tbody = document.getElementById('tws-tbody');
-    if (!tbody) return;
-    const list = getList();
-    tbody.innerHTML = '';
+  const tbody = document.getElementById('tws-tbody');
+  if (!tbody) return;
+  const list = getList();
+  tbody.innerHTML = '';
 
-    if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
-      renderDashboard();
-      return;
-    }
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:15px;">Nenhum agendamento</td></tr>';
+    renderDashboard();
+    return;
+  }
 
-    list.forEach((cfg, idx) => {
-      const tr = document.createElement('tr');
-let statusKey, statusText;
+  list.forEach((cfg, idx) => {
+    const tr = document.createElement('tr');
+    let statusKey, statusText;
 
-if(cfg.done) {
-    if(cfg.success) {
+    // === STATUS AJUSTADO ===
+    if(cfg.done && cfg.success) {
         statusKey = 'sent';
-        statusText = 'Enviado';
-    } else {
+        statusText = '✅ Enviado';
+    } else if(cfg.done && !cfg.success && cfg.status === 'failed') {
         statusKey = 'failed';
-        statusText = cfg.error ? `Falha: ${cfg.error}` : 'Falhou';
+        statusText = cfg.error ? `❌ Falha: ${cfg.error}` : '❌ Falhou';
+    } else if(cfg.done && cfg.status === 'executing') {
+        statusKey = 'executing';
+        statusText = '🔥 Enviando...';
+    } else if(cfg.locked) {
+        statusKey = 'locked';
+        statusText = '⏳ Travado';
+    } else {
+        statusKey = 'scheduled';
+        statusText = '⏳ Agendado';
     }
-} else if(cfg.locked) {
-    statusKey = 'locked';
-    statusText = 'Travado';
-} else {
-    statusKey = 'scheduled';
-    statusText = 'Agendado';
+
+    // === COR DE FUNDO POR STATUS ===
+    let background = '#fff';
+    if (statusKey === 'sent') background = '#e8f5e9';
+    else if (statusKey === 'failed') background = '#fff0f0';
+    else if (statusKey === 'locked') background = '#fff8e1';
+    else if (statusKey === 'executing') background = '#fff3e0';
+
+    tr.style.backgroundColor = background;
+
+    tr.innerHTML = `
+      <td style="text-align:center;">${statusText.includes('✅') ? '✅' : statusText.includes('❌') ? '❌' : statusKey === 'executing' ? '🔥' : '⏳'}</td>
+      <td>${cfg.origem || cfg.origemId || '?'}</td>
+      <td>${cfg.alvo || '?'}</td>
+      <td style="font-size:11px;">${cfg.datetime || '?'}</td>
+      <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u]||0}`).join(' ')}</td>
+      <td style="text-align:center;font-size:11px;">${statusText}</td>
+      <td style="text-align:center;">
+        ${cfg.done ? 
+          `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
+          `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderDashboard();
 }
 
-
-      let background = '#fff';
-      if (statusKey === 'sent') background = '#e8f5e9';
-      else if (statusKey === 'failed') background = '#fff0f0';
-      else if (statusKey === 'locked') background = '#fff8e1';
-      else if (statusKey === 'executing') background = '#fff3e0';
-
-      tr.style.backgroundColor = background;
-
-      tr.innerHTML = `
-        <td style="text-align:center;">${statusKey === 'sent' ? '✅' : statusKey === 'failed' ? '❌' : statusKey === 'executing' ? '🔥' : '⏳'}</td>
-        <td>${cfg.origem || cfg.origemId || '?'}</td>
-        <td>${cfg.alvo || '?'}</td>
-        <td style="font-size:11px;">${cfg.datetime || '?'}</td>
-        <td style="font-size:11px;">${TROOP_LIST.map(u => `${u}:${cfg[u]||0}`).join(' ')}</td>
-        <td style="text-align:center;font-size:11px;">${statusText}</td>
-        <td style="text-align:center;">
-          ${cfg.done ? 
-            `<button onclick="TWS_Panel.viewDetails(${idx})" style="font-size:10px;padding:2px 6px;">📋</button>` :
-            `<button onclick="TWS_Panel.removeItem(${idx})" style="font-size:10px;padding:2px 6px;">🗑️</button>`}
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    renderDashboard();
-  }
 
   // =========================
   // FUNÇÕES DE AÇÃO
@@ -389,5 +393,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
 
