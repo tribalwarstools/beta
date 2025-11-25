@@ -121,8 +121,24 @@
 
     list.forEach((cfg, idx) => {
       const tr = document.createElement('tr');
-      const statusText = cfg.statusText || (cfg.done ? (cfg.success ? 'Enviado' : (cfg.error ? `Falha: ${cfg.error}` : 'Falhou')) : 'Agendado');
-      const statusKey = cfg.status || (cfg.done ? (cfg.success ? 'sent' : 'failed') : 'scheduled');
+let statusKey, statusText;
+
+if(cfg.done) {
+    if(cfg.success) {
+        statusKey = 'sent';
+        statusText = 'Enviado';
+    } else {
+        statusKey = 'failed';
+        statusText = cfg.error ? `Falha: ${cfg.error}` : 'Falhou';
+    }
+} else if(cfg.locked) {
+    statusKey = 'locked';
+    statusText = 'Travado';
+} else {
+    statusKey = 'scheduled';
+    statusText = 'Agendado';
+}
+
 
       let background = '#fff';
       if (statusKey === 'sent') background = '#e8f5e9';
@@ -373,4 +389,5 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
