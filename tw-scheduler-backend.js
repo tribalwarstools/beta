@@ -697,7 +697,7 @@ if (confirmForm) {
   // === Scheduler ===
 function startScheduler() {
   if (_schedulerInterval) clearInterval(_schedulerInterval);
-  
+
   _schedulerInterval = setInterval(async () => {
     const list = getList();
     const now = Date.now();
@@ -705,30 +705,30 @@ function startScheduler() {
     let hasChanges = false;
 
     const ataquesPorHorario = {};
-    
+
     for (const a of list) {
       const fingerprint = getAttackFingerprint(a);
 
-      // ✅ CORREÇÃO: atualizar status de ataques já executados
+      // ✅ Atualizar status de ataques já concluídos
       if (a.done && a.success && a.info !== 'Enviado') {
         a.info = 'Enviado';
         hasChanges = true;
       }
 
-      // ✅ Pular ataques já processados
-      if (_processedAttacks.has(fingerprint)) continue;
-      if (a.done || a.locked) continue;
-      
+      // ✅ Ignorar ataques já processados ou bloqueados
+      if (_processedAttacks.has(fingerprint) || a.done || a.locked) continue;
+
       const t = parseDateTimeToMs(a.datetime);
       if (!t || isNaN(t)) continue;
-      
+
       const diff = t - now;
-      
-      // Agrupar ataques do mesmo horário
-      if (diff <= 0 && diff > -10000) {
+
+      // Agrupar ataques cujo horário passou (ou quase passou)
+      if (diff <= 0) {
         if (!ataquesPorHorario[a.datetime]) ataquesPorHorario[a.datetime] = [];
         ataquesPorHorario[a.datetime].push(a);
-      } else if (diff > 0) {
+      } else {
+        // Mostrar contagem regressiva
         const seconds = Math.ceil(diff / 1000);
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -736,10 +736,10 @@ function startScheduler() {
       }
     }
 
-    // Processar ataques por horário
+    // Processar ataques agrupados por horário
     for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
       msgs.push(`🔥 Executando ${ataques.length} ataque(s)...`);
-      
+
       for (let i = 0; i < ataques.length; i++) {
         const a = ataques[i];
         const fingerprint = getAttackFingerprint(a);
@@ -748,7 +748,7 @@ function startScheduler() {
         if (!a._id) { a._id = generateUniqueId(); hasChanges = true; }
         if (_executing.has(a._id)) continue;
 
-        // Marcar como processado e bloquear
+        // Marcar como processado e bloquear execução
         _processedAttacks.add(fingerprint);
         a.locked = true;
         _executing.add(a._id);
@@ -756,6 +756,7 @@ function startScheduler() {
         setList(list);
 
         try {
+          // Executa o ataque e marca como enviado
           const success = await executeAttack(a);
           a.done = true;
           a.success = success;
@@ -774,18 +775,22 @@ function startScheduler() {
           hasChanges = true;
         }
 
+        // Pequena pausa entre ataques do mesmo horário
         if (i < ataques.length - 1) await sleep(200);
       }
     }
 
+    // Atualizar lista no backend se houver mudanças
     if (hasChanges) setList(list);
 
+    // Atualizar status visual no frontend
     const status = document.getElementById('tws-status');
     if (status) status.innerHTML = msgs.length ? msgs.join('<br>') : 'Sem agendamentos ativos.';
   }, 1000);
 
   console.log('[TWS_Backend] Scheduler iniciado (status automático corrigido)');
 }
+
 
 
   // === Importar de BBCode ===
@@ -869,6 +874,7 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado com sucesso (v2.3 - Anti-Duplicação ULTRA)');
 })();
+
 
 
 
