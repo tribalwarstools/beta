@@ -408,103 +408,283 @@
   }
 
   // === Scheduler ====//
+
+
+  // === SCHEDULER MELHORADO - Versão 2.0 ===
+
+// ═════════════════════════════════════════════════════════
+// ✅ #1 LIMPEZA DE MEMÓRIA (Novo)
+// ═════════════════════════════════════════════════════════
+
+const _processedAttacksWithTTL = new Map(); // timestamp → fingerprint
+const PROCESSED_ATTACKS_TTL = 86400000; // 24 horas em ms
+
+function cleanupProcessedAttacks() {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [timestamp, fingerprint] of _processedAttacksWithTTL.entries()) {
+    if (now - timestamp > PROCESSED_ATTACKS_TTL) {
+      _processedAttacksWithTTL.delete(timestamp);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`[Scheduler] Limpeza: ${cleaned} fingerprints antigos removidos (${_processedAttacksWithTTL.size} restantes)`);
+  }
+}
+
+function isAttackProcessed(fingerprint) {
+  return _processedAttacksWithTTL.has(fingerprint);
+}
+
+function markAttackProcessed(fingerprint) {
+  _processedAttacksWithTTL.set(Date.now(), fingerprint);
+}
+
+// ═════════════════════════════════════════════════════════
+// ✅ #2 MONITORAMENTO DE PERFORMANCE (Novo)
+// ═════════════════════════════════════════════════════════
+
+const SchedulerMetrics = {
+  cycleStart: null,
+  cycleEnd: null,
+  executionsThisCycle: 0,
+  successCount: 0,
+  failureCount: 0,
+  lastCycleDuration: 0,
+
+  start() {
+    this.cycleStart = Date.now();
+    this.executionsThisCycle = 0;
+    this.successCount = 0;
+    this.failureCount = 0;
+  },
+
+  recordExecution(success) {
+    this.executionsThisCycle++;
+    if (success) this.successCount++;
+    else this.failureCount++;
+  },
+
+  end() {
+    this.cycleEnd = Date.now();
+    this.lastCycleDuration = this.cycleEnd - this.cycleStart;
+    
+    if (this.executionsThisCycle > 0) {
+      const taxa = ((this.successCount / this.executionsThisCycle) * 100).toFixed(1);
+      console.log(
+        `[Scheduler] Ciclo concluído: ` +
+        `${this.executionsThisCycle} exec | ` +
+        `${this.successCount}✅ ${this.failureCount}❌ | ` +
+        `${taxa}% taxa de sucesso | ` +
+        `${this.lastCycleDuration}ms`
+      );
+    }
+  },
+
+  getStats() {
+    return {
+      lastCycleDuration: this.lastCycleDuration,
+      successCount: this.successCount,
+      failureCount: this.failureCount,
+      successRate: this.executionsThisCycle > 0 
+        ? ((this.successCount / this.executionsThisCycle) * 100).toFixed(1) 
+        : 0
+    };
+  }
+};
+
+// ═════════════════════════════════════════════════════════
+// ✅ #3 SCHEDULER MELHORADO (Principal)
+// ═════════════════════════════════════════════════════════
+
 function startScheduler() {
   if (_schedulerInterval) clearInterval(_schedulerInterval);
+  
+  // Cleanup a cada 6 horas
+  let cleanupCounter = 0;
+  
   _schedulerInterval = setInterval(async () => {
+    SchedulerMetrics.start();
+    
     const list = getList();
     const now = Date.now();
-    let hasChanges = false;
     const ataquesPorHorario = {};
+    let needsSave = false;
 
-    // Agrupa ataques por horário que já devem ser disparados
+    // ┌─ FASE 1: AGRUPAMENTO ─┐
+    // Detectar ataques que devem ser executados AGORA
+    
     for (const a of list) {
-      // Atualizar status finalizado (ataques confirmados)
-      if (a.done && a.success && a.status !== 'sent') {
-        a.status = 'sent';
-        a.statusText = 'Enviado';
-        hasChanges = true;
-      }
-      if (a.done && !a.success && a.status !== 'failed') {
-        a.status = 'failed';
-        a.statusText = a.error ? `Falha: ${a.error}` : 'Falhou';
-        hasChanges = true;
+      // Skip se já está travado ou concluído
+      if (a.locked || a.done) {
+        continue;
       }
 
-      // Ignorar ataques já processados ou travados
-      const fingerprint = getAttackFingerprint(a);
-      if (_processedAttacks.has(fingerprint) || a.locked || a.done) continue;
-
+      // Parse datetime
       const t = parseDateTimeToMs(a.datetime);
-      if (!t || isNaN(t)) continue;
+      if (!t || isNaN(t)) {
+        console.warn(`[Scheduler] Datetime inválido: ${a.datetime}`);
+        continue;
+      }
+
       const diff = t - now;
 
-      if (diff <= 0 && diff > -10000) { // até 10s de atraso
-        if (!ataquesPorHorario[a.datetime]) ataquesPorHorario[a.datetime] = [];
+      // Janela de execução: até 10s após o horário agendado
+      if (diff <= 0 && diff > -10000) {
+        // Agrupar por horário para evitar explosão simultânea
+        if (!ataquesPorHorario[a.datetime]) {
+          ataquesPorHorario[a.datetime] = [];
+        }
         ataquesPorHorario[a.datetime].push(a);
       }
     }
 
-    // Processa ataques por horário
-    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      // Marca todos como "Enviado" no frontend imediatamente
-      ataques.forEach(a => {
-        if (!a._id) a._id = generateUniqueId();
-        const fingerprint = getAttackFingerprint(a);
-        if (_executing.has(a._id) || _processedAttacks.has(fingerprint)) return;
+    // ┌─ FASE 2: MARCAÇÃO ─┐
+    // Marcar ataques como "em execução"
+    
+    const ataquesPendentes = Object.values(ataquesPorHorario).flat();
+    
+    if (ataquesPendentes.length > 0) {
+      ataquesPendentes.forEach(a => {
+        // ✅ Proteção: skip se já está rodando
+        if (_executing.has(a._id)) {
+          console.warn(`[Scheduler] Ataque já em execução: ${a._id}`);
+          return;
+        }
 
         a.locked = true;
         a.status = 'executing';
-        a.statusText = 'Enviado';
+        a.statusText = 'Enviando...';
         a.executedAt = new Date().toISOString();
         _executing.add(a._id);
-        hasChanges = true;
+        needsSave = true;
       });
-      if (hasChanges) setList(list);
 
-      // Executa ataques individualmente e atualiza com sucesso ou falha
-      for (let i = 0; i < ataques.length; i++) {
-        const a = ataques[i];
+      // Salvar estado de MARCAÇÃO
+      if (needsSave) {
+        setList(list);
+      }
+    }
+
+    // ┌─ FASE 3: EXECUÇÃO ─┐
+    // Executar sequencialmente por grupo de horário
+    
+    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+      for (const a of ataques) {
+        // ✅ Double-check: skip se já foi finalizado
+        if (a.done) {
+          continue;
+        }
+
+        // ✅ Calcular fingerprint para evitar reprocessamento
         const fingerprint = getAttackFingerprint(a);
-
+        
         try {
+          // Executar o ataque
           const success = await executeAttack(a);
 
-          a.done = true; // só marca como processado após execução
+          // Registrar resultado
+          a.done = true;
+          a.success = success;
+          
           if (success) {
-            a.success = true;
-            _processedAttacks.add(fingerprint);
+            markAttackProcessed(fingerprint);
             a.status = 'sent';
-            a.statusText = 'Enviado';
+            a.statusText = '✅ Enviado';
+            SchedulerMetrics.recordExecution(true);
           } else {
-            a.success = false;
             a.status = 'failed';
-            a.statusText = 'Falhou (verificar manualmente)';
+            a.statusText = '❌ Falhou (verificar manualmente)';
+            SchedulerMetrics.recordExecution(false);
           }
-          hasChanges = true;
+
         } catch (err) {
+          // Erro na execução
           a.done = true;
           a.success = false;
           a.error = err.message;
           a.status = 'failed';
-          a.statusText = `Falha: ${err.message}`;
-          hasChanges = true;
+          a.statusText = `❌ Falha: ${err.message}`;
+          SchedulerMetrics.recordExecution(false);
+
+          console.error(
+            `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
+            err.message
+          );
+
         } finally {
+          // ✅ Sempre desbloquear
           a.locked = false;
           _executing.delete(a._id);
-          hasChanges = true;
-          setList(list); // salva após cada tentativa
+          
+          // Salvar após cada execução
+          setList(list);
         }
 
-        // Delay curto entre múltiplos ataques do mesmo horário
-        if (i < ataques.length - 1) await sleep(250);
+        // Delay entre ataques do mesmo horário (evita sobrecarga)
+        // ✅ Somente se não for o último
+        if (ataques.indexOf(a) < ataques.length - 1) {
+          await sleep(250);
+        }
       }
     }
 
-    if (hasChanges) setList(list);
-  }, 1000);
+    // ┌─ FASE 4: LIMPEZA ─┐
+    // Cleanup periódico
+    
+    cleanupCounter++;
+    if (cleanupCounter >= 21600) { // ~6 horas em ciclos de 1s
+      cleanupProcessedAttacks();
+      cleanupCounter = 0;
+    }
 
-  console.log('[TWS_Backend] Scheduler iniciado (status instantâneo)');
+    // ┌─ MÉTRICAS ─┐
+    SchedulerMetrics.end();
+
+  }, 1000); // ✅ Pulsa a cada 1 segundo
+
+  console.log('[Scheduler] ✅ Iniciado (v2.0 - Melhorado com proteções)');
 }
+
+// ═════════════════════════════════════════════════════════
+// ✅ #4 FUNÇÕES DE DEBUG (Novas)
+// ═════════════════════════════════════════════════════════
+
+function getSchedulerStats() {
+  return {
+    executingCount: _executing.size,
+    processedCount: _processedAttacksWithTTL.size,
+    metrics: SchedulerMetrics.getStats(),
+    ttwlBudget: `${(_processedAttacksWithTTL.size * 100 / 1024).toFixed(2)} KB`
+  };
+}
+
+function dumpSchedulerState() {
+  const stats = getSchedulerStats();
+  console.table({
+    'Em Execução': stats.executingCount,
+    'Processados (24h)': stats.processedCount,
+    'Última Taxa': `${stats.metrics.successRate}%`,
+    'Último Ciclo': `${stats.metrics.lastCycleDuration}ms`,
+    'Memória': stats.ttwlBudget
+  });
+}
+
+// ═════════════════════════════════════════════════════════
+// ✅ EXPORTAR API
+// ═════════════════════════════════════════════════════════
+
+window.TWS_SchedulerDebug = {
+  getStats: getSchedulerStats,
+  dumpState: dumpSchedulerState,
+  getMetrics: () => SchedulerMetrics,
+  clearProcessed: () => _processedAttacksWithTTL.clear()
+};
+
+console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
 
 
@@ -534,6 +714,7 @@ function startScheduler() {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
