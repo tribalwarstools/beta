@@ -622,105 +622,164 @@ function enviarFarmAgora(farmId) {
   }
 
   // ✅ MONITOR COM CLEANUP AUTOMÁTICO
-  function monitorAgendamentosParaFarm() {
+function monitorAgendamentosParaFarm() {
     cleanupOrphanFarms();
     
     const lista = getList();
     const farms = getFarmList().filter(f => !f.paused && f.active !== false);
     
     farms.forEach(farm => {
-      if (farm.agendamentoBaseId >= lista.length) {
-          console.warn(`[Monitor] Índice inválido: ${farm.agendamentoBaseId}`);
-          FarmSyncManager.updateAndSync(farm.id, { active: false });
-          return;
-      }
-
-      const agendamentoBase = lista[farm.agendamentoBaseId];
-      
-      if (!agendamentoBase) {
-          console.warn(`[Monitor] Agendamento não encontrado: ${farm.id}`);
-          return;
-      }
-      
-      if (agendamentoBase.done && agendamentoBase.success) {
-        FarmLogger.log('CYCLE_COMPLETED', farm);
-        
-        farm.stats.totalRuns++;
-        farm.stats.successRuns++;
-        farm.stats.lastRun = new Date().toISOString();
-        
-        const now = new Date();
-        
-        try {
-          const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
-          const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
-          
-          let baseTime;
-          
-          if (agendamentoBase.executedAt) {
-            baseTime = new Date(agendamentoBase.executedAt);
-          } else {
-            const tempoIdaMs = travelTimeToTarget * 1000;
-            baseTime = new Date(now.getTime() + tempoIdaMs);
-          }
-          
-          const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-          let nextRunTime = new Date(baseTime.getTime() + (returnTime * 1000) + intervaloMs);
-          
-          const retornoEstimado = new Date(now.getTime() + (travelTimeToTarget * 1000) + (returnTime * 1000));
-          
-          if (nextRunTime < retornoEstimado) {
-            console.warn(`[Farm] Ajuste: próximo era antes do retorno`);
-            nextRunTime = new Date(retornoEstimado.getTime() + (farm.intervalo || 5) * 60000);
-          }
-          
-          const novoAgendamento = {
-            ...agendamentoBase,
-            datetime: formatDateTime(nextRunTime),
-            done: false,
-            success: false,
-            executedAt: null,
-            error: null
-          };
-          
-          lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
-          setList(lista);
-          
-          farm.nextRun = novoAgendamento.datetime;
-          farm.lastReturnTime = returnTime;
-          
-          const updatedFarms = getFarmList();
-          const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
-          if (farmIdx !== -1) {
-            updatedFarms[farmIdx] = farm;
-            setFarmList(updatedFarms);
-          }
-          
-          FarmLogger.log('NEXT_CYCLE', farm, { nextRun: novoAgendamento.datetime, travelTime: travelTimeToTarget, returnTime });
-          
-          window.dispatchEvent(new CustomEvent('tws-farm-updated'));
-          window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-          
-        } catch (error) {
-          console.error('[Farm] Erro no cálculo:', error);
-          FarmLogger.log('ERROR', farm, { error: error.message });
-          const nextRunTime = new Date(now.getTime() + 7200000);
-          const novoAgendamento = {
-            ...agendamentoBase,
-            datetime: formatDateTime(nextRunTime),
-            done: false,
-            success: false,
-            executedAt: null,
-            error: error.message
-          };
-          
-          lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
-          setList(lista);
+        if (farm.agendamentoBaseId >= lista.length) {
+            console.warn(`[Monitor] Índice inválido: ${farm.agendamentoBaseId}`);
+            FarmSyncManager.updateAndSync(farm.id, { active: false });
+            return;
         }
-      }
-    });
-  }
 
+        const agendamentoBase = lista[farm.agendamentoBaseId];
+        
+        if (!agendamentoBase) {
+            console.warn(`[Monitor] Agendamento não encontrado: ${farm.id}`);
+            return;
+        }
+        
+        // ✅ ALTERAÇÃO AQUI: Processa tanto sucesso quanto falha
+        if (agendamentoBase.done) {
+            FarmLogger.log('CYCLE_COMPLETED', farm, { 
+                success: agendamentoBase.success,
+                failedAttempts: farm.failedAttempts || 0
+            });
+            
+            farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
+            farm.stats.lastRun = new Date().toISOString();
+            
+            const now = new Date();
+            
+            try {
+                if (agendamentoBase.success) {
+                    // ✅ SUCESSO - Ciclo normal
+                    farm.stats.successRuns = (farm.stats.successRuns || 0) + 1;
+                    farm.failedAttempts = 0; // Resetar contador de falhas
+                    
+                    const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+                    const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
+                    
+                    let baseTime;
+                    
+                    if (agendamentoBase.executedAt) {
+                        baseTime = new Date(agendamentoBase.executedAt);
+                    } else {
+                        const tempoIdaMs = travelTimeToTarget * 1000;
+                        baseTime = new Date(now.getTime() + tempoIdaMs);
+                    }
+                    
+                    const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
+                    let nextRunTime = new Date(baseTime.getTime() + (returnTime * 1000) + intervaloMs);
+                    
+                    const retornoEstimado = new Date(now.getTime() + (travelTimeToTarget * 1000) + (returnTime * 1000));
+                    
+                    if (nextRunTime < retornoEstimado) {
+                        console.warn(`[Farm] Ajuste: próximo era antes do retorno`);
+                        nextRunTime = new Date(retornoEstimado.getTime() + (farm.intervalo || 5) * 60000);
+                    }
+                    
+                    const novoAgendamento = {
+                        ...agendamentoBase,
+                        datetime: formatDateTime(nextRunTime),
+                        done: false,
+                        success: false,
+                        executedAt: null,
+                        error: null
+                    };
+                    
+                    lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
+                    setList(lista);
+                    
+                    farm.nextRun = novoAgendamento.datetime;
+                    farm.lastReturnTime = returnTime;
+                    
+                    FarmLogger.log('NEXT_CYCLE_SUCCESS', farm, { 
+                        nextRun: farm.nextRun, 
+                        travelTime: travelTimeToTarget, 
+                        returnTime 
+                    });
+                    
+                } else {
+                    // ❌ FALHA - Tentativas escalonadas
+                    farm.failedAttempts = (farm.failedAttempts || 0) + 1;
+                    
+                    // 🎯 ESCALONAMENTO: 1min, 2min, 5min, depois pausa
+                    const retryIntervals = [1, 2, 5]; // minutos
+                    const maxAttempts = retryIntervals.length;
+                    
+                    if (farm.failedAttempts <= maxAttempts) {
+                        const retryMinutes = retryIntervals[farm.failedAttempts - 1];
+                        const nextRunTime = new Date(now.getTime() + retryMinutes * 60000);
+                        
+                        const novoAgendamento = {
+                            ...agendamentoBase,
+                            datetime: formatDateTime(nextRunTime),
+                            done: false,
+                            success: false,
+                            executedAt: null,
+                            error: `Tentativa ${farm.failedAttempts}/${maxAttempts} - ${agendamentoBase.error || 'Falha desconhecida'}`
+                        };
+                        
+                        lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
+                        setList(lista);
+                        
+                        farm.nextRun = novoAgendamento.datetime;
+                        
+                        FarmLogger.log('RETRY_SCHEDULED', farm, { 
+                            attempt: farm.failedAttempts,
+                            nextRun: farm.nextRun,
+                            retryMinutes: retryMinutes
+                        });
+                        
+                        console.warn(`[Farm] ❌ Falha ${farm.failedAttempts}/${maxAttempts} - Reagendando para ${farm.nextRun}`);
+                        
+                    } else {
+                        // 🛑 MUITAS FALHAS - Pausar automaticamente
+                        farm.paused = true;
+                        farm.nextRun = "⏸️ PAUSADO - Muitas falhas consecutivas";
+                        
+                        const novoAgendamento = {
+                            ...agendamentoBase,
+                            done: false,
+                            success: false,
+                            error: `PAUSADO - ${maxAttempts} falhas consecutivas - ${agendamentoBase.error || 'Falha desconhecida'}`
+                        };
+                        
+                        lista.splice(farm.agendamentoBaseId, 1, novoAgendamento);
+                        setList(lista);
+                        
+                        FarmLogger.log('AUTO_PAUSED', farm, { 
+                            attempts: farm.failedAttempts,
+                            reason: 'Muitas falhas consecutivas'
+                        });
+                        
+                        console.error(`[Farm] 🛑 Pausado automaticamente após ${maxAttempts} falhas: ${farm.origem} → ${farm.alvo}`);
+                    }
+                }
+                
+                // ✅ ATUALIZAR FARM (em ambos os casos)
+                const updatedFarms = getFarmList();
+                const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
+                if (farmIdx !== -1) {
+                    updatedFarms[farmIdx] = farm;
+                    setFarmList(updatedFarms);
+                }
+                
+            } catch (error) {
+                console.error('[Farm] Erro no processamento:', error);
+                FarmLogger.log('PROCESS_ERROR', farm, { error: error.message });
+            }
+        }
+    });
+}
+
+
+//=======================
+  
   function renderFarmList() {
     const farms = getFarmList().filter(f => f.active !== false);
     const listaAgendamentos = getList();
