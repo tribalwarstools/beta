@@ -922,6 +922,7 @@
               </div>
 
               ${farm.failedAttempts ? `<div style="color: #FF6B6B; font-size: 10px; margin-top: 2px;">🔄 Tentativa ${farm.failedAttempts}/3</div>` : ''}
+              ${farm.paused && farm.failedAttempts >= 3 ? `<div style="color: #FF9800; font-size: 10px; margin-top: 2px;">⚠️ Pausado: ${farm.failedAttempts} falhas consecutivas</div>` : ''}
               
             </div>
             <div style="
@@ -1060,9 +1061,9 @@
 
       <!-- Cabeçalho -->
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
-        <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE v2.1</div>
+        <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE v2.2</div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com verificação de atrasos e tentativas escalonadas
+          Sistema automático com reset de tentativas e recuperação completa
         </div>
       </div>
 
@@ -1070,6 +1071,7 @@
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
         <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
           <strong>✨ MELHORIAS APLICADAS:</strong><br>
+          ✅ Reset automático de tentativas ao retomar farm pausado<br>
           ✅ Verificação de farms atrasados (evita horários no passado)<br>
           ✅ Tentativas escalonadas (1min, 2min, 5min)<br>
           ✅ Pausa automática após 3 falhas consecutivas<br>
@@ -1110,7 +1112,7 @@
 
       <!-- Rodapé -->
       <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        Farm Inteligente v2.1 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | Eventos: ${FarmLogger.history.length}
+        Farm Inteligente v2.2 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | Eventos: ${FarmLogger.history.length}
       </div>
     `;
 
@@ -1123,7 +1125,17 @@
         const farms = getFarmList();
         const farm = farms.find(f => f.id === id);
         if (farm) {
+          const estavaPausado = farm.paused;
           farm.paused = !farm.paused;
+          
+          // ✅ CORREÇÃO CRÍTICA: Reset de tentativas ao retomar farm pausado
+          if (estavaPausado && !farm.paused && farm.failedAttempts >= 3) {
+            farm.failedAttempts = 0; // 🆕 RESET do contador
+            farm.nextRun = "Calculando..."; // 🆕 Forçar novo cálculo
+            console.log(`[Farm] 🔄 Reset de tentativas ao retomar: ${farm.origem} → ${farm.alvo}`);
+            FarmLogger.log('RESET_ATTEMPTS', farm, { reason: 'Retomada manual após pausa automática' });
+          }
+          
           const lista = getList();
           const agendamento = lista[farm.agendamentoBaseId];
           if (agendamento) {
@@ -1421,7 +1433,7 @@
     
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado v2.1 - Com Verificação de Atrasos e Tentativas Escalonadas!');
+    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas e Recuperação Completa!');
   }
 
   if (document.readyState === 'loading') {
