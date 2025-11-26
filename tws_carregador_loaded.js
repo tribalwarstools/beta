@@ -11,6 +11,7 @@
         ],
 scripts: [
     { file: 'tw-scheduler-backend.js', check: 'TWS_Backend' },
+    { file: 'tw-scheduler-multitab-lock.js', check: 'TWS_MultiTabLock' },
     { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
     { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' },
     { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal' },
