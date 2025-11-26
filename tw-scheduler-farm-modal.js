@@ -875,6 +875,10 @@ function monitorAgendamentosParaFarm() {
               <div style="color: #888; font-size: 10px; margin-top: 1px;">
                 ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
               </div>
+
+          ${farm.failedAttempts ? `<div style="color: #FF6B6B; font-size: 10px; margin-top: 2px;">🔄 Tentativa
+          ${farm.failedAttempts}/3</div>` : ''}
+              
             </div>
             <div style="
               background: ${statusColor};
