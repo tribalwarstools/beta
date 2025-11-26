@@ -223,7 +223,7 @@
   }
 
   // ═════════════════════════════════════════════════════════
-  // ✅ #5 VALIDAÇÃO AO CRIAR FARM
+  // ✅ #5 VALIDAÇÃO AO CRIAR FARM (SEM VERIFICAÇÃO DE DUPLICATAS)
   // ═════════════════════════════════════════════════════════
 
   function validateFarmCreation(agendamento, intervalo) {
@@ -243,14 +243,10 @@
           errors.push(validation.error);
       }
 
-      const farms = getFarmList();
-      if (farms.some(f => 
-          f.origem === agendamento.origem && 
-          f.alvo === agendamento.alvo &&
-          !f.paused
-      )) {
-          errors.push('⚠️ Já existe um farm ativo com mesma origem/alvo');
-      }
+      // 🚫 REMOVIDO: Verificação de duplicatas
+      // ✅ AGORA PERMITIDO: Múltiplos farms no mesmo alvo
+      // ✅ AGORA PERMITIDO: Mesmas tropas, mesmo alvo
+      // ✅ AGORA PERMITIDO: Mesmo agendamento convertido múltiplas vezes
 
       return {
           valid: errors.length === 0,
@@ -259,7 +255,7 @@
   }
 
   // ═════════════════════════════════════════════════════════
-  // ✅ #6 FUNÇÃO ENVIAR AGORA (NOVA)
+  // ✅ #6 FUNÇÃO ENVIAR AGORA (SEM VERIFICAÇÕES DE DUPLICATAS)
   // ═════════════════════════════════════════════════════════
 
   function enviarFarmAgora(farmId) {
@@ -279,10 +275,8 @@
           return false;
       }
 
-      if (agendamento.locked) {
-          alert('⚠️ Este farm já está em processo de envio!');
-          return false;
-      }
+      // 🚫 REMOVIDO: Verificação de locked
+      // ✅ AGORA PERMITIDO: "Enviar Agora" sem verificações
 
       // ✅ CONFIRMAÇÃO
       if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediatamente.`)) {
@@ -419,7 +413,7 @@
   }
 
   // ═════════════════════════════════════════════════════════
-  // ✅ #7 VERIFICAÇÃO DE FARMS ATRASADOS (NOVA)
+  // ✅ #7 VERIFICAÇÃO DE FARMS ATRASADOS (SEM RESTRIÇÕES)
   // ═════════════════════════════════════════════════════════
 
   function verificarFarmsAtrasados() {
@@ -507,7 +501,7 @@
     localStorage.setItem('tws_farm_inteligente', JSON.stringify(list));
   }
 
-  // ✅ CONVERSÃO COM VALIDAÇÃO COMPLETA
+  // ✅ CONVERSÃO SEM VERIFICAÇÃO DE DUPLICATAS
   function convertToFarm(agendamentoIndex, intervalo = 5) {
     const lista = getList();
     
@@ -518,7 +512,7 @@
     
     const agendamento = lista[agendamentoIndex];
 
-    // ✅ VALIDAR ANTES DE CONVERTER
+    // ✅ VALIDAR APENAS DADOS BÁSICOS (SEM DUPLICATAS)
     const validation = validateFarmCreation(agendamento, intervalo);
     if (!validation.valid) {
         console.error('[Farm] Validação falhou:', validation.errors);
@@ -526,12 +520,8 @@
         return false;
     }
     
-    const farms = getFarmList();
-    const jaExiste = farms.find(f => f.agendamentoBaseId === agendamentoIndex);
-    if (jaExiste) {
-        console.warn('❌ Este agendamento já é um Farm Inteligente!');
-        return false;
-    }
+    // 🚫 REMOVIDO: Verificação se já existe farm para este agendamento
+    // ✅ AGORA PERMITIDO: Mesmo agendamento convertido múltiplas vezes
     
     if (agendamento.done) {
         agendamento.done = false;
@@ -567,6 +557,7 @@
         failedAttempts: 0
     };
     
+    const farms = getFarmList();
     farms.push(farm);
     setFarmList(farms);
     
@@ -575,7 +566,7 @@
     return true;
   }
 
-  // ✅ CONVERSÃO EM MASSA COM VALIDAÇÃO
+  // ✅ CONVERSÃO EM MASSA SEM RESTRIÇÕES
   function convertAgendamentosEmMassa(agendamentosIds, intervalo = 5) {
     const validation = validateIntervalo(intervalo);
     if (!validation.valid) {
@@ -669,7 +660,7 @@
     return convertAgendamentosEmMassa(agendamentosIds, intervalo);
   }
 
-  // ✅ MONITOR COM CLEANUP AUTOMÁTICO E VERIFICAÇÃO DE ATRASOS
+  // ✅ MONITOR SEM RESTRIÇÕES DE DUPLICATAS
   function monitorAgendamentosParaFarm() {
     cleanupOrphanFarms();
     
@@ -1077,7 +1068,12 @@
           ✅ Pausa automática após 3 falhas consecutivas<br>
           ✅ Distância Euclidiana correta para TW<br>
           ✅ Logging detalhado de eventos<br>
-          ✅ 🚀 BOTÃO "ENVIAR AGORA" para falhas
+          ✅ 🚀 BOTÃO "ENVIAR AGORA" para falhas<br>
+          <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>
+          ✅ Múltiplos farms no mesmo alvo<br>
+          ✅ Mesmas tropas, mesmo alvo<br>
+          ✅ Mesmo agendamento convertido múltiplas vezes<br>
+          ✅ "Enviar Agora" sem verificações
         </div>
 
         <!-- Botões de Conversão em Massa -->
