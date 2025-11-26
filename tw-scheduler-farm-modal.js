@@ -262,157 +262,162 @@
   // ✅ #6 FUNÇÃO ENVIAR AGORA (NOVA)
   // ═════════════════════════════════════════════════════════
 
-  function enviarFarmAgora(farmId) {
-      const farms = getFarmList();
-      const farm = farms.find(f => f.id === farmId);
-      
-      if (!farm) {
-          alert('❌ Farm não encontrado!');
-          return false;
-      }
+// ✅ FUNÇÃO ENVIAR AGORA (CORREÇÃO ESPECÍFICA)
+function enviarFarmAgora(farmId) {
+    const farms = getFarmList();
+    const farm = farms.find(f => f.id === farmId);
+    
+    if (!farm) {
+        alert('❌ Farm não encontrado!');
+        return false;
+    }
 
-      const lista = getList();
-      const agendamento = lista[farm.agendamentoBaseId];
-      
-      if (!agendamento) {
-          alert('❌ Agendamento base não encontrado!');
-          return false;
-      }
+    const lista = getList();
+    const agendamento = lista[farm.agendamentoBaseId];
+    
+    if (!agendamento) {
+        alert('❌ Agendamento base não encontrado!');
+        return false;
+    }
 
-      if (agendamento.locked) {
-          alert('⚠️ Este farm já está em processo de envio!');
-          return false;
-      }
+    if (agendamento.locked) {
+        alert('⚠️ Este farm já está em processo de envio!');
+        return false;
+    }
 
-      // ✅ CONFIRMAÇÃO
-      if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediatamente.`)) {
-          return false;
-      }
+    // ✅ CONFIRMAÇÃO
+    if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediatamente.`)) {
+        return false;
+    }
 
-      try {
-          // ✅ MARCAR COMO EXECUTANDO
-          agendamento.locked = true;
-          agendamento.status = 'executing';
-          agendamento.statusText = '🔥 Enviando Agora...';
-          
-          FarmLogger.log('MANUAL_SEND_ATTEMPT', farm);
-          
-          // ✅ EXECUTAR O ATAQUE
-          executeAttack(agendamento)
-              .then(success => {
-                  if (success) {
-                      // ✅ SUCESSO - Atualizar estados
-                      agendamento.done = true;
-                      agendamento.success = true;
-                      agendamento.executedAt = new Date().toISOString();
-                      agendamento.status = 'sent';
-                      agendamento.statusText = '✅ Enviado (Manual)';
-                      
-                      farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
-                      farm.stats.successRuns = (farm.stats.successRuns || 0) + 1;
-                      farm.stats.lastRun = new Date().toISOString();
-                      
-                      FarmLogger.log('MANUAL_SEND_SUCCESS', farm);
-                      alert(`✅ FARM ENVIADO COM SUCESSO!\n\n${farm.origem} → ${farm.alvo}`);
-                      
-                  } else {
-                      // ❌ FALHA
-                      agendamento.done = true;
-                      agendamento.success = false;
-                      agendamento.status = 'failed';
-                      agendamento.statusText = '❌ Falha (Manual)';
-                      agendamento.error = 'Falha no envio manual';
-                      
-                      farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
-                      farm.stats.lastRun = new Date().toISOString();
-                      
-                      FarmLogger.log('MANUAL_SEND_FAILED', farm);
-                      alert(`❌ FALHA NO ENVIO MANUAL!\n\nVerifique as tropas e tente novamente.`);
-                  }
-                  
-                  // ✅ SEMPRE LIBERAR O LOCK
-                  agendamento.locked = false;
-                  
-                  // ✅ ATUALIZAR PRÓXIMA EXECUÇÃO
-                  if (success && !farm.paused) {
-                      const now = new Date();
-                      const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
-                      const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
-                      
-                      const baseTime = new Date(agendamento.executedAt);
-                      const intervaloMs = (farm.intervalo || 5) * 60 * 1000;
-                      let nextRunTime = new Date(baseTime.getTime() + (returnTime * 1000) + intervaloMs);
-                      
-                      // ✅ ATUALIZAR DATETIME PARA PRÓXIMO CICLO
-                      agendamento.datetime = formatDateTime(nextRunTime);
-                      agendamento.done = false;
-                      agendamento.success = false;
-                      agendamento.executedAt = null;
-                      agendamento.error = null;
-                      
-                      farm.nextRun = agendamento.datetime;
-                      farm.lastReturnTime = returnTime;
-                      
-                      FarmLogger.log('MANUAL_NEXT_CYCLE', farm, { 
-                          nextRun: farm.nextRun,
-                          travelTime: travelTimeToTarget,
-                          returnTime 
-                      });
-                  }
-                  
-                  // ✅ SALVAR ALTERAÇÕES
-                  setList(lista);
-                  
-                  const updatedFarms = getFarmList();
-                  const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
-                  if (farmIdx !== -1) {
-                      updatedFarms[farmIdx] = farm;
-                      setFarmList(updatedFarms);
-                  }
-                  
-                  // ✅ ATUALIZAR UI
-                  window.dispatchEvent(new CustomEvent('tws-farm-updated'));
-                  window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-                  
-                  if (document.getElementById('farm-list-container')) {
-                      document.getElementById('farm-list-container').innerHTML = renderFarmList();
-                  }
-                  
-              })
-              .catch(error => {
-                  // ❌ ERRO NA EXECUÇÃO
-                  console.error('[Farm] Erro no envio manual:', error);
-                  
-                  agendamento.done = true;
-                  agendamento.success = false;
-                  agendamento.locked = false;
-                  agendamento.status = 'failed';
-                  agendamento.statusText = '❌ Erro (Manual)';
-                  agendamento.error = error.message;
-                  
-                  farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
-                  farm.stats.lastRun = new Date().toISOString();
-                  
-                  FarmLogger.log('MANUAL_SEND_ERROR', farm, { error: error.message });
-                  
-                  setList(lista);
-                  setFarmList(farms);
-                  
-                  alert(`❌ ERRO NO ENVIO MANUAL!\n\n${error.message}`);
-                  
-                  if (document.getElementById('farm-list-container')) {
-                      document.getElementById('farm-list-container').innerHTML = renderFarmList();
-                  }
-              });
-          
-          return true;
-          
-      } catch (error) {
-          console.error('[Farm] Erro no processo manual:', error);
-          alert(`❌ ERRO CRÍTICO: ${error.message}`);
-          return false;
-      }
-  }
+    try {
+        // ✅ MARCAR COMO EXECUTANDO
+        agendamento.locked = true;
+        agendamento.status = 'executing';
+        agendamento.statusText = '🔥 Enviando Agora...';
+        
+        FarmLogger.log('MANUAL_SEND_ATTEMPT', farm);
+        
+        // ✅ EXECUTAR O ATAQUE
+        executeAttack(agendamento)
+            .then(success => {
+                if (success) {
+                    // ✅ SUCESSO - Atualizar estados
+                    agendamento.done = true;
+                    agendamento.success = true;
+                    agendamento.executedAt = new Date().toISOString();
+                    agendamento.status = 'sent';
+                    agendamento.statusText = '✅ Enviado (Manual)';
+                    
+                    farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
+                    farm.stats.successRuns = (farm.stats.successRuns || 0) + 1;
+                    farm.stats.lastRun = new Date().toISOString();
+                    
+                    FarmLogger.log('MANUAL_SEND_SUCCESS', farm);
+                    
+                    // ✅ CORREÇÃO: CÁLCULO SIMPLIFICADO E CONSISTENTE
+                    const now = new Date();
+                    const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+                    const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
+                    
+                    // ✅ CORREÇÃO: Usar o mesmo cálculo do sistema automático
+                    // Tempo total do ciclo: ida + volta + intervalo
+                    const totalCycleTime = travelTimeToTarget + returnTime + (farm.intervalo * 60);
+                    
+                    // Próximo envio: agora + tempo total do ciclo
+                    let nextRunTime = new Date(now.getTime() + (totalCycleTime * 1000));
+                    
+                    // ✅ ATUALIZAR DATETIME PARA PRÓXIMO CICLO
+                    agendamento.datetime = formatDateTime(nextRunTime);
+                    agendamento.done = false;
+                    agendamento.success = false;
+                    agendamento.executedAt = null;
+                    agendamento.error = null;
+                    
+                    farm.nextRun = agendamento.datetime;
+                    farm.lastReturnTime = returnTime;
+                    
+                    FarmLogger.log('MANUAL_NEXT_CYCLE', farm, { 
+                        nextRun: farm.nextRun,
+                        travelTime: travelTimeToTarget,
+                        returnTime: returnTime,
+                        totalCycleTime: totalCycleTime,
+                        intervalo: farm.intervalo
+                    });
+                    
+                    alert(`✅ FARM ENVIADO COM SUCESSO!\n\n${farm.origem} → ${farm.alvo}\nPróximo ciclo: ${farm.nextRun}`);
+                    
+                } else {
+                    // ❌ FALHA - CORREÇÃO: manter o agendamento para tentar novamente
+                    agendamento.done = false; // ✅ CORREÇÃO: Não marcar como done em caso de falha
+                    agendamento.success = false;
+                    agendamento.status = 'failed';
+                    agendamento.statusText = '❌ Falha (Manual)';
+                    agendamento.error = 'Falha no envio manual';
+                    
+                    farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
+                    farm.stats.lastRun = new Date().toISOString();
+                    
+                    FarmLogger.log('MANUAL_SEND_FAILED', farm);
+                    alert(`❌ FALHA NO ENVIO MANUAL!\n\nVerifique as tropas e tente novamente.`);
+                }
+                
+                // ✅ SEMPRE LIBERAR O LOCK (mesmo em caso de falha)
+                agendamento.locked = false;
+                
+                // ✅ SALVAR ALTERAÇÕES
+                setList(lista);
+                
+                const updatedFarms = getFarmList();
+                const farmIdx = updatedFarms.findIndex(f => f.id === farm.id);
+                if (farmIdx !== -1) {
+                    updatedFarms[farmIdx] = farm;
+                    setFarmList(updatedFarms);
+                }
+                
+                // ✅ ATUALIZAR UI
+                window.dispatchEvent(new CustomEvent('tws-farm-updated'));
+                window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
+                
+                if (document.getElementById('farm-list-container')) {
+                    document.getElementById('farm-list-container').innerHTML = renderFarmList();
+                }
+                
+            })
+            .catch(error => {
+                // ❌ ERRO NA EXECUÇÃO - CORREÇÃO: não marcar como done
+                console.error('[Farm] Erro no envio manual:', error);
+                
+                agendamento.done = false; // ✅ CORREÇÃO: Maniver como pendente
+                agendamento.success = false;
+                agendamento.locked = false;
+                agendamento.status = 'failed';
+                agendamento.statusText = '❌ Erro (Manual)';
+                agendamento.error = error.message;
+                
+                farm.stats.totalRuns = (farm.stats.totalRuns || 0) + 1;
+                farm.stats.lastRun = new Date().toISOString();
+                
+                FarmLogger.log('MANUAL_SEND_ERROR', farm, { error: error.message });
+                
+                setList(lista);
+                setFarmList(farms);
+                
+                alert(`❌ ERRO NO ENVIO MANUAL!\n\n${error.message}\n\nO farm permanecerá ativo para tentar novamente.`);
+                
+                if (document.getElementById('farm-list-container')) {
+                    document.getElementById('farm-list-container').innerHTML = renderFarmList();
+                }
+            });
+        
+        return true;
+        
+    } catch (error) {
+        console.error('[Farm] Erro no processo manual:', error);
+        alert(`❌ ERRO CRÍTICO: ${error.message}`);
+        return false;
+    }
+}
 
   // ═════════════════════════════════════════════════════════
   // BACKEND ORIGINAL (Integrado com melhorias)
