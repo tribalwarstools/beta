@@ -325,6 +325,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.clearAll()" style="padding:6px 12px;background:#D32F2F;color:white;border:none;border-radius:4px;cursor:pointer;">🚫 Limpar Tudo</button>
           <button onclick="TWS_Panel.exportList()" style="padding:6px 12px;background:#607D8B;color:white;border:none;border-radius:4px;cursor:pointer;">💾 Exportar</button>
           <button onclick="TWS_Panel.importList()" style="padding:6px 12px;background:#795548;color:white;border:none;border-radius:4px;cursor:pointer;">📂 Importar</button>
+          <button onclick="TWS_ConfigModal.show()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Config</button>
         </div>
       </div>
       <div id="tws-dashboard" style="margin-bottom:20px;"></div>
@@ -393,6 +394,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
 
 
