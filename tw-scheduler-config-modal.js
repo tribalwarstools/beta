@@ -150,6 +150,7 @@
           background: #F7FAFC;
           overflow-y: auto;
           flex: 1;
+          color: #2D3748;
         }
         .tws-config-tab-content.active {
           display: block;
@@ -160,6 +161,7 @@
           padding: 20px;
           margin: 10px 0;
           border-left: 4px solid #667eea;
+          color: #2D3748;
         }
         .tws-config-grid {
           display: grid;
@@ -194,6 +196,8 @@
           border-radius: 4px;
           text-align: center;
           font-size: 14px;
+          background: white;
+          color: #2D3748;
         }
         .tws-config-unit {
           font-size: 11px;
@@ -220,14 +224,15 @@
         .btn-danger { background: #F56565; }
         .btn-secondary { background: #718096; }
         
-        /* Dark theme */
+        /* Dark theme - CORREÇÕES APLICADAS */
         [data-tws-theme="dark"] .tws-config-tab-content {
           background: #2D3748;
-          color: #E2E8F0;
+          color: #E2E8F0 !important;
         }
         [data-tws-theme="dark"] .tws-config-section {
           background: #4A5568;
-          color: #E2E8F0;
+          color: #E2E8F0 !important;
+          border-left-color: #667eea;
         }
         [data-tws-theme="dark"] .tws-config-item {
           background: #2D3748;
@@ -239,7 +244,10 @@
           color: #E2E8F0;
         }
         [data-tws-theme="dark"] .tws-config-label {
-          color: #E2E8F0;
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-unit {
+          color: #CBD5E0;
         }
 
         /* Melhorias para inputs e labels */
@@ -260,6 +268,8 @@
           border-radius: 6px;
           font-size: 14px;
           transition: border-color 0.3s;
+          background: white;
+          color: #2D3748;
         }
         .tws-form-input:focus {
           outline: none;
@@ -271,6 +281,7 @@
           align-items: center;
           gap: 8px;
           margin-bottom: 10px;
+          color: #2D3748;
         }
         .tws-checkbox-group input[type="checkbox"] {
           width: 16px;
@@ -279,6 +290,53 @@
         .tws-checkbox-group label {
           font-size: 14px;
           color: #4A5568;
+        }
+
+        /* Dark theme para formulários */
+        [data-tws-theme="dark"] .tws-form-label {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-form-input {
+          background: #1A202C;
+          border-color: #718096;
+          color: #E2E8F0;
+        }
+        [data-tws-theme="dark"] .tws-form-input:focus {
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        [data-tws-theme="dark"] .tws-checkbox-group {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-checkbox-group label {
+          color: #E2E8F0 !important;
+        }
+
+        /* Textos específicos */
+        [data-tws-theme="dark"] h3,
+        [data-tws-theme="dark"] h4 {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] p {
+          color: #CBD5E0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section p {
+          color: #CBD5E0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section h3 {
+          color: #E2E8F0 !important;
+        }
+
+        /* Estatísticas no backup */
+        [data-tws-theme="dark"] .tws-config-section div[style*="background: #EDF2F7"] {
+          background: #2D3748 !important;
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section div[style*="background: #EDF2F7"] h4 {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section div[style*="background: #EDF2F7"] div {
+          color: #CBD5E0 !important;
         }
       </style>
 
