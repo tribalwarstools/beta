@@ -370,41 +370,131 @@ function showConfigModal() {
         }
     };
 
-    // ... resto das funções (saveConfig, closeConfigModal, etc.)
+    window.testTelegram = function() {
+      alert('🧪 Funcionalidade de teste do Telegram será implementada!');
+    };
+
+    window.exportConfig = function() {
+      const config = getConfig();
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tws_config_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('✅ Configurações exportadas!');
+    };
+
+    window.importConfig = function() {
+      alert('📥 Funcionalidade de importação será implementada!');
+    };
+
+    window.backupData = function() {
+      alert('💾 Funcionalidade de backup completo será implementada!');
+    };
+
+    window.resetConfig = function() {
+      if (confirm('⚠️ TEM CERTEZA?\n\nIsso resetará TODAS as configurações para os valores padrão.')) {
+        localStorage.removeItem(CONFIG_STORAGE_KEY);
+        applyConfig(defaultConfig);
+        alert('✅ Configurações resetadas!');
+        closeConfigModal();
+      }
+    };
+
     window.saveConfig = function() {
-        const config = getConfig();
-        
-        // Salvar velocidades das unidades
-        document.querySelectorAll('.tws-unit-input').forEach(input => {
-            const unit = input.dataset.unit;
-            const value = parseFloat(input.value) || defaultConfig.velocidadesUnidades[unit];
-            config.velocidadesUnidades[unit] = Math.max(0.1, value);
-        });
-        
-        if (saveConfig(config)) {
-            alert('✅ Configurações salvas com sucesso!');
-        }
+      const config = getConfig();
+      
+      // Salvar velocidades das unidades
+      document.querySelectorAll('.tws-config-input').forEach(input => {
+        const unit = input.dataset.unit;
+        const value = parseInt(input.value) || defaultConfig.velocidadesUnidades[unit];
+        config.velocidadesUnidades[unit] = Math.max(1, value);
+      });
+      
+      // Salvar outras configurações
+      config.telegram.enabled = document.getElementById('telegram-enabled').checked;
+      config.telegram.botToken = document.getElementById('telegram-token').value;
+      config.telegram.chatId = document.getElementById('telegram-chatid').value;
+      config.telegram.notifications.success = document.getElementById('telegram-notif-success').checked;
+      config.telegram.notifications.failure = document.getElementById('telegram-notif-failure').checked;
+      config.telegram.notifications.farmCycle = document.getElementById('telegram-notif-farm').checked;
+      config.telegram.notifications.error = document.getElementById('telegram-notif-error').checked;
+      
+      config.theme = document.getElementById('theme-select').value;
+      config.behavior.showNotifications = document.getElementById('show-notifications').checked;
+      config.behavior.soundOnComplete = document.getElementById('sound-on-complete').checked;
+      config.behavior.autoStartScheduler = document.getElementById('auto-start-scheduler').checked;
+      config.behavior.retryOnFail = document.getElementById('retry-on-fail').checked;
+      config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
+      config.behavior.delayBetweenAttacks = parseInt(document.getElementById('delay-between-attacks').value) || 1000;
+      
+      if (saveConfig(config)) {
+        alert('✅ Configurações salvas com sucesso!');
+      }
     };
 
     window.saveAndCloseConfig = function() {
-        window.saveConfig();
-        window.closeConfigModal();
+      window.saveConfig();
+      window.closeConfigModal();
     };
 
     window.closeConfigModal = function() {
-        const modal = document.getElementById('tws-config-modal');
-        if (modal) modal.remove();
-        
-        // Limpar funções globais temporárias
-        ['switchConfigTab', 'resetUnitSpeeds', 'testUnitSpeed', 'saveConfig', 'saveAndCloseConfig', 'closeConfigModal'].forEach(fn => {
-            delete window[fn];
-        });
+      const modal = document.getElementById('tws-config-modal');
+      if (modal) modal.remove();
+      
+      // Limpar funções globais temporárias
+      delete window.switchConfigTab;
+      delete window.resetUnitSpeeds;
+      delete window.testUnitSpeed;
+      delete window.testTelegram;
+      delete window.exportConfig;
+      delete window.importConfig;
+      delete window.backupData;
+      delete window.resetConfig;
+      delete window.saveConfig;
+      delete window.saveAndCloseConfig;
+      delete window.closeConfigModal;
     };
 
     // Fechar modal ao clicar fora
     overlay.onclick = function(e) {
-        if (e.target === overlay) {
-            window.closeConfigModal();
-        }
+      if (e.target === overlay) {
+        window.closeConfigModal();
+      }
     };
-}
+  }
+
+  // === INICIALIZAÇÃO ===
+  function init() {
+    if (!window.TWS_ConfigModal) {
+      window.TWS_ConfigModal = {};
+    }
+    
+    window.TWS_ConfigModal.show = showConfigModal;
+    window.TWS_ConfigModal.getConfig = getConfig;
+    window.TWS_ConfigModal.saveConfig = saveConfig;
+    
+    // Aplicar configurações ao carregar
+    applyConfig(getConfig());
+    
+    console.log('[TW Config] ✅ Sistema de configurações carregado!');
+  }
+
+  // Função auxiliar para calcular distância
+  function calcularDistancia(coord1, coord2) {
+    const [x1, y1] = coord1.split('|').map(Number);
+    const [x2, y2] = coord2.split('|').map(Number);
+    const deltaX = Math.abs(x1 - x2);
+    const deltaY = Math.abs(y1 - y2);
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
+  // Inicializar
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
