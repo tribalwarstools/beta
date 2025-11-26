@@ -108,7 +108,7 @@
       padding: 0;
       width: 95%;
       max-width: 1000px;
-      max-height: 90vh;
+      height: 85vh;
       overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       display: flex;
@@ -121,6 +121,7 @@
           display: flex;
           background: #4A5568;
           padding: 0;
+          flex-shrink: 0;
         }
         .tws-config-tab {
           padding: 15px 20px;
@@ -137,12 +138,18 @@
         .tws-config-tab.active {
           background: #667eea;
         }
+        .tws-config-content-wrapper {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
         .tws-config-tab-content {
           display: none;
           padding: 20px;
           background: #F7FAFC;
           overflow-y: auto;
-          max-height: 60vh;
+          flex: 1;
         }
         .tws-config-tab-content.active {
           display: block;
@@ -156,26 +163,42 @@
         }
         .tws-config-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 15px;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
           margin-top: 15px;
         }
         .tws-config-item {
           display: flex;
-          align-items: center;
-          gap: 10px;
+          flex-direction: column;
+          gap: 5px;
+          padding: 10px;
+          background: #F7FAFC;
+          border-radius: 6px;
+          border: 1px solid #E2E8F0;
         }
         .tws-config-label {
-          min-width: 80px;
           font-weight: bold;
-          font-size: 14px;
+          font-size: 13px;
+          color: #4A5568;
+          text-transform: capitalize;
+        }
+        .tws-config-input-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
         .tws-config-input {
-          width: 80px;
+          flex: 1;
           padding: 8px;
           border: 1px solid #CBD5E0;
           border-radius: 4px;
           text-align: center;
+          font-size: 14px;
+        }
+        .tws-config-unit {
+          font-size: 11px;
+          color: #718096;
+          white-space: nowrap;
         }
         .tws-config-btn {
           padding: 10px 16px;
@@ -206,15 +229,61 @@
           background: #4A5568;
           color: #E2E8F0;
         }
-        [data-tws-theme="dark"] .tws-config-input {
+        [data-tws-theme="dark"] .tws-config-item {
           background: #2D3748;
           border-color: #718096;
+        }
+        [data-tws-theme="dark"] .tws-config-input {
+          background: #1A202C;
+          border-color: #718096;
           color: #E2E8F0;
+        }
+        [data-tws-theme="dark"] .tws-config-label {
+          color: #E2E8F0;
+        }
+
+        /* Melhorias para inputs e labels */
+        .tws-form-group {
+          margin-bottom: 15px;
+        }
+        .tws-form-label {
+          display: block;
+          font-weight: bold;
+          margin-bottom: 8px;
+          color: #2D3748;
+          font-size: 14px;
+        }
+        .tws-form-input {
+          width: 100%;
+          padding: 10px;
+          border: 1px solid #CBD5E0;
+          border-radius: 6px;
+          font-size: 14px;
+          transition: border-color 0.3s;
+        }
+        .tws-form-input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .tws-checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .tws-checkbox-group input[type="checkbox"] {
+          width: 16px;
+          height: 16px;
+        }
+        .tws-checkbox-group label {
+          font-size: 14px;
+          color: #4A5568;
         }
       </style>
 
       <!-- Cabeçalho -->
-      <div style="background: #4A5568; padding: 20px; text-align: center; border-bottom: 3px solid #667eea;">
+      <div style="background: #4A5568; padding: 20px; text-align: center; border-bottom: 3px solid #667eea; flex-shrink: 0;">
         <div style="font-size: 24px; font-weight: bold; color: white;">⚙️ CONFIGURAÇÕES GLOBAIS</div>
         <div style="color: #E2E8F0; font-size: 14px; margin-top: 5px;">
           Ajuste velocidades, Telegram, aparência e comportamento do sistema
@@ -231,7 +300,7 @@
       </div>
 
       <!-- Conteúdo das Abas -->
-      <div style="flex: 1; overflow-y: auto;">
+      <div class="tws-config-content-wrapper">
         <!-- ABA: UNIDADES -->
         <div id="tab-unidades" class="tws-config-tab-content active">
           <div class="tws-config-section">
@@ -243,15 +312,17 @@
             <div class="tws-config-grid" id="unit-speed-config">
               ${Object.entries(config.velocidadesUnidades).map(([unit, speed]) => `
                 <div class="tws-config-item">
-                  <span class="tws-config-label">${unit}:</span>
-                  <input type="number" class="tws-config-input" data-unit="${unit}" 
-                         value="${speed}" min="1" max="100" step="0.1" />
-                  <span style="font-size: 11px; color: #718096;">min/campo</span>
+                  <div class="tws-config-label">${getUnitDisplayName(unit)}</div>
+                  <div class="tws-config-input-wrapper">
+                    <input type="number" class="tws-config-input" data-unit="${unit}" 
+                           value="${speed}" min="1" max="100" step="0.1" />
+                    <span class="tws-config-unit">min/campo</span>
+                  </div>
                 </div>
               `).join('')}
             </div>
             
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
               <button class="tws-config-btn btn-secondary" onclick="resetUnitSpeeds()">
                 🔄 Resetar Velocidades
               </button>
@@ -267,46 +338,44 @@
           <div class="tws-config-section">
             <h3 style="margin-top: 0; color: #2D3748;">🤖 Configurações do Telegram</h3>
             
-            <div style="margin-bottom: 15px;">
-              <label>
+            <div class="tws-form-group">
+              <div class="tws-checkbox-group">
                 <input type="checkbox" id="telegram-enabled" ${config.telegram.enabled ? 'checked' : ''}>
-                Ativar notificações do Telegram
-              </label>
-            </div>
-            
-            <div style="display: grid; gap: 15px; margin-bottom: 20px;">
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 5px;">Bot Token:</label>
-                <input type="password" style="width: 100%; padding: 8px; border: 1px solid #CBD5E0; border-radius: 4px;" 
-                       id="telegram-token" value="${config.telegram.botToken}" placeholder="123456789:ABCdefGHIjkl..." />
-              </div>
-              
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 5px;">Chat ID:</label>
-                <input type="text" style="width: 100%; padding: 8px; border: 1px solid #CBD5E0; border-radius: 4px;" 
-                       id="telegram-chatid" value="${config.telegram.chatId}" placeholder="-100123456789" />
+                <label for="telegram-enabled">Ativar notificações do Telegram</label>
               </div>
             </div>
             
-            <div>
-              <label style="display: block; font-weight: bold; margin-bottom: 10px;">Notificações:</label>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <label>
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="telegram-token">Bot Token:</label>
+              <input type="password" class="tws-form-input" 
+                     id="telegram-token" value="${config.telegram.botToken}" placeholder="123456789:ABCdefGHIjkl..." />
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="telegram-chatid">Chat ID:</label>
+              <input type="text" class="tws-form-input" 
+                     id="telegram-chatid" value="${config.telegram.chatId}" placeholder="-100123456789" />
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label">Notificações:</label>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="tws-checkbox-group">
                   <input type="checkbox" id="telegram-notif-success" ${config.telegram.notifications.success ? 'checked' : ''}>
-                  ✅ Ataques bem-sucedidos
-                </label>
-                <label>
+                  <label for="telegram-notif-success">✅ Ataques bem-sucedidos</label>
+                </div>
+                <div class="tws-checkbox-group">
                   <input type="checkbox" id="telegram-notif-failure" ${config.telegram.notifications.failure ? 'checked' : ''}>
-                  ❌ Ataques falhos
-                </label>
-                <label>
+                  <label for="telegram-notif-failure">❌ Ataques falhos</label>
+                </div>
+                <div class="tws-checkbox-group">
                   <input type="checkbox" id="telegram-notif-farm" ${config.telegram.notifications.farmCycle ? 'checked' : ''}>
-                  🔄 Ciclos de Farm
-                </label>
-                <label>
+                  <label for="telegram-notif-farm">🔄 Ciclos de Farm</label>
+                </div>
+                <div class="tws-checkbox-group">
                   <input type="checkbox" id="telegram-notif-error" ${config.telegram.notifications.error ? 'checked' : ''}>
-                  🚨 Erros do sistema
-                </label>
+                  <label for="telegram-notif-error">🚨 Erros do sistema</label>
+                </div>
               </div>
             </div>
             
@@ -321,24 +390,24 @@
           <div class="tws-config-section">
             <h3 style="margin-top: 0; color: #2D3748;">🎨 Aparência e Tema</h3>
             
-            <div style="margin-bottom: 15px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 5px;">Tema:</label>
-              <select style="width: 100%; padding: 8px; border: 1px solid #CBD5E0; border-radius: 4px;" id="theme-select">
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="theme-select">Tema:</label>
+              <select class="tws-form-input" id="theme-select">
                 <option value="light" ${config.theme === 'light' ? 'selected' : ''}>🌞 Claro</option>
                 <option value="dark" ${config.theme === 'dark' ? 'selected' : ''}>🌙 Escuro</option>
                 <option value="auto" ${config.theme === 'auto' ? 'selected' : ''}>⚡ Automático (Sistema)</option>
               </select>
             </div>
             
-            <div style="display: grid; gap: 10px;">
-              <label>
+            <div class="tws-form-group">
+              <div class="tws-checkbox-group">
                 <input type="checkbox" id="show-notifications" ${config.behavior.showNotifications ? 'checked' : ''}>
-                Mostrar notificações na tela
-              </label>
-              <label>
+                <label for="show-notifications">Mostrar notificações na tela</label>
+              </div>
+              <div class="tws-checkbox-group">
                 <input type="checkbox" id="sound-on-complete" ${config.behavior.soundOnComplete ? 'checked' : ''}>
-                Som quando ataques são concluídos
-              </label>
+                <label for="sound-on-complete">Som quando ataques são concluídos</label>
+              </div>
             </div>
           </div>
         </div>
@@ -348,28 +417,28 @@
           <div class="tws-config-section">
             <h3 style="margin-top: 0; color: #2D3748;">⚡ Comportamento do Sistema</h3>
             
-            <div style="display: grid; gap: 15px;">
-              <label>
+            <div class="tws-form-group">
+              <div class="tws-checkbox-group">
                 <input type="checkbox" id="auto-start-scheduler" ${config.behavior.autoStartScheduler ? 'checked' : ''}>
-                Iniciar scheduler automaticamente
-              </label>
+                <label for="auto-start-scheduler">Iniciar scheduler automaticamente</label>
+              </div>
               
-              <label>
+              <div class="tws-checkbox-group">
                 <input type="checkbox" id="retry-on-fail" ${config.behavior.retryOnFail ? 'checked' : ''}>
-                Tentar novamente em caso de falha
-              </label>
-              
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 5px;">Máximo de tentativas:</label>
-                <input type="number" style="width: 100px; padding: 8px; border: 1px solid #CBD5E0; border-radius: 4px;" 
-                       id="max-retries" value="${config.behavior.maxRetries}" min="1" max="10" />
+                <label for="retry-on-fail">Tentar novamente em caso de falha</label>
               </div>
-              
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 5px;">Delay entre ataques (ms):</label>
-                <input type="number" style="width: 150px; padding: 8px; border: 1px solid #CBD5E0; border-radius: 4px;" 
-                       id="delay-between-attacks" value="${config.behavior.delayBetweenAttacks}" min="0" max="10000" />
-              </div>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="max-retries">Máximo de tentativas:</label>
+              <input type="number" class="tws-form-input" 
+                     id="max-retries" value="${config.behavior.maxRetries}" min="1" max="10" style="width: 120px;" />
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="delay-between-attacks">Delay entre ataques (ms):</label>
+              <input type="number" class="tws-form-input" 
+                     id="delay-between-attacks" value="${config.behavior.delayBetweenAttacks}" min="0" max="10000" style="width: 150px;" />
             </div>
           </div>
         </div>
@@ -379,7 +448,7 @@
           <div class="tws-config-section">
             <h3 style="margin-top: 0; color: #2D3748;">💾 Backup e Restauração</h3>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
               <button class="tws-config-btn btn-success" onclick="exportConfig()">
                 📤 Exportar Configurações
               </button>
@@ -410,7 +479,7 @@
       </div>
 
       <!-- Rodapé -->
-      <div style="background: #F7FAFC; padding: 15px; text-align: center; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between;">
+      <div style="background: #F7FAFC; padding: 15px; text-align: center; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; flex-shrink: 0;">
         <button class="tws-config-btn btn-secondary" onclick="closeConfigModal()">
           ❌ Cancelar
         </button>
@@ -509,8 +578,8 @@
       // Salvar velocidades das unidades
       document.querySelectorAll('.tws-config-input').forEach(input => {
         const unit = input.dataset.unit;
-        const value = parseInt(input.value) || defaultConfig.velocidadesUnidades[unit];
-        config.velocidadesUnidades[unit] = Math.max(1, value);
+        const value = parseFloat(input.value) || defaultConfig.velocidadesUnidades[unit];
+        config.velocidadesUnidades[unit] = Math.max(0.1, value);
       });
       
       // Salvar outras configurações
@@ -566,6 +635,33 @@
     };
   }
 
+  // === FUNÇÕES AUXILIARES ===
+  function getUnitDisplayName(unit) {
+    const names = {
+      spear: 'Lanceiro',
+      sword: 'Espadachim',
+      axe: 'Bárbaro',
+      archer: 'Arqueiro',
+      spy: 'Espião',
+      light: 'Cav. Leve',
+      marcher: 'Arqueiro Cav.',
+      heavy: 'Cav. Pesado',
+      ram: 'Ariete',
+      catapult: 'Catapulta',
+      knight: 'Paladino',
+      snob: 'Nobre'
+    };
+    return names[unit] || unit;
+  }
+
+  function calcularDistancia(coord1, coord2) {
+    const [x1, y1] = coord1.split('|').map(Number);
+    const [x2, y2] = coord2.split('|').map(Number);
+    const deltaX = Math.abs(x1 - x2);
+    const deltaY = Math.abs(y1 - y2);
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
   // === INICIALIZAÇÃO ===
   function init() {
     if (!window.TWS_ConfigModal) {
@@ -580,15 +676,6 @@
     applyConfig(getConfig());
     
     console.log('[TW Config] ✅ Sistema de configurações carregado!');
-  }
-
-  // Função auxiliar para calcular distância
-  function calcularDistancia(coord1, coord2) {
-    const [x1, y1] = coord1.split('|').map(Number);
-    const [x2, y2] = coord2.split('|').map(Number);
-    const deltaX = Math.abs(x1 - x2);
-    const deltaY = Math.abs(y1 - y2);
-    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
   }
 
   // Inicializar
