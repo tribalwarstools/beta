@@ -372,6 +372,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     importBBCode,
     testSend,
     Farm,
+    Config,
     clearCompleted,
     clearPending,
     clearAll,
@@ -398,6 +399,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
 
 
