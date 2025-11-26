@@ -1,5 +1,3 @@
-Refaça:
-
 (function () {
   'use strict';
 
