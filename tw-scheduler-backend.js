@@ -271,7 +271,7 @@ const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
 
       // 3) POST inicial (tela de confirmação)
       setStatus(`⏳ Enviando comando...`);
-      const { controller: c2, timeout: t2 } = safeTimeout(ATTACK_TIMEOUT);
+      const { controller: c2, timeout: t2 } = safeTimeout();
       const postRes = await safeFetch(postUrl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -317,7 +317,8 @@ const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
         if (confirmUrl.startsWith('/')) confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
 
         setStatus('⏳ Confirmando ataque (auto-fetch)...');
-        const { controller: c3, timeout: t3 } = safeTimeout(ATTACK_TIMEOUT);
+        const { controller: c3, timeout: t3 } = safeTimeout();
+        const confirmRes = await safeFetch(confirmUrl, {
           method: 'POST',
           credentials: 'same-origin',
           signal: c3.signal,
@@ -734,8 +735,3 @@ console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
-
-
-
-
-
