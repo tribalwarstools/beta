@@ -76,12 +76,15 @@
     return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
   }
 
-  // Normalize fingerprint usando timestamp (evita diferenças "sem segundos" vs "com segundos")
-  function getAttackFingerprint(a) {
-    const dt = parseDateTimeToMs(a.datetime);
-    const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
-    return `${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
-  }
+  // fingerprint 
+function getAttackFingerprint(a) {
+  const dt = parseDateTimeToMs(a.datetime);
+  const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
+
+  // fingerprint inclui _id para permitir ataques idênticos simultâneos
+  return `${a._id}_${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
+}
+
 
   // Safefetch com timeout
   function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -714,6 +717,7 @@ console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
