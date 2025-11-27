@@ -229,23 +229,8 @@
       // Criar agendamento
       const list = getList();
       
-      // ✅ PROTEÇÃO: Verificar duplicatas
-      const isDuplicate = list.some(item => 
-        item.origemId === origemId && 
-        item.alvo === alvoParsed && 
-        item.datetime === datetime &&
-        !item.done &&
-        !item.locked
-      );
-      
-      if (isDuplicate) {
-        console.warn('[Modal] ⚠️ Agendamento duplicado detectado!');
-        showMsg('⚠️ Já existe um agendamento idêntico pendente!', 'error');
-        submitBtn.disabled = false;
-        submitBtn.textContent = '✅ Adicionar';
-        return;
-      }
-      
+      // ✅ REMOVIDO: verificação de duplicatas — agora permitimos agendamentos idênticos
+
       const uniqueId = generateUniqueId();
       
       const cfg = {
@@ -271,15 +256,22 @@
 
       showMsg('✅ Agendamento adicionado com sucesso!', 'success');
       
+      // Notificar atualizações para o resto da aplicação
       window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-      
-      setTimeout(() => overlay.remove(), 1500);
-      
+
+      // IMPORTANT: NÃO remover o overlay automaticamente — o usuário pediu que o modal só feche ao clicar em CANCELAR
+      // Apenas reabilitamos o botão para permitir novos agendamentos sem fechar o modal
+      submitBtn.disabled = false;
+      submitBtn.textContent = '✅ Adicionar';
+
     } catch (error) {
       console.error('[Modal] Erro ao adicionar agendamento:', error);
       showMsg(`❌ Erro: ${error.message}`, 'error');
-      submitBtn.disabled = false;
-      submitBtn.textContent = '✅ Adicionar';
+      const submitBtn = document.querySelector('#tws-add-form button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✅ Adicionar';
+      }
     }
   }
 
@@ -480,8 +472,11 @@
 
     loadVillageSelect();
 
+    // Somente botão cancelar fecha o modal (pedido do usuário)
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    // NOTA: removido handler que fechava o modal ao clicar no overlay/fundo
+    // overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
     // ✅ Auto-preencher tropas ao mudar aldeia
     document.getElementById('tws-origem').onchange = (e) => {
@@ -543,5 +538,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler Modal] ✅ Carregado com validação de coordenadas corrigida!');
+  console.log('[TW Scheduler Modal] ✅ Carregado com validação de coordenadas corrigida e comportamento de modal ajustado!');
 })();
