@@ -13,9 +13,8 @@
 
   // Proteções / estados locais
   const _executing = new Set();
-  
-  // 🚫 REMOVIDO: Sistema de fingerprints e processed attacks
-  // ✅ AGORA PERMITIDO: Múltiplos ataques idênticos
+  // Usamos Set de fingerprints apenas para casos bem-sucedidos (evita reprocessar envios já enviados)
+  const _processedAttacks = new Set();
 
   // Contador para fallback de ids
   let _idCounter = Date.now();
@@ -77,8 +76,12 @@
     return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
   }
 
-  // 🚫 REMOVIDO: Sistema de fingerprint que evita duplicatas
-  // ✅ AGORA PERMITIDO: Ataques idênticos consecutivos
+  // Normalize fingerprint usando timestamp (evita diferenças "sem segundos" vs "com segundos")
+  function getAttackFingerprint(a) {
+    const dt = parseDateTimeToMs(a.datetime);
+    const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
+    return `${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
+  }
 
   // Safefetch com timeout
   function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -158,22 +161,13 @@
     }
   }
 
-  // === Valida tropas (MODIFICADA PARA PERMITIR MICRO-FARMS)
+  // === Valida tropas
   function validateTroops(requested, available) {
     const errors = [];
     TROOP_LIST.forEach(u => {
       const req = Number(requested[u] || 0);
       const avail = Number(available[u] || 0);
-      
-      // ✅ ALTERAÇÃO CRÍTICA: Permitir 0 tropas para micro-farms
-      if (req === 0) {
-        return; // Skip validation for zero troops
-      }
-      
-      // ✅ ALTERAÇÃO: Apenas validar se tropas solicitadas > 0
-      if (req > 0 && req > avail) {
-        errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
-      }
+      if (req > avail) errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
     });
     return errors;
   }
@@ -190,57 +184,39 @@
     return successPatterns.some(p => p.test(htmlText));
   }
 
-  // === executeAttack (MODIFICADA PARA MICRO-FARMS)
+  // === executeAttack (faz todo fluxo via fetch)
   async function executeAttack(cfg) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => { try{ if(statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); };
 
-    // ✅ ALTERAÇÃO: Verificação mais flexível de origem
-    let origemId = cfg.origemId;
-    if (!origemId && cfg.origem) {
-      origemId = _villageMap[cfg.origem];
-    }
-    
-    // ✅ ALTERAÇÃO: Permitir fallback - se não encontrar no map, usar origem diretamente
-    if (!origemId && cfg.origem) {
-      console.warn(`[TWScheduler] Origem ${cfg.origem} não encontrada no map, usando fallback`);
-      // Tentar extrair ID da origem se for numérico
-      const match = cfg.origem.match(/^\d+$/);
-      if (match) {
-        origemId = cfg.origem;
-      } else {
-        setStatus(`⚠️ Origem ${cfg.origem} não mapeada, tentando continuar...`);
-      }
+    // resolver origemId
+    const origemId = cfg.origemId || _villageMap[cfg.origem];
+    if (!origemId) {
+      setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
+      throw new Error('Origem não encontrada');
     }
 
-    // ✅ ALTERAÇÃO: Validação mais flexível do alvo
+    // validar alvo
     const [x, y] = (cfg.alvo || '').split('|');
     if (!x || !y) {
       setStatus(`❌ Alvo inválido: ${cfg.alvo}`);
       throw new Error('Alvo inválido');
     }
 
-    // ✅ ALTERAÇÃO CRÍTICA: Verificação de tropas OPCIONAL para micro-farms
-    if (origemId) {
-      setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
-      const availableTroops = await getVillageTroops(origemId);
-      if (availableTroops) {
-        const errors = validateTroops(cfg, availableTroops);
-        if (errors.length > 0) {
-          // ✅ ALTERAÇÃO: Não bloquear, apenas alertar para micro-farms
-          console.warn(`[TWScheduler] Tropas insuficientes: ${errors.join(', ')} - Continuando para micro-farms`);
-          setStatus(`⚠️ Tropas insuficientes, mas continuando (micro-farm): ${errors.slice(0,2).join(', ')}`);
-          // Não throw error - permitir que continue para micro-farms
-        }
+    setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
+    const availableTroops = await getVillageTroops(origemId);
+    if (availableTroops) {
+      const errors = validateTroops(cfg, availableTroops);
+      if (errors.length) {
+        setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
+        // atualiza status no objeto para o frontend exibir
+        cfg.status = 'no_troops';
+        cfg.statusText = `Sem tropas: ${errors.slice(0,2).join(', ')}`;
+        throw new Error('Tropas insuficientes');
       }
-    } else {
-      setStatus(`⚠️ Sem origem ID, pulando verificação de tropas...`);
     }
 
-    const placeUrl = origemId 
-      ? `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`
-      : `${location.protocol}//${location.host}/game.php?screen=place`;
-
+    const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
     try {
       // 1) GET /place
       const { controller: c1, timeout: t1 } = safeTimeout();
@@ -431,232 +407,286 @@
     return agendamentos;
   }
 
-  // === SCHEDULER MODIFICADO PARA MICRO-FARMS ===
+  // === Scheduler ====//
 
-  // 🚫 REMOVIDO: Sistema completo de fingerprints e TTL
-  // ✅ AGORA PERMITIDO: Execuções idênticas consecutivas
 
-  const SchedulerMetrics = {
-    cycleStart: null,
-    cycleEnd: null,
-    executionsThisCycle: 0,
-    successCount: 0,
-    failureCount: 0,
-    lastCycleDuration: 0,
+  // === SCHEDULER MELHORADO - Versão 2.0 ===
 
-    start() {
-      this.cycleStart = Date.now();
-      this.executionsThisCycle = 0;
-      this.successCount = 0;
-      this.failureCount = 0;
-    },
+// ═════════════════════════════════════════════════════════
+// ✅ #1 LIMPEZA DE MEMÓRIA (Novo)
+// ═════════════════════════════════════════════════════════
 
-    recordExecution(success) {
-      this.executionsThisCycle++;
-      if (success) this.successCount++;
-      else this.failureCount++;
-    },
+const _processedAttacksWithTTL = new Map(); // timestamp → fingerprint
+const PROCESSED_ATTACKS_TTL = 86400000; // 24 horas em ms
 
-    end() {
-      this.cycleEnd = Date.now();
-      this.lastCycleDuration = this.cycleEnd - this.cycleStart;
-      
-      if (this.executionsThisCycle > 0) {
-        const taxa = ((this.successCount / this.executionsThisCycle) * 100).toFixed(1);
-        console.log(
-          `[Scheduler] Ciclo concluído: ` +
-          `${this.executionsThisCycle} exec | ` +
-          `${this.successCount}✅ ${this.failureCount}❌ | ` +
-          `${taxa}% taxa de sucesso | ` +
-          `${this.lastCycleDuration}ms`
-        );
-      }
-    },
-
-    getStats() {
-      return {
-        lastCycleDuration: this.lastCycleDuration,
-        successCount: this.successCount,
-        failureCount: this.failureCount,
-        successRate: this.executionsThisCycle > 0 
-          ? ((this.successCount / this.executionsThisCycle) * 100).toFixed(1) 
-          : 0
-      };
+function cleanupProcessedAttacks() {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [timestamp, fingerprint] of _processedAttacksWithTTL.entries()) {
+    if (now - timestamp > PROCESSED_ATTACKS_TTL) {
+      _processedAttacksWithTTL.delete(timestamp);
+      cleaned++;
     }
-  };
-
-  // ═════════════════════════════════════════════════════════
-  // ✅ SCHEDULER LIBERADO PARA MICRO-FARMS
-  // ═════════════════════════════════════════════════════════
-
-  function startScheduler() {
-    if (_schedulerInterval) clearInterval(_schedulerInterval);
-    
-    _schedulerInterval = setInterval(async () => {
-      SchedulerMetrics.start();
-      
-      const list = getList();
-      const now = Date.now();
-      const ataquesPorHorario = {};
-      let needsSave = false;
-
-      // ┌─ FASE 1: AGRUPAMENTO ─┐
-      // Detectar ataques que devem ser executados AGORA
-      
-      for (const a of list) {
-        // Skip se já está travado ou concluído
-        if (a.locked || a.done) {
-          continue;
-        }
-
-        // Parse datetime
-        const t = parseDateTimeToMs(a.datetime);
-        if (!t || isNaN(t)) {
-          console.warn(`[Scheduler] Datetime inválido: ${a.datetime}`);
-          continue;
-        }
-
-        const diff = t - now;
-
-        // Janela de execução: até 10s após o horário agendado
-        if (diff <= 0 && diff > -10000) {
-          // Agrupar por horário para evitar explosão simultânea
-          if (!ataquesPorHorario[a.datetime]) {
-            ataquesPorHorario[a.datetime] = [];
-          }
-          ataquesPorHorario[a.datetime].push(a);
-        }
-      }
-
-      // ┌─ FASE 2: MARCAÇÃO ─┐
-      // Marcar ataques como "em execução"
-      
-      const ataquesPendentes = Object.values(ataquesPorHorario).flat();
-      
-      if (ataquesPendentes.length > 0) {
-        ataquesPendentes.forEach(a => {
-          // ✅ Proteção: skip se já está rodando
-          if (_executing.has(a._id)) {
-            console.warn(`[Scheduler] Ataque já em execução: ${a._id}`);
-            return;
-          }
-
-          a.locked = true;
-          a.status = 'executing';
-          a.statusText = 'Enviando...';
-          a.executedAt = new Date().toISOString();
-          _executing.add(a._id);
-          needsSave = true;
-        });
-
-        // Salvar estado de MARCAÇÃO
-        if (needsSave) {
-          setList(list);
-        }
-      }
-
-      // ┌─ FASE 3: EXECUÇÃO ─┐
-      // Executar sequencialmente por grupo de horário
-      
-      for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-        for (const a of ataques) {
-          // ✅ Double-check: skip se já foi finalizado
-          if (a.done) {
-            continue;
-          }
-
-          // 🚫 REMOVIDO: Verificação de fingerprint
-          // ✅ AGORA PERMITIDO: Executar ataques idênticos consecutivos
-          
-          try {
-            // Executar o ataque
-            const success = await executeAttack(a);
-
-            // Registrar resultado
-            a.done = true;
-            a.success = success;
-            
-            if (success) {
-              // 🚫 REMOVIDO: Marcar como processado
-              a.status = 'sent';
-              a.statusText = '✅ Enviado';
-              SchedulerMetrics.recordExecution(true);
-            } else {
-              a.status = 'failed';
-              a.statusText = '❌ Falhou (verificar manualmente)';
-              SchedulerMetrics.recordExecution(false);
-            }
-
-          } catch (err) {
-            // Erro na execução
-            a.done = true;
-            a.success = false;
-            a.error = err.message;
-            a.status = 'failed';
-            a.statusText = `❌ Falha: ${err.message}`;
-            SchedulerMetrics.recordExecution(false);
-
-            console.error(
-              `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
-              err.message
-            );
-
-          } finally {
-            // ✅ Sempre desbloquear
-            a.locked = false;
-            _executing.delete(a._id);
-            
-            // Salvar após cada execução
-            setList(list);
-          }
-
-          // Delay entre ataques do mesmo horário (evita sobrecarga)
-          // ✅ Somente se não for o último
-          if (ataques.indexOf(a) < ataques.length - 1) {
-            await sleep(250);
-          }
-        }
-      }
-
-      // ┌─ MÉTRICAS ─┐
-      SchedulerMetrics.end();
-
-    }, 1000); // ✅ Pulsa a cada 1 segundo
-
-    console.log('[Scheduler] ✅ Iniciado (vMicroFarm - Sem restrições de duplicatas)');
   }
+  
+  if (cleaned > 0) {
+    console.log(`[Scheduler] Limpeza: ${cleaned} fingerprints antigos removidos (${_processedAttacksWithTTL.size} restantes)`);
+  }
+}
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ FUNÇÕES DE DEBUG ATUALIZADAS
-  // ═════════════════════════════════════════════════════════
+function isAttackProcessed(fingerprint) {
+  return _processedAttacksWithTTL.has(fingerprint);
+}
 
-  function getSchedulerStats() {
+function markAttackProcessed(fingerprint) {
+  _processedAttacksWithTTL.set(Date.now(), fingerprint);
+}
+
+// ═════════════════════════════════════════════════════════
+// ✅ #2 MONITORAMENTO DE PERFORMANCE (Novo)
+// ═════════════════════════════════════════════════════════
+
+const SchedulerMetrics = {
+  cycleStart: null,
+  cycleEnd: null,
+  executionsThisCycle: 0,
+  successCount: 0,
+  failureCount: 0,
+  lastCycleDuration: 0,
+
+  start() {
+    this.cycleStart = Date.now();
+    this.executionsThisCycle = 0;
+    this.successCount = 0;
+    this.failureCount = 0;
+  },
+
+  recordExecution(success) {
+    this.executionsThisCycle++;
+    if (success) this.successCount++;
+    else this.failureCount++;
+  },
+
+  end() {
+    this.cycleEnd = Date.now();
+    this.lastCycleDuration = this.cycleEnd - this.cycleStart;
+    
+    if (this.executionsThisCycle > 0) {
+      const taxa = ((this.successCount / this.executionsThisCycle) * 100).toFixed(1);
+      console.log(
+        `[Scheduler] Ciclo concluído: ` +
+        `${this.executionsThisCycle} exec | ` +
+        `${this.successCount}✅ ${this.failureCount}❌ | ` +
+        `${taxa}% taxa de sucesso | ` +
+        `${this.lastCycleDuration}ms`
+      );
+    }
+  },
+
+  getStats() {
     return {
-      executingCount: _executing.size,
-      metrics: SchedulerMetrics.getStats()
+      lastCycleDuration: this.lastCycleDuration,
+      successCount: this.successCount,
+      failureCount: this.failureCount,
+      successRate: this.executionsThisCycle > 0 
+        ? ((this.successCount / this.executionsThisCycle) * 100).toFixed(1) 
+        : 0
     };
   }
+};
 
-  function dumpSchedulerState() {
-    const stats = getSchedulerStats();
-    console.table({
-      'Em Execução': stats.executingCount,
-      'Última Taxa': `${stats.metrics.successRate}%`,
-      'Último Ciclo': `${stats.metrics.lastCycleDuration}ms`
-    });
-  }
+// ═════════════════════════════════════════════════════════
+// ✅ #3 SCHEDULER MELHORADO (Principal)
+// ═════════════════════════════════════════════════════════
 
-  // ═════════════════════════════════════════════════════════
-  // ✅ EXPORTAR API ATUALIZADA
-  // ═════════════════════════════════════════════════════════
+function startScheduler() {
+  if (_schedulerInterval) clearInterval(_schedulerInterval);
+  
+  // Cleanup a cada 6 horas
+  let cleanupCounter = 0;
+  
+  _schedulerInterval = setInterval(async () => {
+    SchedulerMetrics.start();
+    
+    const list = getList();
+    const now = Date.now();
+    const ataquesPorHorario = {};
+    let needsSave = false;
 
-  window.TWS_SchedulerDebug = {
-    getStats: getSchedulerStats,
-    dumpState: dumpSchedulerState,
-    getMetrics: () => SchedulerMetrics
+    // ┌─ FASE 1: AGRUPAMENTO ─┐
+    // Detectar ataques que devem ser executados AGORA
+    
+    for (const a of list) {
+      // Skip se já está travado ou concluído
+      if (a.locked || a.done) {
+        continue;
+      }
+
+      // Parse datetime
+      const t = parseDateTimeToMs(a.datetime);
+      if (!t || isNaN(t)) {
+        console.warn(`[Scheduler] Datetime inválido: ${a.datetime}`);
+        continue;
+      }
+
+      const diff = t - now;
+
+      // Janela de execução: até 10s após o horário agendado
+      if (diff <= 0 && diff > -10000) {
+        // Agrupar por horário para evitar explosão simultânea
+        if (!ataquesPorHorario[a.datetime]) {
+          ataquesPorHorario[a.datetime] = [];
+        }
+        ataquesPorHorario[a.datetime].push(a);
+      }
+    }
+
+    // ┌─ FASE 2: MARCAÇÃO ─┐
+    // Marcar ataques como "em execução"
+    
+    const ataquesPendentes = Object.values(ataquesPorHorario).flat();
+    
+    if (ataquesPendentes.length > 0) {
+      ataquesPendentes.forEach(a => {
+        // ✅ Proteção: skip se já está rodando
+        if (_executing.has(a._id)) {
+          console.warn(`[Scheduler] Ataque já em execução: ${a._id}`);
+          return;
+        }
+
+        a.locked = true;
+        a.status = 'executing';
+        a.statusText = 'Enviando...';
+        a.executedAt = new Date().toISOString();
+        _executing.add(a._id);
+        needsSave = true;
+      });
+
+      // Salvar estado de MARCAÇÃO
+      if (needsSave) {
+        setList(list);
+      }
+    }
+
+    // ┌─ FASE 3: EXECUÇÃO ─┐
+    // Executar sequencialmente por grupo de horário
+    
+    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+      for (const a of ataques) {
+        // ✅ Double-check: skip se já foi finalizado
+        if (a.done) {
+          continue;
+        }
+
+        // ✅ Calcular fingerprint para evitar reprocessamento
+        const fingerprint = getAttackFingerprint(a);
+        
+        try {
+          // Executar o ataque
+          const success = await executeAttack(a);
+
+          // Registrar resultado
+          a.done = true;
+          a.success = success;
+          
+          if (success) {
+            markAttackProcessed(fingerprint);
+            a.status = 'sent';
+            a.statusText = '✅ Enviado';
+            SchedulerMetrics.recordExecution(true);
+          } else {
+            a.status = 'failed';
+            a.statusText = '❌ Falhou (verificar manualmente)';
+            SchedulerMetrics.recordExecution(false);
+          }
+
+        } catch (err) {
+          // Erro na execução
+          a.done = true;
+          a.success = false;
+          a.error = err.message;
+          a.status = 'failed';
+          a.statusText = `❌ Falha: ${err.message}`;
+          SchedulerMetrics.recordExecution(false);
+
+          console.error(
+            `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
+            err.message
+          );
+
+        } finally {
+          // ✅ Sempre desbloquear
+          a.locked = false;
+          _executing.delete(a._id);
+          
+          // Salvar após cada execução
+          setList(list);
+        }
+
+        // Delay entre ataques do mesmo horário (evita sobrecarga)
+        // ✅ Somente se não for o último
+        if (ataques.indexOf(a) < ataques.length - 1) {
+          await sleep(250);
+        }
+      }
+    }
+
+    // ┌─ FASE 4: LIMPEZA ─┐
+    // Cleanup periódico
+    
+    cleanupCounter++;
+    if (cleanupCounter >= 21600) { // ~6 horas em ciclos de 1s
+      cleanupProcessedAttacks();
+      cleanupCounter = 0;
+    }
+
+    // ┌─ MÉTRICAS ─┐
+    SchedulerMetrics.end();
+
+  }, 1000); // ✅ Pulsa a cada 1 segundo
+
+  console.log('[Scheduler] ✅ Iniciado (v2.0 - Melhorado com proteções)');
+}
+
+// ═════════════════════════════════════════════════════════
+// ✅ #4 FUNÇÕES DE DEBUG (Novas)
+// ═════════════════════════════════════════════════════════
+
+function getSchedulerStats() {
+  return {
+    executingCount: _executing.size,
+    processedCount: _processedAttacksWithTTL.size,
+    metrics: SchedulerMetrics.getStats(),
+    ttwlBudget: `${(_processedAttacksWithTTL.size * 100 / 1024).toFixed(2)} KB`
   };
+}
 
-  console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
+function dumpSchedulerState() {
+  const stats = getSchedulerStats();
+  console.table({
+    'Em Execução': stats.executingCount,
+    'Processados (24h)': stats.processedCount,
+    'Última Taxa': `${stats.metrics.successRate}%`,
+    'Último Ciclo': `${stats.metrics.lastCycleDuration}ms`,
+    'Memória': stats.ttwlBudget
+  });
+}
+
+// ═════════════════════════════════════════════════════════
+// ✅ EXPORTAR API
+// ═════════════════════════════════════════════════════════
+
+window.TWS_SchedulerDebug = {
+  getStats: getSchedulerStats,
+  dumpState: dumpSchedulerState,
+  getMetrics: () => SchedulerMetrics,
+  clearProcessed: () => _processedAttacksWithTTL.clear()
+};
+
+console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
+
+
 
   // === Export API ===
   window.TWS_Backend = {
@@ -670,17 +700,20 @@
     getVillageTroops,
     validateTroops,
     generateUniqueId,
-    // 🚫 REMOVIDO: getAttackFingerprint
+    getAttackFingerprint,
     TROOP_LIST,
     STORAGE_KEY,
     PANEL_STATE_KEY,
     _internal: {
       get villageMap(){ return _villageMap; },
       get myVillages(){ return _myVillages; },
-      get executing(){ return _executing; }
-      // 🚫 REMOVIDO: processedAttacks
+      get executing(){ return _executing; },
+      get processedAttacks(){ return _processedAttacks; }
     }
   };
 
-  console.log('[TWS_Backend] Backend carregado (vMicroFarm - Sem restrições de duplicatas)');
+  console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
+
+
