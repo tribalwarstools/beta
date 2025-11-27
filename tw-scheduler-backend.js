@@ -192,6 +192,11 @@ function getAttackFingerprint(a) {
     const statusEl = document.getElementById('tws-status');
     const setStatus = (msg) => { try{ if(statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); };
 
+// No início do executeAttack, após setStatus
+const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
+
+
+    
     // resolver origemId
     const origemId = cfg.origemId || _villageMap[cfg.origem];
     if (!origemId) {
@@ -222,7 +227,8 @@ function getAttackFingerprint(a) {
     const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
     try {
       // 1) GET /place
-      const { controller: c1, timeout: t1 } = safeTimeout();
+      // Modifique o safeTimeout dentro do executeAttack:
+      const { controller: c1, timeout: t1 } = safeTimeout(ATTACK_TIMEOUT);
       const getRes = await safeFetch(placeUrl, { credentials: 'same-origin', signal: c1.signal });
       clearTimeout(t1);
       if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
@@ -265,7 +271,7 @@ function getAttackFingerprint(a) {
 
       // 3) POST inicial (tela de confirmação)
       setStatus(`⏳ Enviando comando...`);
-      const { controller: c2, timeout: t2 } = safeTimeout();
+      const { controller: c2, timeout: t2 } = safeTimeout(ATTACK_TIMEOUT);
       const postRes = await safeFetch(postUrl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -311,8 +317,7 @@ function getAttackFingerprint(a) {
         if (confirmUrl.startsWith('/')) confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
 
         setStatus('⏳ Confirmando ataque (auto-fetch)...');
-        const { controller: c3, timeout: t3 } = safeTimeout();
-        const confirmRes = await safeFetch(confirmUrl, {
+        const { controller: c3, timeout: t3 } = safeTimeout(ATTACK_TIMEOUT);
           method: 'POST',
           credentials: 'same-origin',
           signal: c3.signal,
@@ -572,14 +577,19 @@ function startScheduler() {
       }
     }
 
-    // ┌─ FASE 3: EXECUÇÃO ─┐
-    // Executar sequencialmente por grupo de horário
+// ┌─ FASE 3: EXECUÇÃO SIMULTÂNEA ─┐
+// Executar TODOS os ataques do mesmo horário simultaneamente
+
+for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+  if (ataques.length > 0) {
+    console.log(`[Scheduler] Executando ${ataques.length} ataques simultâneos para ${horario}`);
     
-    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      for (const a of ataques) {
+    // Preparar todas as promessas de execução
+    const executionPromises = ataques.map(a => {
+      return (async () => {
         // ✅ Double-check: skip se já foi finalizado
         if (a.done) {
-          continue;
+          return { attack: a, success: false, skipped: true };
         }
 
         // ✅ Calcular fingerprint para evitar reprocessamento
@@ -604,6 +614,8 @@ function startScheduler() {
             SchedulerMetrics.recordExecution(false);
           }
 
+          return { attack: a, success: success, error: null };
+
         } catch (err) {
           // Erro na execução
           a.done = true;
@@ -618,22 +630,27 @@ function startScheduler() {
             err.message
           );
 
+          return { attack: a, success: false, error: err.message };
+
         } finally {
           // ✅ Sempre desbloquear
           a.locked = false;
           _executing.delete(a._id);
-          
-          // Salvar após cada execução
-          setList(list);
         }
+      })();
+    });
 
-        // Delay entre ataques do mesmo horário (evita sobrecarga)
-        // ✅ Somente se não for o último
-        if (ataques.indexOf(a) < ataques.length - 1) {
-          await sleep(250);
-        }
-      }
-    }
+    // ⚡ EXECUTAR TODOS SIMULTANEAMENTE
+    const results = await Promise.allSettled(executionPromises);
+    
+    // Salvar todos os resultados de uma vez
+    setList(list);
+    
+    // Log de resultados
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    console.log(`[Scheduler] Lote ${horario}: ${successful}/${ataques.length} bem-sucedidos`);
+  }
+}
 
     // ┌─ FASE 4: LIMPEZA ─┐
     // Cleanup periódico
@@ -717,6 +734,7 @@ console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
