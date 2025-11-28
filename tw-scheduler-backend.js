@@ -695,6 +695,52 @@ function dumpSchedulerState() {
 }
 
 // ═════════════════════════════════════════════════════════
+// ✅ TELEGRAM
+// ═════════════════════════════════════════════════════════
+
+// Adicione estas funções ao seu TWS_Backend:
+async function sendTelegramNotification(type, data) {
+  if (window.TelegramBotReal) {
+    try {
+      const config = TelegramBotReal.getConfig();
+      if (!config.enabled) return;
+      
+      let message = '';
+      const timestamp = new Date().toLocaleString('pt-BR');
+      
+      switch (type) {
+        case 'attack_success':
+          if (!config.notifications.success) return;
+          message = `✅ <b>Ataque Bem-Sucedido</b>\n⏰ ${timestamp}\n📍 ${data.origin} → ${data.target}`;
+          break;
+        case 'attack_failure':
+          if (!config.notifications.failure) return;
+          message = `❌ <b>Ataque Falhado</b>\n⏰ ${timestamp}\n📍 ${data.origin} → ${data.target}\n📝 ${data.reason}`;
+          break;
+        case 'system_error':
+          if (!config.notifications.error) return;
+          message = `🚨 <b>Erro do Sistema</b>\n⏰ ${timestamp}\n🔧 ${data.module}\n❌ ${data.error}`;
+          break;
+      }
+      
+      await TelegramBotReal.makeRequest('sendMessage', {
+        text: message,
+        parse_mode: 'HTML'
+      });
+    } catch (error) {
+      console.error('[Telegram] Erro ao enviar notificação:', error);
+    }
+  }
+}
+
+// Exemplo de uso quando um ataque é executado:
+// await sendTelegramNotification('attack_success', {
+//   origin: '500|500',
+//   target: '501|501',
+//   units: '100 spear, 50 sword'
+// });
+  
+// ═════════════════════════════════════════════════════════
 // ✅ EXPORTAR API
 // ═════════════════════════════════════════════════════════
 
@@ -735,4 +781,5 @@ console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
