@@ -430,7 +430,7 @@
     };
   }
 
-  // === INICIALIZAÇÃO ===
+  // === INICIALIZAÇÃO ====
   function init() {
     if (!window.TWS_TestModal) {
       window.TWS_TestModal = {};
