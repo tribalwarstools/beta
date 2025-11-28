@@ -39,6 +39,271 @@
     }
   };
 
+  // === MÓDULO TELEGRAM REAL ===
+  const TelegramBotReal = {
+    baseUrl: 'https://api.telegram.org/bot',
+    timeout: 10000,
+
+    getConfig() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
+        return saved.telegram || defaultConfig.telegram;
+      } catch (e) {
+        return defaultConfig.telegram;
+      }
+    },
+
+    updateFromModal() {
+      try {
+        const config = {
+          enabled: document.getElementById('telegram-enabled')?.checked || false,
+          botToken: document.getElementById('telegram-token')?.value.trim() || '',
+          chatId: document.getElementById('telegram-chatid')?.value.trim() || '',
+          notifications: {
+            success: document.getElementById('telegram-notif-success')?.checked !== false,
+            failure: document.getElementById('telegram-notif-failure')?.checked !== false,
+            farmCycle: document.getElementById('telegram-notif-farm')?.checked || false,
+            error: document.getElementById('telegram-notif-error')?.checked !== false
+          }
+        };
+
+        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
+        saved.telegram = config;
+        localStorage.setItem('tws_global_config_v2', JSON.stringify(saved));
+        return true;
+      } catch (e) {
+        console.error('[Telegram] Erro ao atualizar:', e);
+        return false;
+      }
+    },
+
+    populateModal() {
+      try {
+        const config = this.getConfig();
+        
+        const setValue = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) {
+            if (el.type === 'checkbox') {
+              el.checked = value;
+            } else {
+              el.value = value;
+            }
+          }
+        };
+
+        setValue('telegram-enabled', config.enabled);
+        setValue('telegram-token', config.botToken);
+        setValue('telegram-chatid', config.chatId);
+        setValue('telegram-notif-success', config.notifications?.success);
+        setValue('telegram-notif-failure', config.notifications?.failure);
+        setValue('telegram-notif-farm', config.notifications?.farmCycle);
+        setValue('telegram-notif-error', config.notifications?.error);
+
+        this.updateUIState();
+      } catch (e) {
+        console.error('[Telegram] Erro ao preencher modal:', e);
+      }
+    },
+
+    updateUIState() {
+      const config = this.getConfig();
+      const inputs = ['telegram-token', 'telegram-chatid'];
+      const checkboxes = ['telegram-notif-success', 'telegram-notif-failure', 'telegram-notif-farm', 'telegram-notif-error'];
+      
+      inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !config.enabled;
+      });
+      
+      checkboxes.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !config.enabled;
+      });
+    },
+
+    validateConfig() {
+      const config = this.getConfig();
+      
+      if (!config.enabled) {
+        return { valid: false, error: '❌ Telegram desativado' };
+      }
+      
+      if (!config.botToken || config.botToken.trim() === '') {
+        return { valid: false, error: '❌ Token do bot não configurado' };
+      }
+      
+      if (!config.chatId || config.chatId.trim() === '') {
+        return { valid: false, error: '❌ Chat ID não configurado' };
+      }
+      
+      if (!config.botToken.includes(':')) {
+        return { valid: false, error: '❌ Formato de token inválido' };
+      }
+      
+      return { valid: true };
+    },
+
+    async makeRequest(method, params = {}) {
+      const config = this.getConfig();
+      
+      if (!config.enabled) {
+        return { success: false, error: 'Telegram desativado' };
+      }
+
+      const url = `${this.baseUrl}${config.botToken}/${method}`;
+
+      const payload = {
+        ...params,
+        chat_id: config.chatId
+      };
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.ok) {
+          throw new Error(data.description || 'Erro desconhecido da API');
+        }
+
+        return { success: true, data: data.result };
+      } catch (error) {
+        console.error('[Telegram] Erro na requisição:', error);
+        return { 
+          success: false, 
+          error: this.getErrorMessage(error)
+        };
+      }
+    },
+
+    getErrorMessage(error) {
+      const message = error.message || 'Erro desconhecido';
+      
+      if (message.includes('400')) return '❌ Requisição inválida - verifique o Chat ID';
+      if (message.includes('401')) return '❌ Token inválido ou expirado';
+      if (message.includes('403')) return '❌ Bot bloqueado pelo usuário';
+      if (message.includes('404')) return '❌ Chat não encontrado';
+      if (message.includes('429')) return '❌ Muitas requisições - aguarde um pouco';
+      if (message.includes('500')) return '❌ Erro interno do servidor do Telegram';
+      if (message.includes('network') || message.includes('Failed to fetch')) return '❌ Erro de conexão - verifique sua internet';
+      if (message.includes('abort')) return '❌ Tempo esgotado - servidor não respondeu';
+      
+      return `❌ ${message}`;
+    },
+
+    async testConnection() {
+      const validation = this.validateConfig();
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
+      const result = await this.makeRequest('getMe');
+      
+      if (result.success) {
+        const botInfo = result.data;
+        return {
+          success: true,
+          message: '✅ Conexão bem-sucedida!',
+          details: `🤖 Bot: @${botInfo.username}\n🆔 ID: ${botInfo.id}\n📝 Nome: ${botInfo.first_name}`
+        };
+      } else {
+        return { success: false, error: result.error };
+      }
+    },
+
+    async sendTestMessage() {
+      const validation = this.validateConfig();
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
+      const timestamp = new Date().toLocaleString('pt-BR');
+      const message = `🧪 <b>Mensagem de Teste</b>\n\n⏰ <b>${timestamp}</b>\n\n🤖 <b>Bot:</b> TW Scheduler\n✅ <b>Status:</b> Sistema operacional\n📡 <b>Conexão:</b> Estável\n⏰ <b>Horário:</b> ${timestamp}`;
+
+      const result = await this.makeRequest('sendMessage', {
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      });
+
+      if (result.success) {
+        this.addToHistory(message, 'sent');
+      } else {
+        this.addToHistory(message, 'failed');
+      }
+
+      return result;
+    },
+
+    addToHistory(message, status) {
+      try {
+        const history = this.getHistory();
+        history.unshift({
+          message: message.substring(0, 200),
+          status,
+          timestamp: new Date().toISOString(),
+          type: 'outgoing'
+        });
+
+        // Manter apenas os últimos 50 registros
+        if (history.length > 50) {
+          history.splice(50);
+        }
+
+        localStorage.setItem('tws_telegram_history', JSON.stringify(history));
+      } catch (e) {
+        console.error('[Telegram] Erro ao salvar histórico:', e);
+      }
+    },
+
+    getHistory() {
+      try {
+        return JSON.parse(localStorage.getItem('tws_telegram_history') || '[]');
+      } catch (e) {
+        return [];
+      }
+    },
+
+    getStats() {
+      const history = this.getHistory();
+      const sent = history.filter(msg => msg.status === 'sent').length;
+      const failed = history.filter(msg => msg.status === 'failed').length;
+      
+      return {
+        total: history.length,
+        sent,
+        failed,
+        successRate: history.length > 0 ? Math.round((sent / history.length) * 100) : 0
+      };
+    },
+
+    clearHistory() {
+      try {
+        localStorage.removeItem('tws_telegram_history');
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+  };
+
   // === GERENCIAMENTO DE CONFIGURAÇÕES ===
   function getConfig() {
     try {
@@ -77,151 +342,6 @@
     const isDark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-tws-theme', isDark ? 'dark' : 'light');
   }
-
-  // === MÓDULO TELEGRAM SIMPLIFICADO (fallback) ===
-  const TelegramBotFallback = {
-    getConfig() {
-      try {
-        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
-        return saved.telegram || defaultConfig.telegram;
-      } catch (e) {
-        return defaultConfig.telegram;
-      }
-    },
-
-    updateFromModal() {
-      try {
-        const config = {
-          enabled: document.getElementById('telegram-enabled')?.checked || false,
-          botToken: document.getElementById('telegram-token')?.value.trim() || '',
-          chatId: document.getElementById('telegram-chatid')?.value.trim() || '',
-          notifications: {
-            success: document.getElementById('telegram-notif-success')?.checked !== false,
-            failure: document.getElementById('telegram-notif-failure')?.checked !== false,
-            farmCycle: document.getElementById('telegram-notif-farm')?.checked || false,
-            error: document.getElementById('telegram-notif-error')?.checked !== false
-          }
-        };
-
-        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
-        saved.telegram = config;
-        localStorage.setItem('tws_global_config_v2', JSON.stringify(saved));
-        return true;
-      } catch (e) {
-        console.error('[Telegram Fallback] Erro ao atualizar:', e);
-        return false;
-      }
-    },
-
-    populateModal() {
-      try {
-        const config = this.getConfig();
-        
-        const setValue = (id, value) => {
-          const el = document.getElementById(id);
-          if (el) {
-            if (el.type === 'checkbox') {
-              el.checked = value;
-            } else {
-              el.value = value;
-            }
-          }
-        };
-
-        setValue('telegram-enabled', config.enabled);
-        setValue('telegram-token', config.botToken);
-        setValue('telegram-chatid', config.chatId);
-        setValue('telegram-notif-success', config.notifications?.success);
-        setValue('telegram-notif-failure', config.notifications?.failure);
-        setValue('telegram-notif-farm', config.notifications?.farmCycle);
-        setValue('telegram-notif-error', config.notifications?.error);
-
-        this.updateUIState();
-      } catch (e) {
-        console.error('[Telegram Fallback] Erro ao preencher modal:', e);
-      }
-    },
-
-    updateUIState() {
-      const config = this.getConfig();
-      const inputs = ['telegram-token', 'telegram-chatid'];
-      const checkboxes = ['telegram-notif-success', 'telegram-notif-failure', 'telegram-notif-farm', 'telegram-notif-error'];
-      
-      inputs.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = !config.enabled;
-      });
-      
-      checkboxes.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = !config.enabled;
-      });
-    },
-
-    async testConnection() {
-      const config = this.getConfig();
-      
-      if (!config.enabled) {
-        return { success: false, error: '❌ Telegram desativado' };
-      }
-      
-      if (!config.botToken || !config.chatId) {
-        return { success: false, error: '❌ Token ou Chat ID não configurado' };
-      }
-
-      // Simular teste de conexão
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return {
-        success: true,
-        message: '✅ Conexão bem-sucedida!',
-        details: '🤖 Bot: Teste Simulado\n🆔 ID: 123456789\n📝 Nome: TW Scheduler Bot'
-      };
-    },
-
-    async sendTestMessage() {
-      const config = this.getConfig();
-      
-      if (!config.enabled) {
-        return { success: false, error: '❌ Telegram desativado' };
-      }
-
-      // Simular envio de mensagem
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      return { success: true };
-    },
-
-    getHistory() {
-      try {
-        return JSON.parse(localStorage.getItem('tws_telegram_history') || '[]');
-      } catch (e) {
-        return [];
-      }
-    },
-
-    getStats() {
-      const history = this.getHistory();
-      const sent = history.filter(msg => msg.status === 'sent').length;
-      const failed = history.filter(msg => msg.status === 'failed').length;
-      
-      return {
-        total: history.length,
-        sent,
-        failed,
-        successRate: history.length > 0 ? Math.round((sent / history.length) * 100) : 0
-      };
-    },
-
-    clearHistory() {
-      try {
-        localStorage.removeItem('tws_telegram_history');
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-  };
 
   // === FUNÇÕES AUXILIARES ===
   function getUnitDisplayName(unit) {
@@ -479,6 +599,7 @@
           font-weight: bold;
           margin: 5px 0;
           white-space: pre-wrap;
+          line-height: 1.4;
         }
         .tws-status-success {
           background: #C6F6D5;
@@ -660,6 +781,9 @@
 
             <!-- Status do Telegram -->
             <div id="telegram-status" style="margin-top: 15px;"></div>
+
+            <!-- Estatísticas -->
+            <div id="telegram-stats" style="margin-top: 15px; font-size: 12px; color: #718096;"></div>
           </div>
         </div>
 
@@ -767,6 +891,19 @@
                 <div>Telegram: <span id="stats-telegram">${config.telegram.enabled ? '✅ Ativo' : '❌ Inativo'}</span></div>
               </div>
             </div>
+
+            <!-- Histórico do Telegram -->
+            <div style="margin-top: 20px;">
+              <h4 style="margin-bottom: 10px;">📨 Histórico do Telegram</h4>
+              <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="tws-config-btn btn-secondary" onclick="viewTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  📋 Ver Histórico
+                </button>
+                <button class="tws-config-btn btn-warning" onclick="clearTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  🗑️ Limpar Histórico
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -794,7 +931,8 @@
 
     // Inicializar configurações do Telegram
     setTimeout(() => {
-      TelegramBotFallback.populateModal();
+      TelegramBotReal.populateModal();
+      updateTelegramStats();
     }, 100);
 
     // === FUNÇÕES GLOBAIS TEMPORÁRIAS ===
@@ -845,8 +983,8 @@
         btn.disabled = true;
         showTelegramStatus('⏳ Testando conexão com Telegram...', 'warning');
 
-        TelegramBotFallback.updateFromModal();
-        const result = await TelegramBotFallback.testConnection();
+        TelegramBotReal.updateFromModal();
+        const result = await TelegramBotReal.testConnection();
 
         if (result.success) {
           showTelegramStatus(`✅ ${result.message}\n${result.details}`, 'success');
@@ -858,6 +996,7 @@
       } finally {
         btn.innerHTML = '🧪 Testar Conexão';
         btn.disabled = false;
+        updateTelegramStats();
       }
     };
 
@@ -870,8 +1009,8 @@
         btn.disabled = true;
         showTelegramStatus('📤 Enviando mensagem de teste...', 'warning');
 
-        TelegramBotFallback.updateFromModal();
-        const result = await TelegramBotFallback.sendTestMessage();
+        TelegramBotReal.updateFromModal();
+        const result = await TelegramBotReal.sendTestMessage();
 
         if (result.success) {
           showTelegramStatus('✅ Mensagem de teste enviada com sucesso!', 'success');
@@ -883,6 +1022,7 @@
       } finally {
         btn.innerHTML = '📤 Enviar Teste';
         btn.disabled = false;
+        updateTelegramStats();
       }
     };
 
@@ -966,8 +1106,8 @@
       });
       
       // Salvar configurações do Telegram
-      TelegramBotFallback.updateFromModal();
-      Object.assign(config.telegram, TelegramBotFallback.getConfig());
+      TelegramBotReal.updateFromModal();
+      Object.assign(config.telegram, TelegramBotReal.getConfig());
       
       // Salvar outras configurações
       config.theme = document.getElementById('theme-select').value;
@@ -982,6 +1122,7 @@
       
       if (saveConfig(config)) {
         showStatus('✅ Configurações salvas com sucesso!', 'success');
+        updateTelegramStats();
       }
     };
 
@@ -998,12 +1139,37 @@
       const functions = [
         'switchConfigTab', 'resetUnitSpeeds', 'testUnitSpeed', 'testTelegram', 'sendTestMessage',
         'exportConfig', 'importConfig', 'backupData', 'resetConfig', 'saveConfig', 
-        'saveAndCloseConfig', 'closeConfigModal'
+        'saveAndCloseConfig', 'closeConfigModal', 'viewTelegramHistory', 'clearTelegramHistory'
       ];
       
       functions.forEach(fn => {
         delete window[fn];
       });
+    };
+
+    window.viewTelegramHistory = function() {
+      const history = TelegramBotReal.getHistory();
+      const stats = TelegramBotReal.getStats();
+      
+      const historyText = history.slice(0, 10).map((msg, i) => 
+        `${i + 1}. ${new Date(msg.timestamp).toLocaleString()} - ${msg.status === 'sent' ? '✅' : '❌'} ${msg.message}`
+      ).join('\n');
+      
+      alert(`📊 Estatísticas do Telegram:\n\n` +
+            `📨 Total: ${stats.total} mensagens\n` +
+            `✅ Enviadas: ${stats.sent}\n` +
+            `❌ Falhas: ${stats.failed}\n` +
+            `📈 Taxa de sucesso: ${stats.successRate}%\n\n` +
+            `📋 Últimas mensagens:\n${historyText || 'Nenhuma mensagem no histórico'}`);
+    };
+
+    window.clearTelegramHistory = function() {
+      if (confirm('Limpar todo o histórico do Telegram?')) {
+        if (TelegramBotReal.clearHistory()) {
+          showStatus('✅ Histórico do Telegram limpo!', 'success');
+          updateTelegramStats();
+        }
+      }
     };
 
     // === FUNÇÕES AUXILIARES ===
@@ -1018,6 +1184,22 @@
       }
     }
 
+    function updateTelegramStats() {
+      const stats = TelegramBotReal.getStats();
+      const statsEl = document.getElementById('telegram-stats');
+      if (statsEl) {
+        statsEl.innerHTML = `
+          <div style="background: #EDF2F7; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <strong>📊 Estatísticas:</strong><br>
+            📨 Total: ${stats.total} mensagens | 
+            ✅ ${stats.sent} enviadas | 
+            ❌ ${stats.failed} falhas | 
+            📈 ${stats.successRate}% sucesso
+          </div>
+        `;
+      }
+    }
+
     // Fechar modal ao clicar fora
     overlay.onclick = function(e) {
       if (e.target === overlay) {
@@ -1027,7 +1209,7 @@
 
     // Event listeners para atualização em tempo real
     document.getElementById('telegram-enabled')?.addEventListener('change', () => {
-      TelegramBotFallback.updateUIState();
+      TelegramBotReal.updateUIState();
     });
   }
 
@@ -1044,7 +1226,7 @@
     // Aplicar configurações ao carregar
     applyConfig(getConfig());
     
-    console.log('[TW Config] ✅ Modal de configurações carregado com fallback do Telegram!');
+    console.log('[TW Config] ✅ Modal de configurações carregado com Telegram REAL!');
   }
 
   // Inicializar
