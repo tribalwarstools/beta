@@ -18,7 +18,7 @@ scripts: [
     { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal' },  // ✨ NOVO
     { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente' },  // ✨ NOVO
     { file: 'tw-scheduler-config-modal.js', check: 'TWS_ConfigModal' },  // ✨ NOVO
-    { file: 'telegram-bot.js', check: 'TelegramBot' }  // ✨ NOVO
+    
     
 ],
         timeout: 15000,
