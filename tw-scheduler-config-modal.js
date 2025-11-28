@@ -559,7 +559,7 @@
           font-size: 14px;
         }
         .tws-form-input {
-          width: 100%;
+          width: 50%;
           padding: 10px;
           border: 1px solid #CBD5E0;
           border-radius: 6px;
