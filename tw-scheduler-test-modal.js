@@ -177,14 +177,14 @@
             O ataque será enviado <strong>IMEDIATAMENTE</strong>
           </div>
           ${isOriginalDone ? `
-            <div style="margin-top: 8px; padding: 8px; background: #FFF3E0; border-radius: 4px; font-size: 12px;">
-              🔄 <strong>Agendamento original já foi executado</strong><br>
+            <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
+              ✅ <strong>Agendamento original preservado</strong><br>
               <small>Criando um NOVO envio baseado no original</small>
             </div>
           ` : `
-            <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
-              ✅ <strong>Agendamento original preservado</strong><br>
-              <small>O agendamento original será mantido na lista</small>
+            <div style="margin-top: 8px; padding: 8px; background: #FFF3E0; border-radius: 4px; font-size: 12px;">
+              🔄 <strong>Agendamento será marcado como concluído</strong><br>
+              <small>Não executará novamente no horário original</small>
             </div>
           `}
         </div>
