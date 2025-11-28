@@ -155,8 +155,10 @@
     return html;
   }
 
-  // ✅ Renderiza confirmação de envio (SIMPLIFICADA)
+  // ✅ Renderiza confirmação de envio
   function renderConfirmTab(cfg) {
+    const isOriginalDone = cfg.done;
+    
     return `
       <div style="display: grid; gap: 15px;">
         <!-- Aviso destacado -->
@@ -169,11 +171,22 @@
         ">
           <div style="font-size: 28px; margin-bottom: 8px;">⚠️</div>
           <div style="font-weight: bold; color: #D32F2F; font-size: 16px;">
-            ENVIO IMEDIATO!
+            ATENÇÃO - ENVIO IMEDIATO!
           </div>
           <div style="color: #C62828; font-size: 14px; margin-top: 8px;">
-            O ataque será enviado <strong>AGORA</strong>
+            O ataque será enviado <strong>IMEDIATAMENTE</strong>
           </div>
+          ${isOriginalDone ? `
+            <div style="margin-top: 8px; padding: 8px; background: #FFF3E0; border-radius: 4px; font-size: 12px;">
+              🔄 <strong>Agendamento original já foi executado</strong><br>
+              <small>Criando um NOVO envio baseado no original</small>
+            </div>
+          ` : `
+            <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
+              ✅ <strong>Agendamento original preservado</strong><br>
+              <small>O agendamento original será mantido na lista</small>
+            </div>
+          `}
         </div>
 
         <!-- Info do ataque -->
@@ -205,7 +218,7 @@
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
             <input type="checkbox" id="confirm-checkbox" style="width: 20px; height: 20px; cursor: pointer;">
             <span style="font-weight: bold; color: #E65100;">
-              Confirmar envio imediato deste ataque
+              Tenho certeza que quero enviar este ataque AGORA
             </span>
           </label>
         </div>
@@ -213,7 +226,7 @@
     `;
   }
 
-  // ✅ Executa o ataque imediatamente SEM ALTERAR O AGENDAMENTO ORIGINAL
+  // ✅ Executa o ataque imediatamente
   async function executeTest(cfg, statusDiv, overlay) {
     try {
       statusDiv.innerHTML = '🔥 <strong>Executando envio imediato...</strong>';
@@ -227,9 +240,20 @@
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
         
-        // ✅ IMPORTANTE: NÃO ALTERA O AGENDAMENTO ORIGINAL
-        // O agendamento permanece exatamente como estava na lista
-        // (não marca como done, não modifica nada)
+        // ✅ Para envio imediato, marca o original como feito apenas se ainda não estava
+        const list = getList();
+        const idx = list.findIndex(a => 
+          a.origem === cfg.origem && 
+          a.alvo === cfg.alvo &&
+          a.datetime === cfg.datetime // Match exato
+        );
+        
+        if (idx !== -1 && !list[idx].done) {
+          list[idx].done = true;
+          list[idx].success = true;
+          list[idx].executedAt = new Date().toISOString();
+          setList(list);
+        }
         
         setTimeout(() => {
           overlay.remove();
@@ -403,8 +427,22 @@
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
-        // ✅ EXECUTA O ATAQUE SEM MODIFICAR O AGENDAMENTO ORIGINAL
-        // A lista de agendamentos permanece intacta
+        // ✅ ENVIO IMEDIATO: Marca original como feito apenas se ainda não estava
+        const list = getList();
+        const idx = list.findIndex(a => 
+          a.origem === selectedAgenda.origem && 
+          a.alvo === selectedAgenda.alvo &&
+          a.datetime === selectedAgenda.datetime // Match exato
+        );
+
+        if (idx !== -1 && !list[idx].done) {
+          list[idx].done = true;
+          list[idx].success = true;
+          list[idx].executedAt = new Date().toISOString();
+          setList(list);
+        }
+
+        // Executar envio
         executeTest(selectedAgenda, statusDiv, overlay);
       }
     };
