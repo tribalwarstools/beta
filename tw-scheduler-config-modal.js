@@ -29,12 +29,12 @@
       soundOnComplete: false,
       retryOnFail: true,
       maxRetries: 3,
-      delayBetweenAttacks: 1000
+      delayBetweenAttacks: 1000,
+      confirmDeletion: true,
+      askBeforeSend: false
     },
     security: {
-      confirmDeletion: true,
       confirmMassActions: true,
-      askBeforeSend: false,
       backupInterval: 86400000
     }
   };
@@ -78,6 +78,33 @@
     document.documentElement.setAttribute('data-tws-theme', isDark ? 'dark' : 'light');
   }
 
+  // === FUNÇÕES AUXILIARES ===
+  function getUnitDisplayName(unit) {
+    const names = {
+      spear: 'Lanceiro',
+      sword: 'Espadachim',
+      axe: 'Bárbaro',
+      archer: 'Arqueiro',
+      spy: 'Espião',
+      light: 'Cav. Leve',
+      marcher: 'Arqueiro Cav.',
+      heavy: 'Cav. Pesado',
+      ram: 'Ariete',
+      catapult: 'Catapulta',
+      knight: 'Paladino',
+      snob: 'Nobre'
+    };
+    return names[unit] || unit;
+  }
+
+  function calcularDistancia(coord1, coord2) {
+    const [x1, y1] = coord1.split('|').map(Number);
+    const [x2, y2] = coord2.split('|').map(Number);
+    const deltaX = Math.abs(x1 - x2);
+    const deltaY = Math.abs(y1 - y2);
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
   // === MODAL DE CONFIGURAÇÕES ===
   function showConfigModal() {
     const existing = document.getElementById('tws-config-modal');
@@ -94,10 +121,11 @@
       width: 100%;
       height: 100%;
       background: rgba(0, 0, 0, 0.8);
-      z-index: 999999;
+      z-index: 1000000;
       display: flex;
       justify-content: center;
       align-items: center;
+      animation: fadeIn 0.2s ease;
     `;
 
     const modal = document.createElement('div');
@@ -113,15 +141,26 @@
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       display: flex;
       flex-direction: column;
+      animation: slideIn 0.3s ease;
     `;
 
     modal.innerHTML = `
       <style>
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { transform: translateY(-50px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        
         .tws-config-tabs {
           display: flex;
           background: #4A5568;
           padding: 0;
           flex-shrink: 0;
+          border-bottom: 2px solid #667eea;
         }
         .tws-config-tab {
           padding: 15px 20px;
@@ -131,12 +170,14 @@
           background: none;
           font-weight: bold;
           transition: all 0.3s;
+          border-bottom: 3px solid transparent;
         }
         .tws-config-tab:hover {
           background: #5a6578;
         }
         .tws-config-tab.active {
           background: #667eea;
+          border-bottom-color: #48BB78;
         }
         .tws-config-content-wrapper {
           flex: 1;
@@ -162,6 +203,7 @@
           margin: 10px 0;
           border-left: 4px solid #667eea;
           color: #2D3748;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         .tws-config-grid {
           display: grid;
@@ -177,6 +219,11 @@
           background: #F7FAFC;
           border-radius: 6px;
           border: 1px solid #E2E8F0;
+          transition: all 0.2s;
+        }
+        .tws-config-item:hover {
+          border-color: #667eea;
+          transform: translateY(-1px);
         }
         .tws-config-label {
           font-weight: bold;
@@ -198,6 +245,12 @@
           font-size: 14px;
           background: white;
           color: #2D3748;
+          transition: border-color 0.3s;
+        }
+        .tws-config-input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
         .tws-config-unit {
           font-size: 11px;
@@ -213,10 +266,16 @@
           cursor: pointer;
           margin: 5px;
           transition: all 0.3s;
+          font-size: 14px;
         }
-        .tws-config-btn:hover {
+        .tws-config-btn:hover:not(:disabled) {
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .tws-config-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none !important;
         }
         .btn-primary { background: #667eea; }
         .btn-success { background: #48BB78; }
@@ -224,33 +283,6 @@
         .btn-danger { background: #F56565; }
         .btn-secondary { background: #718096; }
         
-        /* Dark theme - CORREÇÕES APLICADAS */
-        [data-tws-theme="dark"] .tws-config-tab-content {
-          background: #2D3748;
-          color: #E2E8F0 !important;
-        }
-        [data-tws-theme="dark"] .tws-config-section {
-          background: #4A5568;
-          color: #E2E8F0 !important;
-          border-left-color: #667eea;
-        }
-        [data-tws-theme="dark"] .tws-config-item {
-          background: #2D3748;
-          border-color: #718096;
-        }
-        [data-tws-theme="dark"] .tws-config-input {
-          background: #1A202C;
-          border-color: #718096;
-          color: #E2E8F0;
-        }
-        [data-tws-theme="dark"] .tws-config-label {
-          color: #E2E8F0 !important;
-        }
-        [data-tws-theme="dark"] .tws-config-unit {
-          color: #CBD5E0;
-        }
-
-        /* Melhorias para inputs e labels */
         .tws-form-group {
           margin-bottom: 15px;
         }
@@ -286,13 +318,43 @@
         .tws-checkbox-group input[type="checkbox"] {
           width: 16px;
           height: 16px;
+          cursor: pointer;
         }
         .tws-checkbox-group label {
           font-size: 14px;
           color: #4A5568;
+          cursor: pointer;
         }
 
-        /* Dark theme para formulários */
+        /* Dark theme */
+        [data-tws-theme="dark"] .tws-config-tab-content {
+          background: #2D3748;
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section {
+          background: #4A5568;
+          color: #E2E8F0 !important;
+          border-left-color: #667eea;
+        }
+        [data-tws-theme="dark"] .tws-config-item {
+          background: #2D3748;
+          border-color: #718096;
+        }
+        [data-tws-theme="dark"] .tws-config-input {
+          background: #1A202C;
+          border-color: #718096;
+          color: #E2E8F0;
+        }
+        [data-tws-theme="dark"] .tws-config-input:focus {
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        [data-tws-theme="dark"] .tws-config-label {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-unit {
+          color: #CBD5E0;
+        }
         [data-tws-theme="dark"] .tws-form-label {
           color: #E2E8F0 !important;
         }
@@ -311,8 +373,6 @@
         [data-tws-theme="dark"] .tws-checkbox-group label {
           color: #E2E8F0 !important;
         }
-
-        /* Textos específicos */
         [data-tws-theme="dark"] h3,
         [data-tws-theme="dark"] h4 {
           color: #E2E8F0 !important;
@@ -326,8 +386,6 @@
         [data-tws-theme="dark"] .tws-config-section h3 {
           color: #E2E8F0 !important;
         }
-
-        /* Estatísticas no backup */
         [data-tws-theme="dark"] .tws-config-section div[style*="background: #EDF2F7"] {
           background: #2D3748 !important;
           color: #E2E8F0 !important;
@@ -337,6 +395,44 @@
         }
         [data-tws-theme="dark"] .tws-config-section div[style*="background: #EDF2F7"] div {
           color: #CBD5E0 !important;
+        }
+
+        /* Botões de ação em grupo */
+        .tws-action-buttons {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+        
+        /* Status indicators */
+        .tws-status {
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: bold;
+          margin: 5px 0;
+        }
+        .tws-status-success {
+          background: #C6F6D5;
+          color: #22543D;
+          border: 1px solid #48BB78;
+        }
+        .tws-status-error {
+          background: #FED7D7;
+          color: #742A2A;
+          border: 1px solid #F56565;
+        }
+        .tws-status-warning {
+          background: #FEEBC8;
+          color: #744210;
+          border: 1px solid #ED8936;
+        }
+        
+        /* Loading states */
+        .tws-loading {
+          opacity: 0.7;
+          pointer-events: none;
         }
       </style>
 
@@ -407,12 +503,18 @@
               <label class="tws-form-label" for="telegram-token">Bot Token:</label>
               <input type="password" class="tws-form-input" 
                      id="telegram-token" value="${config.telegram.botToken}" placeholder="123456789:ABCdefGHIjkl..." />
+              <small style="color: #718096; font-size: 12px;">
+                Obtenha com @BotFather no Telegram
+              </small>
             </div>
             
             <div class="tws-form-group">
               <label class="tws-form-label" for="telegram-chatid">Chat ID:</label>
               <input type="text" class="tws-form-input" 
                      id="telegram-chatid" value="${config.telegram.chatId}" placeholder="-100123456789" />
+              <small style="color: #718096; font-size: 12px;">
+                Use @userinfobot para obter seu Chat ID
+              </small>
             </div>
             
             <div class="tws-form-group">
@@ -437,9 +539,18 @@
               </div>
             </div>
             
-            <button class="tws-config-btn btn-primary" onclick="testTelegram()" style="margin-top: 15px;">
-              🧪 Testar Conexão Telegram
-            </button>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+              <button class="tws-config-btn btn-primary" onclick="testTelegram()">
+                🧪 Testar Conexão
+              </button>
+              
+              <button class="tws-config-btn btn-success" onclick="sendTestMessage()">
+                📤 Enviar Teste
+              </button>
+            </div>
+
+            <!-- Status do Telegram -->
+            <div id="telegram-status" style="margin-top: 15px;"></div>
           </div>
         </div>
 
@@ -458,6 +569,7 @@
             </div>
             
             <div class="tws-form-group">
+              <label class="tws-form-label">Notificações:</label>
               <div class="tws-checkbox-group">
                 <input type="checkbox" id="show-notifications" ${config.behavior.showNotifications ? 'checked' : ''}>
                 <label for="show-notifications">Mostrar notificações na tela</label>
@@ -485,6 +597,16 @@
                 <input type="checkbox" id="retry-on-fail" ${config.behavior.retryOnFail ? 'checked' : ''}>
                 <label for="retry-on-fail">Tentar novamente em caso de falha</label>
               </div>
+
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="confirm-deletion" ${config.behavior.confirmDeletion ? 'checked' : ''}>
+                <label for="confirm-deletion">Confirmar antes de excluir</label>
+              </div>
+
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="ask-before-send" ${config.behavior.askBeforeSend ? 'checked' : ''}>
+                <label for="ask-before-send">Perguntar antes de enviar ataques</label>
+              </div>
             </div>
             
             <div class="tws-form-group">
@@ -497,6 +619,9 @@
               <label class="tws-form-label" for="delay-between-attacks">Delay entre ataques (ms):</label>
               <input type="number" class="tws-form-input" 
                      id="delay-between-attacks" value="${config.behavior.delayBetweenAttacks}" min="0" max="10000" style="width: 150px;" />
+              <small style="color: #718096; font-size: 12px;">
+                Recomendado: 1000ms (1 segundo) para evitar detecção
+              </small>
             </div>
           </div>
         </div>
@@ -506,7 +631,7 @@
           <div class="tws-config-section">
             <h3 style="margin-top: 0; color: #2D3748;">💾 Backup e Restauração</h3>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+            <div class="tws-action-buttons">
               <button class="tws-config-btn btn-success" onclick="exportConfig()">
                 📤 Exportar Configurações
               </button>
@@ -530,7 +655,22 @@
                 <div>Agendamentos: <span id="stats-agendamentos">${window.TWS_Backend ? window.TWS_Backend.getList().length : 0}</span></div>
                 <div>Farms: <span id="stats-farms">${window.TWS_FarmInteligente ? window.TWS_FarmInteligente._getFarmList().length : 0}</span></div>
                 <div>Configurações: <span id="stats-config-size">${Math.round(JSON.stringify(config).length / 1024 * 100) / 100}</span> KB</div>
+                <div>Telegram: <span id="stats-telegram">${config.telegram.enabled ? '✅ Ativo' : '❌ Inativo'}</span></div>
               </div>
+            </div>
+
+            <!-- Histórico do Telegram -->
+            <div style="margin-top: 20px;">
+              <h4 style="margin-bottom: 10px;">📨 Histórico do Telegram</h4>
+              <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="tws-config-btn btn-secondary" onclick="viewTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  📋 Ver Histórico
+                </button>
+                <button class="tws-config-btn btn-warning" onclick="clearTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  🗑️ Limpar Histórico
+                </button>
+              </div>
+              <div id="telegram-stats"></div>
             </div>
           </div>
         </div>
@@ -557,13 +697,19 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Adicionar funções globais temporárias
+    // Inicializar configurações do Telegram se disponível
+    setTimeout(() => {
+      if (window.TelegramBot) {
+        window.TelegramBot.populateModal();
+        updateTelegramStats();
+      }
+    }, 100);
+
+    // === FUNÇÕES GLOBAIS TEMPORÁRIAS ===
     window.switchConfigTab = function(tabName) {
-      // Remover active de todas as abas
       document.querySelectorAll('.tws-config-tab').forEach(tab => tab.classList.remove('active'));
       document.querySelectorAll('.tws-config-tab-content').forEach(content => content.classList.remove('active'));
       
-      // Adicionar active à aba selecionada
       document.querySelector(`.tws-config-tab[onclick="switchConfigTab('${tabName}')"]`).classList.add('active');
       document.getElementById(`tab-${tabName}`).classList.add('active');
     };
@@ -574,11 +720,12 @@
         config.velocidadesUnidades = { ...defaultConfig.velocidadesUnidades };
         saveConfig(config);
         
-        // Atualizar os inputs
         document.querySelectorAll('.tws-config-input').forEach(input => {
           const unit = input.dataset.unit;
           input.value = config.velocidadesUnidades[unit];
         });
+        
+        showStatus('✅ Velocidades resetadas para padrão!', 'success');
       }
     };
 
@@ -597,32 +744,61 @@
       }
     };
 
-// No lugar da função window.testTelegram atual:
-window.testTelegram = async function() {
-  try {
-    const config = getConfig();
-    
-    if (!config.telegram.botToken) {
-      alert('❌ Bot Token não configurado!');
-      return;
-    }
-    
-    if (!config.telegram.chatId) {
-      alert('❌ Chat ID não configurado!');
-      return;
-    }
+    window.testTelegram = async function() {
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      
+      try {
+        btn.innerHTML = '⏳ Testando...';
+        btn.disabled = true;
+        showTelegramStatus('⏳ Testando conexão com Telegram...', 'warning');
 
-    alert('🧪 Testando conexão com Telegram...\n\nVerifique se recebeu a mensagem de teste.');
-    
-    if (window.TWS_Telegram) {
-      await window.TWS_Telegram.testConnection();
-    } else {
-      alert('⚠️ Módulo Telegram não carregado completamente');
-    }
-  } catch (error) {
-    alert(`❌ Erro no teste: ${error.message}`);
-  }
-};
+        if (window.TelegramBot) {
+          window.TelegramBot.updateFromModal();
+        }
+
+        const result = await TelegramBot.testConnection();
+
+        if (result.success) {
+          showTelegramStatus(`✅ ${result.message}\n${result.details}`, 'success');
+        } else {
+          showTelegramStatus(result.error, 'error');
+        }
+      } catch (error) {
+        showTelegramStatus(`❌ Erro inesperado: ${error.message}`, 'error');
+      } finally {
+        btn.innerHTML = '🧪 Testar Conexão';
+        btn.disabled = false;
+      }
+    };
+
+    window.sendTestMessage = async function() {
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      
+      try {
+        btn.innerHTML = '📤 Enviando...';
+        btn.disabled = true;
+        showTelegramStatus('📤 Enviando mensagem de teste...', 'warning');
+
+        if (window.TelegramBot) {
+          window.TelegramBot.updateFromModal();
+        }
+
+        const result = await TelegramBot.sendTestMessage();
+
+        if (result.success) {
+          showTelegramStatus('✅ Mensagem de teste enviada com sucesso!', 'success');
+        } else {
+          showTelegramStatus(`❌ Erro: ${result.error}`, 'error');
+        }
+      } catch (error) {
+        showTelegramStatus(`❌ Erro inesperado: ${error.message}`, 'error');
+      } finally {
+        btn.innerHTML = '📤 Enviar Teste';
+        btn.disabled = false;
+      }
+    };
 
     window.exportConfig = function() {
       const config = getConfig();
@@ -633,23 +809,63 @@ window.testTelegram = async function() {
       a.download = `tws_config_${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      alert('✅ Configurações exportadas!');
+      showStatus('✅ Configurações exportadas com sucesso!', 'success');
     };
 
     window.importConfig = function() {
-      alert('📥 Funcionalidade de importação será implementada!');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const importedConfig = JSON.parse(event.target.result);
+            if (confirm('Importar estas configurações? Isso substituirá suas configurações atuais.')) {
+              saveConfig(importedConfig);
+              showStatus('✅ Configurações importadas com sucesso!', 'success');
+              setTimeout(() => location.reload(), 1000);
+            }
+          } catch (error) {
+            showStatus('❌ Erro ao importar arquivo: formato inválido', 'error');
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
     };
 
     window.backupData = function() {
-      alert('💾 Funcionalidade de backup completo será implementada!');
+      const backup = {
+        config: getConfig(),
+        schedules: window.TWS_Backend ? window.TWS_Backend.getList() : [],
+        farms: window.TWS_FarmInteligente ? window.TWS_FarmInteligente._getFarmList() : [],
+        timestamp: new Date().toISOString(),
+        version: '1.0'
+      };
+      
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tws_backup_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('✅ Backup completo realizado!', 'success');
     };
 
     window.resetConfig = function() {
       if (confirm('⚠️ TEM CERTEZA?\n\nIsso resetará TODAS as configurações para os valores padrão.')) {
         localStorage.removeItem(CONFIG_STORAGE_KEY);
         applyConfig(defaultConfig);
-        alert('✅ Configurações resetadas!');
-        closeConfigModal();
+        showStatus('✅ Configurações resetadas! Recarregando...', 'success');
+        setTimeout(() => {
+          closeConfigModal();
+          location.reload();
+        }, 1500);
       }
     };
 
@@ -663,25 +879,26 @@ window.testTelegram = async function() {
         config.velocidadesUnidades[unit] = Math.max(0.1, value);
       });
       
-      // Salvar outras configurações
-      config.telegram.enabled = document.getElementById('telegram-enabled').checked;
-      config.telegram.botToken = document.getElementById('telegram-token').value;
-      config.telegram.chatId = document.getElementById('telegram-chatid').value;
-      config.telegram.notifications.success = document.getElementById('telegram-notif-success').checked;
-      config.telegram.notifications.failure = document.getElementById('telegram-notif-failure').checked;
-      config.telegram.notifications.farmCycle = document.getElementById('telegram-notif-farm').checked;
-      config.telegram.notifications.error = document.getElementById('telegram-notif-error').checked;
+      // Salvar configurações do Telegram
+      if (window.TelegramBot) {
+        window.TelegramBot.updateFromModal();
+        Object.assign(config.telegram, window.TelegramBot.getConfig());
+      }
       
+      // Salvar outras configurações
       config.theme = document.getElementById('theme-select').value;
       config.behavior.showNotifications = document.getElementById('show-notifications').checked;
       config.behavior.soundOnComplete = document.getElementById('sound-on-complete').checked;
       config.behavior.autoStartScheduler = document.getElementById('auto-start-scheduler').checked;
       config.behavior.retryOnFail = document.getElementById('retry-on-fail').checked;
+      config.behavior.confirmDeletion = document.getElementById('confirm-deletion').checked;
+      config.behavior.askBeforeSend = document.getElementById('ask-before-send').checked;
       config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
       config.behavior.delayBetweenAttacks = parseInt(document.getElementById('delay-between-attacks').value) || 1000;
       
       if (saveConfig(config)) {
-        alert('✅ Configurações salvas com sucesso!');
+        showStatus('✅ Configurações salvas com sucesso!', 'success');
+        updateTelegramStats();
       }
     };
 
@@ -695,18 +912,70 @@ window.testTelegram = async function() {
       if (modal) modal.remove();
       
       // Limpar funções globais temporárias
-      delete window.switchConfigTab;
-      delete window.resetUnitSpeeds;
-      delete window.testUnitSpeed;
-      delete window.testTelegram;
-      delete window.exportConfig;
-      delete window.importConfig;
-      delete window.backupData;
-      delete window.resetConfig;
-      delete window.saveConfig;
-      delete window.saveAndCloseConfig;
-      delete window.closeConfigModal;
+      const functions = [
+        'switchConfigTab', 'resetUnitSpeeds', 'testUnitSpeed', 'testTelegram', 'sendTestMessage',
+        'exportConfig', 'importConfig', 'backupData', 'resetConfig', 'saveConfig', 
+        'saveAndCloseConfig', 'closeConfigModal', 'viewTelegramHistory', 'clearTelegramHistory'
+      ];
+      
+      functions.forEach(fn => {
+        delete window[fn];
+      });
     };
+
+    window.viewTelegramHistory = function() {
+      if (window.TelegramBot) {
+        const history = window.TelegramBot.getHistory();
+        const stats = window.TelegramBot.getStats();
+        
+        const historyText = history.slice(0, 10).map((msg, i) => 
+          `${i + 1}. ${new Date(msg.timestamp).toLocaleString()} - ${msg.status === 'sent' ? '✅' : '❌'} ${msg.message}`
+        ).join('\n');
+        
+        alert(`📊 Estatísticas do Telegram:\n\n` +
+              `📨 Total: ${stats.total} mensagens\n` +
+              `✅ Enviadas: ${stats.sent}\n` +
+              `❌ Falhas: ${stats.failed}\n` +
+              `📈 Taxa de sucesso: ${stats.successRate}%\n\n` +
+              `📋 Últimas mensagens:\n${historyText || 'Nenhuma mensagem no histórico'}`);
+      }
+    };
+
+    window.clearTelegramHistory = function() {
+      if (confirm('Limpar todo o histórico do Telegram?')) {
+        if (window.TelegramBot && window.TelegramBot.clearHistory()) {
+          showStatus('✅ Histórico do Telegram limpo!', 'success');
+          updateTelegramStats();
+        }
+      }
+    };
+
+    // === FUNÇÕES AUXILIARES ===
+    function showStatus(message, type) {
+      // Implementação para mostrar status geral
+      alert(message);
+    }
+
+    function showTelegramStatus(message, type) {
+      const statusEl = document.getElementById('telegram-status');
+      if (statusEl) {
+        statusEl.innerHTML = `<div class="tws-status tws-status-${type}">${message.replace(/\n/g, '<br>')}</div>`;
+      }
+    }
+
+    function updateTelegramStats() {
+      if (window.TelegramBot) {
+        const stats = window.TelegramBot.getStats();
+        const statsEl = document.getElementById('telegram-stats');
+        if (statsEl) {
+          statsEl.innerHTML = `
+            <div style="font-size: 12px; color: #718096;">
+              📨 Mensagens: ${stats.total} total | ✅ ${stats.sent} | ❌ ${stats.failed} | 📈 ${stats.successRate}% sucesso
+            </div>
+          `;
+        }
+      }
+    }
 
     // Fechar modal ao clicar fora
     overlay.onclick = function(e) {
@@ -714,33 +983,6 @@ window.testTelegram = async function() {
         window.closeConfigModal();
       }
     };
-  }
-
-  // === FUNÇÕES AUXILIARES ===
-  function getUnitDisplayName(unit) {
-    const names = {
-      spear: 'Lanceiro',
-      sword: 'Espadachim',
-      axe: 'Bárbaro',
-      archer: 'Arqueiro',
-      spy: 'Espião',
-      light: 'Cav. Leve',
-      marcher: 'Arqueiro Cav.',
-      heavy: 'Cav. Pesado',
-      ram: 'Ariete',
-      catapult: 'Catapulta',
-      knight: 'Paladino',
-      snob: 'Nobre'
-    };
-    return names[unit] || unit;
-  }
-
-  function calcularDistancia(coord1, coord2) {
-    const [x1, y1] = coord1.split('|').map(Number);
-    const [x2, y2] = coord2.split('|').map(Number);
-    const deltaX = Math.abs(x1 - x2);
-    const deltaY = Math.abs(y1 - y2);
-    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
   }
 
   // === INICIALIZAÇÃO ===
@@ -756,7 +998,7 @@ window.testTelegram = async function() {
     // Aplicar configurações ao carregar
     applyConfig(getConfig());
     
-    console.log('[TW Config] ✅ Sistema de configurações carregado!');
+    console.log('[TW Config] ✅ Sistema de configurações carregado e integrado com Telegram!');
   }
 
   // Inicializar
