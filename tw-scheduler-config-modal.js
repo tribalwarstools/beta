@@ -597,9 +597,32 @@
       }
     };
 
-    window.testTelegram = function() {
-      alert('🧪 Funcionalidade de teste do Telegram será implementada!');
-    };
+// No lugar da função window.testTelegram atual:
+window.testTelegram = async function() {
+  try {
+    const config = getConfig();
+    
+    if (!config.telegram.botToken) {
+      alert('❌ Bot Token não configurado!');
+      return;
+    }
+    
+    if (!config.telegram.chatId) {
+      alert('❌ Chat ID não configurado!');
+      return;
+    }
+
+    alert('🧪 Testando conexão com Telegram...\n\nVerifique se recebeu a mensagem de teste.');
+    
+    if (window.TWS_Telegram) {
+      await window.TWS_Telegram.testConnection();
+    } else {
+      alert('⚠️ Módulo Telegram não carregado completamente');
+    }
+  } catch (error) {
+    alert(`❌ Erro no teste: ${error.message}`);
+  }
+};
 
     window.exportConfig = function() {
       const config = getConfig();
