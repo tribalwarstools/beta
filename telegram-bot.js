@@ -583,7 +583,7 @@
   // === INICIALIZAÇÃO ===
   function init() {
     // Expor o módulo globalmente
-    window.TelegramBot = TelegramBot;
+   window.TelegramBotReal = TelegramBot;
     
     // Integrar com o modal de configurações
     integrateWithConfigModal();
