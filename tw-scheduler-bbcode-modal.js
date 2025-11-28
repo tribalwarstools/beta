@@ -14,25 +14,25 @@
     generateUniqueId
   } = window.TWS_Backend;
 
-// ✅ VALIDADOR MELHORADO DE COORDENADAS - VERSÃO CORRIGIDA
-function parseCoordValidate(s) {
-  if (!s) return null;
-  
-  const t = s.trim();
-  const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-  
-  if (!match) return null;
-  
-  const x = parseInt(match[1], 10);
-  const y = parseInt(match[2], 10);
-  
-  // Corrigido: máximo 9999 (4 dígitos) para compatibilidade com a regex
-  if (x < 0 || x > 9999 || y < 0 || y > 9999) {
-    return null;
+  // ✅ VALIDADOR MELHORADO DE COORDENADAS - VERSÃO CORRIGIDA
+  function parseCoordValidate(s) {
+    if (!s) return null;
+    
+    const t = s.trim();
+    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+    
+    if (!match) return null;
+    
+    const x = parseInt(match[1], 10);
+    const y = parseInt(match[2], 10);
+    
+    // Corrigido: máximo 9999 (4 dígitos) para compatibilidade com a regex
+    if (x < 0 || x > 9999 || y < 0 || y > 9999) {
+      return null;
+    }
+    
+    return `${x}|${y}`;
   }
-  
-  return `${x}|${y}`;
-}
 
   // ✅ EXTRATOR ROBUSTO DE COORDENADAS
   function extractCoordinatesFromLine(text) {
@@ -77,6 +77,62 @@ function parseCoordValidate(s) {
     } catch {
       return false;
     }
+  }
+
+  // ✅ ALGORITMO "1 ALDEIA ATACA 1 SEM REPETIR"
+  function distribuirAtaquesOneToOne(agendamentos) {
+    if (!agendamentos || agendamentos.length === 0) return agendamentos;
+    
+    console.log('[One-to-One] 🔄 Aplicando distribuição 1:1...');
+    
+    // Agrupar por origem e destino
+    const origens = [...new Set(agendamentos.map(a => a.origem))];
+    const destinos = [...new Set(agendamentos.map(a => a.alvo))];
+    
+    console.log(`[One-to-One] 🎯 ${origens.length} origens, ${destinos.length} destinos`);
+    
+    // Se não há destinos suficientes, retornar original
+    if (destinos.length === 0) return agendamentos;
+    
+    const resultado = [];
+    const destinosUsados = new Set();
+    const origensUsadas = new Set();
+    
+    // Para cada origem, encontrar um destino único
+    origens.forEach(origem => {
+      // Encontrar todos os agendamentos desta origem
+      const agendamentosOrigem = agendamentos.filter(a => a.origem === origem);
+      
+      // Encontrar um destino não usado para esta origem
+      for (const agendamento of agendamentosOrigem) {
+        const destino = agendamento.alvo;
+        
+        // Se este destino ainda não foi usado E esta origem ainda não foi usada
+        if (!destinosUsados.has(destino) && !origensUsadas.has(origem)) {
+          resultado.push(agendamento);
+          destinosUsados.add(destino);
+          origensUsadas.add(origem);
+          console.log(`[One-to-One] ✅ ${origem} → ${destino}`);
+          break;
+        }
+      }
+    });
+    
+    // Adicionar agendamentos restantes que não violam a regra
+    agendamentos.forEach(agendamento => {
+      const { origem, alvo: destino } = agendamento;
+      
+      // Se nem a origem nem o destino foram usados, adicionar
+      if (!origensUsadas.has(origem) && !destinosUsados.has(destino)) {
+        resultado.push(agendamento);
+        origensUsadas.add(origem);
+        destinosUsados.add(destino);
+        console.log(`[One-to-One] ➕ ${origem} → ${destino} (restante)`);
+      }
+    });
+    
+    console.log(`[One-to-One] ✅ Distribuição concluída: ${agendamentos.length} → ${resultado.length}`);
+    return resultado;
   }
 
   // ✅ PARSER BBCODE MELHORADO
@@ -172,7 +228,7 @@ function parseCoordValidate(s) {
   }
 
   // === Preview dos agendamentos importados ===
-  function renderPreview(agendamentos) {
+  function renderPreview(agendamentos, oneToOneEnabled = false) {
     if (agendamentos.length === 0) {
       return '<p style="text-align:center;color:#888;padding:20px;">Nenhum agendamento detectado no BBCode</p>';
     }
@@ -193,11 +249,20 @@ function parseCoordValidate(s) {
       <tbody>
     `;
 
+    // Análise para destacar duplicatas
+    const origemCount = {};
+    const destinoCount = {};
+    agendamentos.forEach(cfg => {
+      origemCount[cfg.origem] = (origemCount[cfg.origem] || 0) + 1;
+      destinoCount[cfg.alvo] = (destinoCount[cfg.alvo] || 0) + 1;
+    });
+
     agendamentos.forEach((cfg, idx) => {
       const t = parseDateTimeToMs(cfg.datetime);
       const diff = t - now;
       let status = '✅ OK';
       let statusColor = '#E8F5E9';
+      let isDuplicata = false;
 
       if (isNaN(t)) {
         status = '⚠️ Data Inválida';
@@ -219,11 +284,25 @@ function parseCoordValidate(s) {
         statusColor = '#FFEBEE';
       }
 
+      // Destacar duplicatas se o modo one-to-one estiver desativado
+      if (!oneToOneEnabled) {
+        if (origemCount[cfg.origem] > 1) {
+          status += ' 🔄 Origem';
+          statusColor = '#FFF9C4';
+          isDuplicata = true;
+        }
+        if (destinoCount[cfg.alvo] > 1) {
+          status += ' 🎯 Destino';
+          statusColor = '#FFF9C4';
+          isDuplicata = true;
+        }
+      }
+
       html += `
         <tr style="background: ${statusColor};">
           <td style="padding:6px; border:1px solid #ddd; text-align:center;">${idx + 1}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.origem || '❌'}</td>
-          <td style="padding:6px; border:1px solid #ddd;">${cfg.alvo || '❌'}</td>
+          <td style="padding:6px; border:1px solid #ddd; ${isDuplicata && origemCount[cfg.origem] > 1 ? 'font-weight:bold;color:#E65100;' : ''}">${cfg.origem || '❌'}</td>
+          <td style="padding:6px; border:1px solid #ddd; ${isDuplicata && destinoCount[cfg.alvo] > 1 ? 'font-weight:bold;color:#E65100;' : ''}">${cfg.alvo || '❌'}</td>
           <td style="padding:6px; border:1px solid #ddd; font-size:11px;">${cfg.datetime || '❌'}</td>
           <td style="padding:6px; border:1px solid #ddd; text-align:center; font-size:11px;">${status}</td>
         </tr>
@@ -235,34 +314,45 @@ function parseCoordValidate(s) {
   }
 
   // === Processa a importação ===
-  function handleImport(agendamentos, replaceAll) {
+  function handleImport(agendamentos, replaceAll, oneToOneEnabled = false) {
     const list = getList();
     
+    // Aplicar distribuição one-to-one se habilitado
+    let agendamentosProcessados = oneToOneEnabled 
+      ? distribuirAtaquesOneToOne(agendamentos) 
+      : agendamentos;
+    
     if (replaceAll) {
-      setList(agendamentos);
-      console.log('[BBCode Modal] ✅ Lista substituída completamente');
+      setList(agendamentosProcessados);
+      console.log('[BBCode Modal] ✅ Lista substituída completamente' + (oneToOneEnabled ? ' (modo 1:1 ativo)' : ''));
     } else {
       // ✅ PROTEÇÃO: Verificar duplicatas
       const existingKeys = new Set(
         list.map(a => `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`)
       );
       
-      const novos = agendamentos.filter(a => {
+      const novos = agendamentosProcessados.filter(a => {
         const key = `${a.origemId || a.origem}_${a.alvo}_${a.datetime}`;
         return !existingKeys.has(key);
       });
       
-      const duplicados = agendamentos.length - novos.length;
+      const duplicados = agendamentosProcessados.length - novos.length;
       
       list.push(...novos);
       setList(list);
       
-      console.log(`[BBCode Modal] ✅ ${novos.length} agendamentos adicionados`);
+      console.log(`[BBCode Modal] ✅ ${novos.length} agendamentos adicionados` + (oneToOneEnabled ? ' (modo 1:1 ativo)' : ''));
       if (duplicados > 0) {
         console.warn(`[BBCode Modal] ⚠️ ${duplicados} duplicados ignorados`);
       }
       
-      return { novos: novos.length, duplicados };
+      return { 
+        novos: novos.length, 
+        duplicados,
+        oneToOne: oneToOneEnabled,
+        originalCount: agendamentos.length,
+        processedCount: agendamentosProcessados.length
+      };
     }
 
     window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
@@ -400,13 +490,63 @@ function parseCoordValidate(s) {
           align-items: center;
           gap: 5px;
         }
-        .bbcode-format-examples {
-          background: #F5F5F5;
-          border-left: 4px solid #2196F3;
-          padding: 8px 12px;
-          margin-top: 8px;
+        .toggle-switch {
+          position: relative;
+          display: inline-block;
+          width: 50px;
+          height: 24px;
+          margin: 0 10px;
+        }
+        .toggle-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .toggle-slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #ccc;
+          transition: .4s;
+          border-radius: 24px;
+        }
+        .toggle-slider:before {
+          position: absolute;
+          content: "";
+          height: 16px;
+          width: 16px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+          background-color: #4CAF50;
+        }
+        input:checked + .toggle-slider:before {
+          transform: translateX(26px);
+        }
+        .toggle-label {
+          display: flex;
+          align-items: center;
+          margin: 10px 0;
+          font-weight: bold;
+          color: #8B4513;
+        }
+        .toggle-description {
           font-size: 12px;
-          font-family: monospace;
+          color: #666;
+          margin-left: 60px;
+          margin-top: -5px;
+          margin-bottom: 10px;
+        }
+        .one-to-one-active {
+          background: #E8F5E9 !important;
+          border-left: 4px solid #4CAF50 !important;
         }
       </style>
 
@@ -419,6 +559,18 @@ function parseCoordValidate(s) {
         3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
         <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
         <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
+      </div>
+
+      <div class="toggle-label">
+        <span>🎯 Modo "1 Aldeia = 1 Alvo":</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="one-to-one-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="toggle-status" style="margin-left: 10px; color: #666;">Desativado</span>
+      </div>
+      <div class="toggle-description" id="toggle-description">
+        ❌ Cada aldeia pode atacar múltiplos alvos (padrão)
       </div>
 
       <textarea 
@@ -450,16 +602,90 @@ function parseCoordValidate(s) {
     document.body.appendChild(overlay);
 
     let parsedAgendamentos = [];
+    let oneToOneEnabled = false;
 
     const inputTextarea = document.getElementById('bbcode-input');
     const previewDiv = document.getElementById('bbcode-preview');
     const previewContent = document.getElementById('bbcode-preview-content');
     const statsDiv = document.getElementById('bbcode-stats');
+    const toggleSwitch = document.getElementById('one-to-one-toggle');
+    const toggleStatus = document.getElementById('toggle-status');
+    const toggleDescription = document.getElementById('toggle-description');
     
     const btnParse = document.getElementById('bbcode-btn-parse');
     const btnImport = document.getElementById('bbcode-btn-import');
     const btnReplace = document.getElementById('bbcode-btn-replace');
     const btnCancel = document.getElementById('bbcode-btn-cancel');
+
+    // Configurar o interruptor
+    toggleSwitch.addEventListener('change', function() {
+      oneToOneEnabled = this.checked;
+      toggleStatus.textContent = oneToOneEnabled ? 'Ativado' : 'Desativado';
+      toggleStatus.style.color = oneToOneEnabled ? '#4CAF50' : '#666';
+      toggleDescription.textContent = oneToOneEnabled 
+        ? '✅ Cada aldeia ataca apenas UM alvo único (distribuição inteligente)'
+        : '❌ Cada aldeia pode atacar múltiplos alvos (padrão)';
+      
+      toggleDescription.parentElement.classList.toggle('one-to-one-active', oneToOneEnabled);
+      
+      // Se já temos agendamentos parseados, atualizar o preview
+      if (parsedAgendamentos.length > 0) {
+        updatePreview();
+      }
+    });
+
+    function updatePreview() {
+      const agendamentosParaPreview = oneToOneEnabled 
+        ? distribuirAtaquesOneToOne(parsedAgendamentos) 
+        : parsedAgendamentos;
+      
+      const now = Date.now();
+      const validDates = agendamentosParaPreview.filter(a => {
+        const t = parseDateTimeToMs(a.datetime);
+        return !isNaN(t) && t > now;
+      }).length;
+      const pastDates = agendamentosParaPreview.filter(a => {
+        const t = parseDateTimeToMs(a.datetime);
+        return !isNaN(t) && t <= now;
+      }).length;
+      const invalidDates = agendamentosParaPreview.filter(a => {
+        const t = parseDateTimeToMs(a.datetime);
+        return isNaN(t);
+      }).length;
+
+      statsDiv.innerHTML = `
+        <div class="bbcode-stat-item">
+          <span>📦 Total:</span>
+          <span style="color: #2196F3;">${agendamentosParaPreview.length}</span>
+          ${oneToOneEnabled ? `<span style="color: #999; font-size: 11px;">(${parsedAgendamentos.length} original)</span>` : ''}
+        </div>
+        <div class="bbcode-stat-item">
+          <span>✅ Válidos:</span>
+          <span style="color: #4CAF50;">${validDates}</span>
+        </div>
+        ${pastDates > 0 ? `
+          <div class="bbcode-stat-item">
+            <span>⏰ Passados:</span>
+            <span style="color: #F44336;">${pastDates}</span>
+          </div>
+        ` : ''}
+        ${invalidDates > 0 ? `
+          <div class="bbcode-stat-item">
+            <span>⚠️ Inválidos:</span>
+            <span style="color: #FF9800;">${invalidDates}</span>
+          </div>
+        ` : ''}
+        ${oneToOneEnabled ? `
+          <div class="bbcode-stat-item">
+            <span>🎯 Modo 1:1:</span>
+            <span style="color: #4CAF50;">ATIVO</span>
+          </div>
+        ` : ''}
+      `;
+
+      previewContent.innerHTML = renderPreview(agendamentosParaPreview, oneToOneEnabled);
+      previewDiv.style.display = 'block';
+    }
 
     btnCancel.onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
@@ -480,47 +706,9 @@ function parseCoordValidate(s) {
           return;
         }
 
-        const now = Date.now();
-        const validDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return !isNaN(t) && t > now;
-        }).length;
-        const pastDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return !isNaN(t) && t <= now;
-        }).length;
-        const invalidDates = parsedAgendamentos.filter(a => {
-          const t = parseDateTimeToMs(a.datetime);
-          return isNaN(t);
-        }).length;
-
-        statsDiv.innerHTML = `
-          <div class="bbcode-stat-item">
-            <span>📦 Total:</span>
-            <span style="color: #2196F3;">${parsedAgendamentos.length}</span>
-          </div>
-          <div class="bbcode-stat-item">
-            <span>✅ Válidos:</span>
-            <span style="color: #4CAF50;">${validDates}</span>
-          </div>
-          ${pastDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⏰ Passados:</span>
-              <span style="color: #F44336;">${pastDates}</span>
-            </div>
-          ` : ''}
-          ${invalidDates > 0 ? `
-            <div class="bbcode-stat-item">
-              <span>⚠️ Inválidos:</span>
-              <span style="color: #FF9800;">${invalidDates}</span>
-            </div>
-          ` : ''}
-        `;
-
-        previewContent.innerHTML = renderPreview(parsedAgendamentos);
-        previewDiv.style.display = 'block';
-
+        updatePreview();
         console.log('[BBCode Modal] ✅ Analisados', parsedAgendamentos.length, 'agendamentos');
+
       } catch (error) {
         console.error('[BBCode Modal] Erro:', error);
         alert('❌ Erro ao analisar BBCode:\n' + error.message);
@@ -535,17 +723,21 @@ function parseCoordValidate(s) {
 
       const existingList = getList();
       const msg = existingList.length > 0 
-        ? `Adicionar ${parsedAgendamentos.length} agendamentos?\n\nTotal após: ${existingList.length + parsedAgendamentos.length}`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
+        ? `Adicionar ${oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length} agendamentos?\n\nTotal após: ${existingList.length + (oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length)}${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
+        : `Importar ${oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length} agendamentos?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
 
       if (confirm(msg)) {
-        const result = handleImport(parsedAgendamentos, false);
+        const result = handleImport(parsedAgendamentos, false, oneToOneEnabled);
         
+        let alertMsg = `✅ ${result.novos} importado(s)!`;
         if (result.duplicados > 0) {
-          alert(`✅ ${result.novos} importado(s)!\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`);
-        } else {
-          alert(`✅ ${result.novos} agendamento(s) importado(s)!`);
+          alertMsg += `\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`;
         }
+        if (oneToOneEnabled) {
+          alertMsg += `\n🎯 Modo 1:1: ${result.originalCount} → ${result.processedCount} agendamentos`;
+        }
+        
+        alert(alertMsg);
         overlay.remove();
       }
     };
@@ -557,13 +749,21 @@ function parseCoordValidate(s) {
       }
 
       const existingList = getList();
+      const processedCount = oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length;
+      
       const msg = existingList.length > 0
-        ? `⚠️ Remover ${existingList.length} e substituir por ${parsedAgendamentos.length}?\n\nContinuar?`
-        : `Importar ${parsedAgendamentos.length} agendamentos?`;
+        ? `⚠️ Remover ${existingList.length} e substituir por ${processedCount}?\n\nContinuar?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
+        : `Importar ${processedCount} agendamentos?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
 
       if (confirm(msg)) {
-        handleImport(parsedAgendamentos, true);
-        alert(`✅ ${parsedAgendamentos.length} agendamento(s) importado(s)!`);
+        handleImport(parsedAgendamentos, true, oneToOneEnabled);
+        
+        let alertMsg = `✅ ${processedCount} agendamento(s) importado(s)!`;
+        if (oneToOneEnabled) {
+          alertMsg += `\n🎯 Modo 1:1: ${parsedAgendamentos.length} → ${processedCount} agendamentos`;
+        }
+        
+        alert(alertMsg);
         overlay.remove();
       }
     };
@@ -575,5 +775,5 @@ function parseCoordValidate(s) {
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas!');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas e modo 1:1!');
 })();
