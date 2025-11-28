@@ -50,8 +50,8 @@
     return html;
   }
 
-  // ✅ MODIFICADO: Renderiza lista de TODOS os agendamentos (TAB 1)
-  function renderAgendamentosList(onSelect) {
+  // ✅ Renderiza lista de TODOS os agendamentos
+  function renderAgendamentosList() {
     const list = getList();
     
     if (list.length === 0) {
@@ -77,7 +77,7 @@
         ? `${minutes}:${secs.toString().padStart(2, '0')}` 
         : `${secs}s`;
 
-      // ✅ MODIFICADO: Cores diferentes para status
+      // ✅ Cores diferentes para status
       let statusColor, statusText, timeColor;
       
       if (agend.done) {
@@ -92,7 +92,7 @@
         if (diff < 60000) timeColor = '#F44336';  // < 1 min = vermelho
       }
 
-      // ✅ MODIFICADO: Exibir informações de execução se disponível
+      // ✅ Exibir informações de execução se disponível
       const execInfo = agend.executedAt ? 
         `<br><small style="color: #666;">Executado: ${formatDateTime(new Date(agend.executedAt))}</small>` : '';
 
@@ -155,139 +155,36 @@
     return html;
   }
 
-  // ✅ Renderiza edição de dados (TAB 2)
-  function renderEditTab(cfg, onUpdate) {
-    const troopsHtml = TROOP_LIST.map(u => `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <label style="width: 60px; font-weight: bold; color: #8B4513;">${u}:</label>
-        <input type="number" 
-          id="edit-troop-${u}" 
-          value="${cfg[u] || 0}" 
-          min="0"
-          style="
-            width: 80px;
-            padding: 6px;
-            border: 2px solid #8B4513;
-            border-radius: 4px;
-          "
-        />
-      </div>
-    `).join('');
-
-    // ✅ MODIFICADO: Exibir status atual do agendamento
-    const statusInfo = cfg.done ? 
-      `<div style="background: ${cfg.success ? '#E8F5E9' : '#FFEBEE'}; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 2px solid ${cfg.success ? '#4CAF50' : '#F44336'};">
-        <strong>Status:</strong> ${cfg.success ? '✅ CONCLUÍDO COM SUCESSO' : '❌ FALHOU NA EXECUÇÃO'}
-        ${cfg.executedAt ? `<br><small>Executado em: ${formatDateTime(new Date(cfg.executedAt))}</small>` : ''}
-      </div>` : '';
-
-    return `
-      <div style="display: grid; gap: 15px;">
-        <!-- Info básica (leitura) -->
-        <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
-          <div style="font-weight: bold; color: #8B4513; margin-bottom: 8px;">📍 Dados Básicos</div>
-          ${statusInfo}
-          <div style="font-size: 13px; line-height: 1.8;">
-            <strong>Origem:</strong> ${cfg.origem}<br>
-            <strong>Alvo:</strong> ${cfg.alvo}<br>
-            <strong>Data/Hora Agendada:</strong> ${cfg.datetime}
-          </div>
-        </div>
-
-        <!-- Opções de envio -->
-        <div style="background: #E3F2FD; padding: 12px; border-radius: 8px; border: 2px dashed #2196F3;">
-          <div style="font-weight: bold; color: #1976D2; margin-bottom: 10px;">🚀 Opções de Envio</div>
-          
-          <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="imediato" id="envio-imediato" ${cfg.done ? 'disabled' : 'checked'} style="cursor: pointer;">
-            <span style="color: #333;">
-              <strong>Envio Imediato</strong><br>
-              <small style="color: #666;">Envia o ataque AGORA, ignorando o horário</small>
-              ${cfg.done ? '<br><small style="color: #F44336;">⚠️ Agendamento já executado</small>' : ''}
-            </span>
-          </label>
-
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-            <input type="radio" name="envio-tipo" value="agendado" id="envio-agendado" ${cfg.done ? 'disabled' : ''} style="cursor: pointer;">
-            <span style="color: #333;">
-              <strong>Data/Hora Customizada</strong><br>
-              <small style="color: #666;">Define um novo horário de envio</small>
-              ${cfg.done ? '<br><small style="color: #F44336;">⚠️ Agendamento já executado</small>' : ''}
-            </span>
-          </label>
-
-          <div id="datetime-editor" style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px; border: 2px solid #2196F3; display: none;">
-            <label style="display: block; font-weight: bold; color: #8B4513; margin-bottom: 8px;">📅 Nova Data/Hora:</label>
-            <input type="text" 
-              id="edit-datetime" 
-              placeholder="DD/MM/YYYY HH:MM:SS"
-              value="${cfg.datetime}"
-              ${cfg.done ? 'disabled' : ''}
-              style="
-                width: 100%;
-                padding: 8px;
-                border: 2px solid #8B4513;
-                border-radius: 4px;
-                box-sizing: border-box;
-                ${cfg.done ? 'background: #F5F5F5; color: #999;' : ''}
-              "
-            />
-            ${!cfg.done ? `
-              <small style="color: #666; display: block; margin-top: 8px;">
-                Atalhos: 
-                <a href="#" onclick="document.getElementById('edit-datetime').value = '${formatDateTime(new Date())}'; return false;" style="color: #2196F3;">Agora</a> | 
-                <a href="#" onclick="const d = new Date(Date.now() + 60000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 60000))}'; return false;" style="color: #2196F3;">+1min</a> | 
-                <a href="#" onclick="const d = new Date(Date.now() + 300000); document.getElementById('edit-datetime').value = '${formatDateTime(new Date(Date.now() + 300000))}'; return false;" style="color: #2196F3;">+5min</a>
-              </small>
-            ` : ''}
-          </div>
-        </div>
-
-        <!-- Tropas editáveis -->
-        <div style="background: #F5F5F5; padding: 12px; border-radius: 8px;">
-          <div style="font-weight: bold; color: #8B4513; margin-bottom: 10px;">🪖 Tropas (Editáveis)</div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-            ${troopsHtml}
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // ✅ Renderiza confirmação final (TAB 3)
-  function renderConfirmTab(cfg, datetime, envioType) {
-    const isImediato = envioType === 'imediato';
-    const isAgendado = envioType === 'agendado';
+  // ✅ Renderiza confirmação de envio
+  function renderConfirmTab(cfg) {
     const isOriginalDone = cfg.done;
     
     return `
       <div style="display: grid; gap: 15px;">
         <!-- Aviso destacado -->
         <div style="
-          background: ${isImediato ? '#FFE5E5' : '#E8F5E9'};
-          border: 3px solid ${isImediato ? '#F44336' : '#4CAF50'};
+          background: #FFE5E5;
+          border: 3px solid #F44336;
           border-radius: 8px;
           padding: 15px;
           text-align: center;
         ">
-          <div style="font-size: 28px; margin-bottom: 8px;">${isImediato ? '⚠️' : '⏰'}</div>
-          <div style="font-weight: bold; color: ${isImediato ? '#D32F2F' : '#2E7D32'}; font-size: 16px;">
-            ${isImediato ? 'ATENÇÃO - ENVIO IMEDIATO!' : 'NOVO AGENDAMENTO CRIADO!'}
+          <div style="font-size: 28px; margin-bottom: 8px;">⚠️</div>
+          <div style="font-weight: bold; color: #D32F2F; font-size: 16px;">
+            ATENÇÃO - ENVIO IMEDIATO!
           </div>
-          <div style="color: ${isImediato ? '#C62828' : '#1B5E20'}; font-size: 14px; margin-top: 8px;">
-            ${isImediato 
-              ? 'O ataque será enviado <strong>IMEDIATAMENTE</strong>' 
-              : `Novo agendamento criado para: <strong>${datetime}</strong>`}
+          <div style="color: #C62828; font-size: 14px; margin-top: 8px;">
+            O ataque será enviado <strong>IMEDIATAMENTE</strong>
           </div>
           ${isOriginalDone ? `
             <div style="margin-top: 8px; padding: 8px; background: #FFF3E0; border-radius: 4px; font-size: 12px;">
               🔄 <strong>Agendamento original já foi executado</strong><br>
-              <small>Criando um NOVO agendamento baseado no original</small>
+              <small>Criando um NOVO envio baseado no original</small>
             </div>
           ` : `
             <div style="margin-top: 8px; padding: 8px; background: #D4EDDA; border-radius: 4px; font-size: 12px;">
               ✅ <strong>Agendamento original preservado</strong><br>
-              <small>Foi criado um NOVO agendamento com suas alterações</small>
+              <small>O agendamento original será mantido na lista</small>
             </div>
           `}
         </div>
@@ -321,9 +218,7 @@
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
             <input type="checkbox" id="confirm-checkbox" style="width: 20px; height: 20px; cursor: pointer;">
             <span style="font-weight: bold; color: #E65100;">
-              ${isImediato 
-                ? 'Tenho certeza que quero enviar este ataque AGORA' 
-                : 'Tenho certeza que quero CRIAR um NOVO agendamento'}
+              Tenho certeza que quero enviar este ataque AGORA
             </span>
           </label>
         </div>
@@ -331,56 +226,44 @@
     `;
   }
 
-  // ✅ Executa o ataque ou cria novo agendamento
-  async function executeTest(cfg, datetime, statusDiv, overlay, isImediato) {
+  // ✅ Executa o ataque imediatamente
+  async function executeTest(cfg, statusDiv, overlay) {
     try {
-      if (isImediato) {
-        statusDiv.innerHTML = '🔥 <strong>Executando envio imediato...</strong>';
-        statusDiv.style.background = '#FFF9C4';
-        statusDiv.style.borderColor = '#FFC107';
+      statusDiv.innerHTML = '🔥 <strong>Executando envio imediato...</strong>';
+      statusDiv.style.background = '#FFF9C4';
+      statusDiv.style.borderColor = '#FFC107';
 
-        const success = await executeAttack(cfg);
-        
-        if (success) {
-          statusDiv.innerHTML = '✅ <strong>Ataque enviado com sucesso!</strong><br><small>Verifique a praça de reunião</small>';
-          statusDiv.style.background = '#E8F5E9';
-          statusDiv.style.borderColor = '#4CAF50';
-          
-          // ✅ Para envio imediato, marca o original como feito apenas se ainda não estava
-          const list = getList();
-          const idx = list.findIndex(a => 
-            a.origem === cfg.origem && 
-            a.alvo === cfg.alvo &&
-            a.datetime === cfg.datetime // Match exato
-          );
-          
-          if (idx !== -1 && !list[idx].done) {
-            list[idx].done = true;
-            list[idx].success = true;
-            list[idx].executedAt = new Date().toISOString();
-            setList(list);
-          }
-          
-          setTimeout(() => {
-            overlay.remove();
-            window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
-          }, 2000);
-          
-        } else {
-          statusDiv.innerHTML = '⚠️ <strong>Teste concluído</strong><br><small>Não foi possível confirmar o envio. Verifique manualmente.</small>';
-          statusDiv.style.background = '#FFF3E0';
-          statusDiv.style.borderColor = '#FF9800';
-        }
-      } else {
-        // ✅ AGENDAMENTO - CRIA NOVO agendamento
-        statusDiv.innerHTML = '✅ <strong>Novo agendamento criado com sucesso!</strong><br><small>O agendamento original foi preservado.</small>';
+      const success = await executeAttack(cfg);
+      
+      if (success) {
+        statusDiv.innerHTML = '✅ <strong>Ataque enviado com sucesso!</strong><br><small>Verifique a praça de reunião</small>';
         statusDiv.style.background = '#E8F5E9';
         statusDiv.style.borderColor = '#4CAF50';
+        
+        // ✅ Para envio imediato, marca o original como feito apenas se ainda não estava
+        const list = getList();
+        const idx = list.findIndex(a => 
+          a.origem === cfg.origem && 
+          a.alvo === cfg.alvo &&
+          a.datetime === cfg.datetime // Match exato
+        );
+        
+        if (idx !== -1 && !list[idx].done) {
+          list[idx].done = true;
+          list[idx].success = true;
+          list[idx].executedAt = new Date().toISOString();
+          setList(list);
+        }
         
         setTimeout(() => {
           overlay.remove();
           window.dispatchEvent(new CustomEvent('tws-schedule-updated'));
         }, 2000);
+        
+      } else {
+        statusDiv.innerHTML = '⚠️ <strong>Teste concluído</strong><br><small>Não foi possível confirmar o envio. Verifique manualmente.</small>';
+        statusDiv.style.background = '#FFF3E0';
+        statusDiv.style.borderColor = '#FF9800';
       }
       
     } catch (error) {
@@ -391,7 +274,7 @@
     }
   }
 
-  // === Cria e exibe o modal com abas ===
+  // === Cria e exibe o modal simplificado ===
   function showModal() {
     const list = getList();
     
@@ -426,7 +309,7 @@
       border-radius: 12px;
       padding: 0;
       width: 90%;
-      max-width: 800px;
+      max-width: 700px;
       max-height: 85vh;
       overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -440,42 +323,20 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: scale(0.9) translateY(-20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
         
-        .tab-header {
-          display: flex;
-          gap: 0;
+        .modal-header {
           background: #8B4513;
+          color: white;
+          padding: 20px;
+          text-align: center;
           border-bottom: 3px solid #654321;
         }
-        .tab-btn {
-          flex: 1;
-          padding: 15px;
-          border: none;
-          background: #A0522D;
-          color: white;
-          font-weight: bold;
-          cursor: pointer;
-          border-bottom: 4px solid transparent;
-          transition: all 0.3s;
-          font-size: 14px;
-        }
-        .tab-btn:hover {
-          background: #8B4513;
-        }
-        .tab-btn.active {
-          background: #8B4513;
-          border-bottom-color: #FFD700;
-          box-shadow: inset 0 -2px 0 #FFD700;
-        }
-        .tab-content {
+        .modal-content {
           flex: 1;
           padding: 20px;
           overflow-y: auto;
-          display: none;
+          max-height: 60vh;
         }
-        .tab-content.active {
-          display: block;
-        }
-        .tab-footer {
+        .modal-footer {
           padding: 15px 20px;
           background: #E8D4A8;
           border-top: 2px solid #8B4513;
@@ -500,10 +361,7 @@
           cursor: not-allowed;
         }
         .btn-cancel { background: #9E9E9E; color: white; }
-        .btn-next { background: #2196F3; color: white; }
-        .btn-prev { background: #9C27B0; color: white; }
         .btn-send { background: #F44336; color: white; }
-        .btn-schedule { background: #4CAF50; color: white; }
         #test-status {
           padding: 12px;
           border: 2px solid #2196F3;
@@ -515,28 +373,23 @@
         }
       </style>
 
-      <!-- Abas -->
-      <div class="tab-header">
-        <button class="tab-btn active" onclick="TWS_TestModal._switchTab(0)">1️⃣ Selecionar</button>
-        <button class="tab-btn" onclick="TWS_TestModal._switchTab(1)">2️⃣ Editar</button>
-        <button class="tab-btn" onclick="TWS_TestModal._switchTab(2)">3️⃣ Confirmar</button>
+      <!-- Cabeçalho -->
+      <div class="modal-header">
+        <h2 style="margin: 0; font-size: 20px;">🚀 Envio Imediato de Ataques</h2>
+        <small>Selecione um agendamento para enviar agora</small>
       </div>
 
-      <!-- Conteúdo das abas -->
-      <div id="test-content" style="flex: 1; overflow-y: auto; padding: 20px;">
+      <!-- Conteúdo -->
+      <div class="modal-content">
         <div id="test-status"></div>
-        <div id="tab-0" class="tab-content active"></div>
-        <div id="tab-1" class="tab-content"></div>
-        <div id="tab-2" class="tab-content"></div>
+        <div id="agendamentos-list"></div>
+        <div id="confirm-section" style="display: none;"></div>
       </div>
 
-      <!-- Rodapé com botões -->
-      <div class="tab-footer">
-        <button class="btn btn-cancel" onclick="document.getElementById('tws-test-modal').remove()">❌ Cancelar</button>
-        <button class="btn btn-prev" id="btn-prev" onclick="TWS_TestModal._prevTab()" style="display: none;">⬅️ Voltar</button>
-        <button class="btn btn-next" id="btn-next" onclick="TWS_TestModal._nextTab()">Próximo ➡️</button>
-        <button class="btn btn-send" id="btn-send-imediato" onclick="TWS_TestModal._executeFinal(true)" style="display: none;">🚀 Enviar Agora</button>
-        <button class="btn btn-schedule" id="btn-send-agendado" onclick="TWS_TestModal._executeFinal(false)" style="display: none;">💾 Criar Novo Agendamento</button>
+      <!-- Rodapé -->
+      <div class="modal-footer">
+        <button class="btn btn-cancel" onclick="document.getElementById('tws-test-modal').remove()">❌ Fechar</button>
+        <button class="btn btn-send" id="btn-send" onclick="TWS_TestModal._executeFinal()" style="display: none;">🚀 Enviar Agora</button>
       </div>
     `;
 
@@ -544,92 +397,27 @@
     document.body.appendChild(overlay);
 
     // Estado compartilhado
-    let currentTab = 0;
-    let selectedAgenda = list[0];
-    let currentDatetime = selectedAgenda.datetime;
-    let currentEnvioType = selectedAgenda.done ? 'agendado' : 'imediato';
+    let selectedAgenda = null;
 
-    // Renderizar TAB 1 (Seleção)
-    document.getElementById('tab-0').innerHTML = renderAgendamentosList();
+    // Renderizar lista de agendamentos
+    document.getElementById('agendamentos-list').innerHTML = renderAgendamentosList();
 
-    // ✅ CORREÇÃO CRÍTICA: Reatribuir funções SEMPRE que o modal abrir
+    // ✅ Funções do modal
     const modalFunctions = {
       _selectAgenda(idx) {
-        selectedAgenda = { ...list[idx] }; // ✅ Cria cópia para não modificar o original
-        currentDatetime = selectedAgenda.datetime;
-        currentEnvioType = selectedAgenda.done ? 'agendado' : 'imediato';
+        const list = getList();
+        selectedAgenda = { ...list[idx] }; // Cria cópia
         
-        // Renderizar TAB 2
-        document.getElementById('tab-1').innerHTML = renderEditTab(selectedAgenda);
+        // Mostrar confirmação
+        document.getElementById('agendamentos-list').style.display = 'none';
+        document.getElementById('confirm-section').style.display = 'block';
+        document.getElementById('confirm-section').innerHTML = renderConfirmTab(selectedAgenda);
+        document.getElementById('btn-send').style.display = 'block';
         
-        // Ir para TAB 2
-        TWS_TestModal._switchTab(1);
-        
-        console.log('[Test Modal] Agendamento selecionado (cópia):', selectedAgenda);
+        console.log('[Test Modal] Agendamento selecionado:', selectedAgenda);
       },
 
-      _switchTab(tab) {
-        currentTab = tab;
-        
-        // Ocultar todas as abas
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        
-        // Mostrar aba atual
-        document.getElementById(`tab-${tab}`).classList.add('active');
-        document.querySelectorAll('.tab-btn')[tab].classList.add('active');
-        
-        // Atualizar botões
-        document.getElementById('btn-prev').style.display = tab === 0 ? 'none' : 'block';
-        document.getElementById('btn-next').style.display = tab === 2 ? 'none' : 'block';
-        
-        // Se tab 2, renderizar confirmação
-        if (tab === 2) {
-          // Capturar dados editados
-          currentEnvioType = document.querySelector('input[name="envio-tipo"]:checked')?.value || currentEnvioType;
-          
-          if (currentEnvioType === 'agendado') {
-            currentDatetime = document.getElementById('edit-datetime')?.value || selectedAgenda.datetime;
-          } else {
-            currentDatetime = formatDateTime(new Date());
-          }
-
-          // Atualizar tropas se editadas
-          TROOP_LIST.forEach(u => {
-            const val = document.getElementById(`edit-troop-${u}`)?.value || selectedAgenda[u];
-            selectedAgenda[u] = parseInt(val, 10);
-          });
-
-          // Mostrar botão correto
-          document.getElementById('btn-send-imediato').style.display = currentEnvioType === 'imediato' ? 'block' : 'none';
-          document.getElementById('btn-send-agendado').style.display = currentEnvioType === 'agendado' ? 'block' : 'none';
-
-          document.getElementById('tab-2').innerHTML = renderConfirmTab(selectedAgenda, currentDatetime, currentEnvioType);
-        } else {
-          document.getElementById('btn-send-imediato').style.display = 'none';
-          document.getElementById('btn-send-agendado').style.display = 'none';
-        }
-
-        // Listener para tipo de envio
-        if (tab === 1) {
-          document.getElementById('envio-imediato').onchange = () => {
-            document.getElementById('datetime-editor').style.display = 'none';
-          };
-          document.getElementById('envio-agendado').onchange = () => {
-            document.getElementById('datetime-editor').style.display = 'block';
-          };
-        }
-      },
-
-      _nextTab() {
-        if (currentTab < 2) TWS_TestModal._switchTab(currentTab + 1);
-      },
-
-      _prevTab() {
-        if (currentTab > 0) TWS_TestModal._switchTab(currentTab - 1);
-      },
-
-      _executeFinal(isImediato) {
+      _executeFinal() {
         const confirmed = document.getElementById('confirm-checkbox')?.checked;
         if (!confirmed) {
           alert('⚠️ Marque o checkbox de confirmação antes de continuar!');
@@ -639,69 +427,46 @@
         const statusDiv = document.getElementById('test-status');
         const overlay = document.getElementById('tws-test-modal');
 
-        // ✅ NOVO COMPORTAMENTO: CRIAR NOVO AGENDAMENTO
+        // ✅ ENVIO IMEDIATO: Marca original como feito apenas se ainda não estava
         const list = getList();
-        
-        if (isImediato) {
-          // ✅ ENVIO IMEDIATO: Marca original como feito apenas se ainda não estava
-          const idx = list.findIndex(a => 
-            a.origem === selectedAgenda.origem && 
-            a.alvo === selectedAgenda.alvo &&
-            a.datetime === selectedAgenda.datetime // Match exato
-          );
+        const idx = list.findIndex(a => 
+          a.origem === selectedAgenda.origem && 
+          a.alvo === selectedAgenda.alvo &&
+          a.datetime === selectedAgenda.datetime // Match exato
+        );
 
-          if (idx !== -1 && !list[idx].done) {
-            list[idx].done = true;
-            list[idx].success = true;
-            list[idx].executedAt = new Date().toISOString();
-          }
-        } else {
-          // ✅ AGENDAMENTO: CRIA NOVO agendamento
-          const novoAgendamento = {
-            ...selectedAgenda,
-            datetime: currentDatetime,
-            done: false,
-            success: false,
-            executedAt: null,
-            error: null
-          };
-
-          list.push(novoAgendamento);
-          console.log('[Test Modal] ✅ NOVO agendamento criado:', novoAgendamento);
+        if (idx !== -1 && !list[idx].done) {
+          list[idx].done = true;
+          list[idx].success = true;
+          list[idx].executedAt = new Date().toISOString();
+          setList(list);
         }
 
-        setList(list);
-
-        // Preparar config final
-        const finalCfg = { ...selectedAgenda };
-        
-        // Executar com o tipo correto
-        executeTest(finalCfg, currentDatetime, statusDiv, overlay, isImediato);
+        // Executar envio
+        executeTest(selectedAgenda, statusDiv, overlay);
       }
     };
 
-    // ✅ CORREÇÃO: Usar Object.assign para adicionar funções sem sobrescrever
+    // ✅ Adicionar funções ao objeto global
     Object.assign(window.TWS_TestModal, modalFunctions);
 
-    // ✅ CORREÇÃO: Fechar seguro - só remove elementos DOM
+    // ✅ Fechar seguro
     overlay.onclick = (e) => { 
       if (e.target === overlay) {
-        overlay.remove(); // ⚠️ Só remove DOM, não as funções
+        overlay.remove();
       }
     };
   }
 
-  // === INICIALIZAÇÃO CORRIGIDA ===
+  // === INICIALIZAÇÃO ===
   function init() {
-    // ✅ CORREÇÃO: Garantir que TWS_TestModal existe
     if (!window.TWS_TestModal) {
       window.TWS_TestModal = {};
     }
     
-    // ✅ CORREÇÃO: Manter a função show SEMPRE disponível
     window.TWS_TestModal.show = showModal;
     
-    console.log('[TW Scheduler Test Modal] ✅ Carregado - EXIBE TODOS OS AGENDAMENTOS!');
+    console.log('[TW Scheduler Test Modal] ✅ Carregado - VERSÃO SIMPLIFICADA!');
     console.log('[TW Scheduler Test Modal] ✅ Função show disponível:', typeof window.TWS_TestModal.show);
   }
 
