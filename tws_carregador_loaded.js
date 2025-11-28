@@ -10,6 +10,7 @@
             'https://cdn.jsdelivr.net/gh/tribalwarstools/beta@latest/'
         ],
 scripts: [
+    { file: 'telegram-bot.js', check: 'TelegramBotReal' },
     { file: 'tw-scheduler-backend.js', check: 'TWS_Backend' },
     { file: 'tw-scheduler-multitab-lock.js', check: 'TWS_MultiTabLock' },
     { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
