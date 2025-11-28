@@ -600,6 +600,26 @@ for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
           // Executar o ataque
           const success = await executeAttack(a);
 
+          // ✅ ✅ ✅ TELEGRAM NOTIFICATIONS - ADICIONE AQUI
+          if (success) {
+            // Notificação de sucesso
+            await sendTelegramNotification('attack_success', {
+              origin: a.origem,
+              target: a.alvo,
+              units: TROOP_LIST.map(u => a[u] > 0 ? `${a[u]} ${u}` : null).filter(Boolean).join(', ') || 'Nenhuma tropa especificada',
+              travelTime: 'Calculando...' // Você pode calcular isso se tiver as velocidades
+            });
+          } else {
+            // Notificação de falha
+            await sendTelegramNotification('attack_failure', {
+              origin: a.origem,
+              target: a.alvo,
+              reason: a.statusText || 'Falha na execução do comando',
+              suggestion: 'Verifique se as tropas estão disponíveis'
+            });
+          }
+          // ✅ ✅ ✅ FIM DAS NOTIFICAÇÕES
+
           // Registrar resultado
           a.done = true;
           a.success = success;
@@ -625,6 +645,14 @@ for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
           a.status = 'failed';
           a.statusText = `❌ Falha: ${err.message}`;
           SchedulerMetrics.recordExecution(false);
+
+          // ✅ ✅ ✅ NOTIFICAÇÃO DE ERRO - ADICIONE AQUI
+          await sendTelegramNotification('system_error', {
+            module: 'Scheduler',
+            error: err.message,
+            details: `Ataque: ${a.origem} → ${a.alvo}`,
+            action: 'Verificar console para detalhes'
+          });
 
           console.error(
             `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
@@ -781,5 +809,6 @@ console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
