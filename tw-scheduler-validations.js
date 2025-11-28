@@ -6,13 +6,63 @@
         return;
     }
     
-    const { getList, parseDateTimeToMs, generateUniqueId } = window.TWS_Backend;
+    const { getList, parseDateTimeToMs, generateUniqueId, TROOP_LIST } = window.TWS_Backend;
     
     // ═══════════════════════════════════════════════════════
     // 📋 VALIDAÇÕES CENTRALIZADAS
     // ═══════════════════════════════════════════════════════
     
     const Validations = {
+        
+        // ✅ PARSE E VALIDAÇÃO DE COORDENADAS
+        parseCoord(s) {
+            if (!s) return null;
+            const t = s.toString().trim();
+            const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
+            if (!match) return null;
+            const x = parseInt(match[1], 10);
+            const y = parseInt(match[2], 10);
+            if (x < 0 || x > 9999 || y < 0 || y > 9999) return null;
+            return `${x}|${y}`;
+        },
+
+        isValidCoord(s) {
+            return this.parseCoord(s) !== null;
+        },
+
+        // ✅ CÁLCULO DE DISTÂNCIA
+        getDistance(coord1, coord2) {
+            const c1 = this.parseCoord(coord1);
+            const c2 = this.parseCoord(coord2);
+            if (!c1 || !c2) return null;
+            const [x1, y1] = c1.split('|').map(Number);
+            const [x2, y2] = c2.split('|').map(Number);
+            return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+        },
+
+        // ✅ OBTER SEÇÃO DO MAPA
+        getMapSection(x, y) {
+            const sections = [];
+            if (x <= 249) sections.push('Oeste');
+            else if (x >= 251) sections.push('Leste');
+            else sections.push('Centro');
+
+            if (y <= 249) sections.push('Norte');
+            else if (y >= 251) sections.push('Sul');
+            else sections.push('Centro');
+
+            return sections.join('-');
+        },
+        
+        // ✅ FINGERPRINT ROBUSTO (fonte única de verdade)
+        getAttackFingerprint(a) {
+            const dt = parseDateTimeToMs(a.datetime);
+            const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
+            
+            // Inclui _id para permitir ataques idênticos simultâneos
+            // Não inclui as unidades (permite ataques diferentes com mesmas coordenadas/horário)
+            return `${a._id}_${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
+        },
         
         // ✅ VALIDAÇÃO DE ATAQUE DUPLICADO (por fingerprint)
         isDuplicateAttack(newAttack, existingList = null) {
@@ -43,27 +93,6 @@
             });
         },
         
-        // ✅ FINGERPRINT ROBUSTO
-        getAttackFingerprint(a) {
-            const dt = parseDateTimeToMs(a.datetime);
-            const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
-            
-            // Inclui origem, alvo, horário MAS NÃO as tropas
-            // (permite ataques diferentes com mesmas coordenadas/horário)
-            return `${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
-        },
-        
-        // ✅ VALIDAÇÃO DE COORDENADAS
-        isValidCoord(coord) {
-            if (!coord) return false;
-            const match = coord.toString().match(/^(\d{1,4})\|(\d{1,4})$/);
-            if (!match) return false;
-            
-            const x = parseInt(match[1], 10);
-            const y = parseInt(match[2], 10);
-            return x >= 0 && x <= 999 && y >= 0 && y <= 999;
-        },
-        
         // ✅ VALIDAÇÃO DE DATA/HORA
         isValidDateTime(datetimeStr) {
             const ms = parseDateTimeToMs(datetimeStr);
@@ -74,14 +103,25 @@
             
             return ms > now && ms <= maxFuture;
         },
-        
-        // ✅ VALIDAÇÃO DE TROPAS
+
+        // ✅ VALIDAÇÃO DE TROPAS (como em backend)
+        validateTroops(requested, available) {
+            const errors = [];
+            TROOP_LIST.forEach(u => {
+                const req = Number(requested[u] || 0);
+                const avail = Number(available[u] || 0);
+                if (req > avail) {
+                    errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
+                }
+            });
+            return errors;
+        },
+
+        // ✅ VALIDAÇÃO DE FORMATO DE TROPAS
         isValidTroops(troopsObj) {
-            if (typeof troopsObj !== 'object') return false;
+            if (typeof troopsObj !== 'object' || troopsObj === null) return false;
             
-            const validUnits = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-            
-            return validUnits.every(unit => {
+            return TROOP_LIST.every(unit => {
                 const count = troopsObj[unit];
                 return typeof count === 'number' && 
                        count >= 0 && 
@@ -128,6 +168,12 @@
             if (attack.origem === attack.alvo) {
                 errors.push('Não é possível atacar a própria aldeia');
             }
+
+            // Validação de distância (warning)
+            const distance = this.getDistance(attack.origem, attack.alvo);
+            if (distance !== null && distance > 100) {
+                warnings.push(`Distância alta (${distance} quadrados) - verifique se é intencional`);
+            }
             
             return {
                 isValid: errors.length === 0,
@@ -162,6 +208,7 @@
                     validation.errors.push('Duplicata dentro do lote de importação');
                     validation.isValid = false;
                     results.duplicates.push({ index, attack, validation });
+                    results.stats.duplicates++;
                 } else {
                     seenFingerprints.add(fingerprint);
                 }
@@ -188,6 +235,7 @@
         
         // Guardar função original do backend
         const originalSetList = window.TWS_Backend.setList;
+        const originalExecuteAttack = window.TWS_Backend.executeAttack;
         
         // 🔒 SOBRESCREVER setList com validações
         window.TWS_Backend.setList = function(newList) {
@@ -232,8 +280,6 @@
         };
         
         // 🔒 VALIDAÇÃO NO EXECUTE ATTACK
-        const originalExecuteAttack = window.TWS_Backend.executeAttack;
-        
         window.TWS_Backend.executeAttack = async function(cfg) {
             // Validar antes de executar
             const validation = Validations.validateAttack(cfg);
