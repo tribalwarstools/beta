@@ -1,4 +1,4 @@
-// === SISTEMA COMPLETO DE BENCHMARK - VERSÃO CORRIGIDA ===
+// === SISTEMA COMPLETO DE BENCHMARK - DADOS FICTÍCIOS ===
 
 // 1. PRIMEIRO: Engine de Testes
 const TWS_BenchmarkEngine = {
