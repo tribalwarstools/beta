@@ -517,20 +517,35 @@ const SchedulerMetrics = {
 // │ ADICIONE ESTA FUNÇÃO AUXILIAR ANTES DO startScheduler() │
 // └─────────────────────────────────────────────────────────┘
 
+// NO BACKEND - Adicionar esta função para garantir consistência
 function getGlobalConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
+    
+    // ✅ USAR MESMO defaultConfig DO MODAL
+    const defaultConfig = {
+      behavior: {
+        schedulerCheckInterval: 50,  // ← VALOR PADRÃO ÚNICO
+        retryOnFail: true,
+        maxRetries: 3
+      }
+    };
+    
     return {
       behavior: {
-        schedulerCheckInterval: 1000, // padrão: 1 segundo
-        retryOnFail: true,
-        maxRetries: 3,
+        ...defaultConfig.behavior,
         ...saved.behavior
       }
     };
   } catch (e) {
     console.error('[Backend] Erro ao ler config global:', e);
-    return { behavior: { schedulerCheckInterval: 1000, retryOnFail: true, maxRetries: 3 } };
+    return { 
+      behavior: { 
+        schedulerCheckInterval: 50,  // ← MESMO VALOR
+        retryOnFail: true, 
+        maxRetries: 3 
+      } 
+    };
   }
 }
 
@@ -544,7 +559,7 @@ function startScheduler() {
   
   // ✅ LER INTERVALO DA CONFIGURAÇÃO
   const config = getGlobalConfig();
-  const checkIntervalMs = config.behavior.schedulerCheckInterval || 1000;
+  const checkIntervalMs = config.behavior.schedulerCheckInterval || 50;
   
   console.log(`[Scheduler] ✅ Iniciando com intervalo de ${checkIntervalMs}ms`);
   
@@ -904,6 +919,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
