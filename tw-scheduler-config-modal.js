@@ -427,24 +427,24 @@
     updateIntervalPrecision();
   }
 
-  function migrateOldConfig() {
-    try {
-      const config = getConfig();
-      
-      // Migrar delayBetweenAttacks para schedulerCheckInterval se necessário
-      if (config.behavior.delayBetweenAttacks && !config.behavior.schedulerCheckInterval) {
-        console.log('[Config] Migrando delayBetweenAttacks para schedulerCheckInterval');
-        config.behavior.schedulerCheckInterval = config.behavior.delayBetweenAttacks;
-        delete config.behavior.delayBetweenAttacks;
-        saveConfig(config);
-      }
-      
-      return config;
-    } catch (e) {
-      console.error('[Config] Erro na migração:', e);
-      return getConfig();
+// No início do modal, adicionar migração
+function migrateOldConfig() {
+  try {
+    const config = getConfig();
+    
+    // ✅ GARANTIR QUE schedulerCheckInterval SEMPRE EXISTA
+    if (typeof config.behavior.schedulerCheckInterval !== 'number') {
+      console.log('[Config] Inicializando schedulerCheckInterval para 50ms');
+      config.behavior.schedulerCheckInterval = 50;
+      saveConfig(config);
     }
+    
+    return config;
+  } catch (e) {
+    console.error('[Config] Erro na migração:', e);
+    return getConfig();
   }
+}
 
   // === MODAL DE CONFIGURAÇÕES ===
   function showConfigModal() {
@@ -1228,13 +1228,13 @@
       config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
       
       // ✅ NOVO: Salvar schedulerCheckInterval
-      const intervalSelect = document.getElementById('scheduler-check-interval');
+      // CORREÇÃO NO window.saveConfig():
       let schedulerInterval;
       
       if (intervalSelect.value === 'custom') {
-        schedulerInterval = parseInt(document.getElementById('scheduler-check-interval-custom').value) || 1000;
+        schedulerInterval = parseInt(customInput.value) || 1000;
       } else {
-        schedulerInterval = parseInt(intervalSelect.value) || 1000;
+        schedulerInterval = parseInt(intervalSelect.value) || 50; // ← 50ms fallback correto
       }
       
       // Validar limites
