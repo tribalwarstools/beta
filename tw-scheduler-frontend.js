@@ -174,10 +174,20 @@
   // =========================
   // FUNÇÕES DE AÇÃO
   // =========================
-  function viewDetails(idx) {
+function viewDetails(idx) {
     const list = getList();
     const cfg = list[idx];
     if (!cfg) return;
+    
+    // ✅ ADICIONAR: Função auxiliar para calcular diferença
+    function calculateTimeDifference(scheduled, actual) {
+        const scheduledMs = parseDateTimeToMs(scheduled);
+        const actualMs = new Date(actual).getTime();
+        const diffMs = actualMs - scheduledMs;
+        const seconds = (diffMs / 1000).toFixed(1);
+        return `${diffMs > 0 ? '+' : ''}${seconds} segundos`;
+    }
+    
     const details = `
 ═══════════════════════════════
 📋 DETALHES DO AGENDAMENTO #${idx + 1}
@@ -187,8 +197,10 @@ ${cfg.statusText || (cfg.success ? '✅ STATUS: ENVIADO' : '❌ STATUS: FALHOU')
 
 📍 Origem: ${cfg.origem || cfg.origemId}
 🎯 Alvo: ${cfg.alvo}
-🕐 Horário Agendado: ${cfg.datetime}
-${cfg.executedAt ? `⏰ Executado em: ${new Date(cfg.executedAt).toLocaleString('pt-BR')}` : ''}
+📅 Agendado: ${cfg.datetime}
+${cfg.actualExecutionTime ? `⏰ Executado: ${new Date(cfg.actualExecutionTime).toLocaleString('pt-BR')}` : ''}
+${cfg.executionDuration ? `⏱️ Duração: ${cfg.executionDuration}ms` : ''}
+${cfg.actualExecutionTime && cfg.datetime ? `📊 Diferença: ${calculateTimeDifference(cfg.datetime, cfg.actualExecutionTime)}` : ''}
 
 🪖 TROPAS ENVIADAS:
 ${TROOP_LIST.map(u => `  ${u}: ${cfg[u]||0}`).join('\n')}
@@ -197,7 +209,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 ═══════════════════════════════
 `.trim();
     alert(details);
-  }
+}
 
   function removeItem(idx) {
     if (!confirm('Remover este agendamento?')) return;
@@ -399,45 +411,3 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
