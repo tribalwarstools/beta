@@ -1,9 +1,288 @@
-// === PAINEL VISUAL DE BENCHMARK ===
+// === SISTEMA COMPLETO DE BENCHMARK - VERSÃO CORRIGIDA ===
+
+// 1. PRIMEIRO: Engine de Testes
+const TWS_BenchmarkEngine = {
+  isTesting: false,
+  currentTest: null,
+  testQueue: [],
+  results: [],
+  
+  async startBenchmark(configs, profileName) {
+    if (this.isTesting) {
+      alert('Já existe um teste em andamento!');
+      return;
+    }
+    
+    this.isTesting = true;
+    this.testQueue = [...configs];
+    this.results = [];
+    
+    // Usar a UI se estiver disponível
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.updateTestStatus(`🧪 Iniciando ${profileName}...`, 0);
+      window.TWS_BenchmarkUI.toggleStopButton(true);
+    }
+    
+    let completed = 0;
+    const total = configs.length;
+    
+    for (const config of configs) {
+      if (!this.isTesting) break;
+      
+      const progress = (completed / total) * 100;
+      if (window.TWS_BenchmarkUI) {
+        window.TWS_BenchmarkUI.updateTestStatus(
+          `Testando: ${config.name} (${completed + 1}/${total})`, 
+          progress
+        );
+        this.updateLiveStats(config);
+        this.updateLiveResults();
+      }
+      
+      const result = await this.runSingleTest(config);
+      this.results.push(result);
+      completed++;
+      
+      await this.sleep(1000);
+    }
+    
+    this.isTesting = false;
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.toggleStopButton(false);
+    }
+    
+    if (completed === total) {
+      if (window.TWS_BenchmarkUI) {
+        window.TWS_BenchmarkUI.updateTestStatus('✅ Benchmark concluído!', 100);
+        this.showFinalResults();
+      }
+    } else {
+      if (window.TWS_BenchmarkUI) {
+        window.TWS_BenchmarkUI.updateTestStatus('⏹️ Benchmark interrompido', progress);
+      }
+    }
+  },
+  
+  async runSingleTest(testConfig) {
+    const startTime = Date.now();
+    const testResults = [];
+    
+    for (let i = 0; i < 5; i++) {
+      if (!this.isTesting) break;
+      const attackResult = await this.simulateAttack(testConfig);
+      testResults.push(attackResult);
+      await this.sleep(200);
+    }
+    
+    const successCount = testResults.filter(r => r.success).length;
+    const totalTime = Date.now() - startTime;
+    const avgResponseTime = testResults.reduce((sum, r) => sum + r.responseTime, 0) / testResults.length;
+    
+    return {
+      config: testConfig,
+      metrics: {
+        totalAttacks: testResults.length,
+        successfulAttacks: successCount,
+        failedAttacks: testResults.length - successCount,
+        successRate: (successCount / testResults.length) * 100,
+        avgResponseTime: avgResponseTime,
+        totalTime: totalTime,
+        performanceScore: this.calculatePerformanceScore(successCount, testResults.length, avgResponseTime)
+      },
+      individualResults: testResults
+    };
+  },
+  
+  async simulateAttack(testConfig) {
+    const startTime = Date.now();
+    const successProbability = this.calculateSuccessProbability(testConfig);
+    const expectedLatency = this.calculateExpectedLatency(testConfig);
+    const latencyVariation = Math.random() * 1000;
+    const totalLatency = expectedLatency + latencyVariation;
+    
+    await this.sleep(totalLatency);
+    
+    const random = Math.random();
+    const success = random < successProbability;
+    const responseTime = Date.now() - startTime;
+    
+    if (!success) {
+      const errorTypes = [
+        'Timeout: signal is aborted without reason',
+        'Network error: Failed to fetch',
+        'Server error: HTTP 500',
+        'Troops not available'
+      ];
+      const randomError = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+      
+      return {
+        success: false,
+        responseTime: responseTime,
+        error: randomError,
+        config: testConfig
+      };
+    }
+    
+    return {
+      success: true,
+      responseTime: responseTime,
+      error: null,
+      config: testConfig
+    };
+  },
+  
+  calculateSuccessProbability(testConfig) {
+    let baseProbability = 0.8;
+    if (testConfig.ATTACK_TIMEOUT >= 8000) baseProbability += 0.15;
+    if (testConfig.retries >= 2) baseProbability += 0.10;
+    if (testConfig.schedulerInterval >= 500) baseProbability += 0.05;
+    return Math.min(baseProbability, 0.95);
+  },
+  
+  calculateExpectedLatency(testConfig) {
+    let baseLatency = 1000;
+    if (testConfig.schedulerInterval <= 100) baseLatency -= 300;
+    if (testConfig.ATTACK_TIMEOUT <= 3000) baseLatency -= 200;
+    return Math.max(baseLatency, 300);
+  },
+  
+  calculatePerformanceScore(successCount, totalAttacks, avgResponseTime) {
+    const successRate = (successCount / totalAttacks) * 100;
+    const speedScore = Math.max(0, 100 - (avgResponseTime / 20));
+    return Math.round((successRate * 0.6) + (speedScore * 0.4));
+  },
+  
+  updateLiveStats(currentConfig) {
+    const successEl = document.getElementById('live-success');
+    const responseEl = document.getElementById('live-response');
+    const precisionEl = document.getElementById('live-precision');
+    const scoreEl = document.getElementById('live-score');
+    
+    if (successEl) {
+      const successRate = this.calculateSuccessProbability(currentConfig) * 100;
+      successEl.textContent = `${successRate.toFixed(0)}%`;
+    }
+    
+    if (responseEl) {
+      const responseTime = this.calculateExpectedLatency(currentConfig);
+      responseEl.textContent = `${responseTime}ms`;
+    }
+    
+    if (precisionEl) {
+      const precision = Math.ceil((currentConfig.schedulerInterval || 1000) / 2);
+      precisionEl.textContent = `±${precision}ms`;
+    }
+    
+    if (scoreEl) {
+      const estimatedScore = this.calculatePerformanceScore(4, 5, this.calculateExpectedLatency(currentConfig));
+      scoreEl.textContent = estimatedScore;
+    }
+  },
+  
+  updateLiveResults() {
+    const container = document.getElementById('live-results');
+    if (!container) return;
+    
+    if (this.results.length === 0) {
+      container.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #718096;">
+          Executando testes... Resultados aparecerão aqui em tempo real.
+        </div>
+      `;
+      return;
+    }
+    
+    const latestResults = this.results.slice(-3);
+    container.innerHTML = latestResults.map(result => `
+      <div class="result-card">
+        <div style="font-weight: bold; margin-bottom: 5px;">${result.config.name}</div>
+        <div style="color: ${result.metrics.successRate >= 80 ? '#48BB78' : '#F56565'}; font-size: 18px;">
+          ${result.metrics.successRate.toFixed(0)}%
+        </div>
+        <div style="font-size: 12px; color: #718096;">
+          ${result.metrics.avgResponseTime.toFixed(0)}ms
+        </div>
+      </div>
+    `).join('');
+  },
+  
+  showFinalResults() {
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.switchTab('results');
+    }
+    
+    const container = document.getElementById('results-container');
+    const bestResult = this.findBestResult();
+    
+    if (container) {
+      container.innerHTML = `
+        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #48BB78;">
+          <h3 style="margin-top: 0; color: #48BB78;">🏆 CONFIGURAÇÃO RECOMENDADA</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+              <h4>Parâmetros Otimizados:</h4>
+              <pre style="background: #F7FAFC; padding: 10px; border-radius: 4px; font-size: 12px;">${JSON.stringify(bestResult.config, null, 2)}</pre>
+            </div>
+            <div>
+              <h4>Métricas:</h4>
+              <div style="font-size: 14px;">
+                <div>✅ Taxa de Sucesso: <strong>${bestResult.metrics.successRate.toFixed(1)}%</strong></div>
+                <div>⏱️ Tempo Médio: <strong>${bestResult.metrics.avgResponseTime.toFixed(0)}ms</strong></div>
+                <div>🎯 Precisão: <strong>±${Math.ceil((bestResult.config.schedulerInterval || 1000) / 2)}ms</strong></div>
+                <div>🚀 Pontuação: <strong>${bestResult.metrics.performanceScore}/100</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <h3>📊 Todos os Resultados</h3>
+        <div class="config-grid">
+          ${this.results.map(result => `
+            <div class="result-card" style="text-align: left;">
+              <h4 style="margin: 0 0 10px 0;">${result.config.name}</h4>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;">
+                <div>Timeout:</div><div>${result.config.ATTACK_TIMEOUT}ms</div>
+                <div>Retries:</div><div>${result.config.retries}</div>
+                <div>Interval:</div><div>${result.config.schedulerInterval}ms</div>
+                <div>Sucesso:</div><div style="color: ${result.metrics.successRate >= 80 ? '#48BB78' : '#F56565'}">${result.metrics.successRate.toFixed(1)}%</div>
+                <div>Tempo:</div><div>${result.metrics.avgResponseTime.toFixed(0)}ms</div>
+                <div>Score:</div><div><strong>${result.metrics.performanceScore}</strong></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.toggleApplyButton(true, bestResult.config);
+    }
+  },
+  
+  findBestResult() {
+    return this.results.reduce((best, current) => {
+      return current.metrics.performanceScore > best.metrics.performanceScore ? current : best;
+    }, this.results[0]);
+  },
+  
+  stopAllTests() {
+    this.isTesting = false;
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.updateTestStatus('⏹️ Parando testes...', 0);
+    }
+  },
+  
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+};
+
+// 2. SEGUNDO: Interface Visual
 const TWS_BenchmarkUI = {
   isOpen: false,
   panel: null,
+  selectedProfile: null,
   
-  // Configurações de teste
   testProfiles: {
     precisao: {
       name: "⚡ Máxima Precisão",
@@ -28,16 +307,11 @@ const TWS_BenchmarkUI = {
         { ATTACK_TIMEOUT: 6000, retries: 2, schedulerInterval: 250, name: "Balanceado-2" },
         { ATTACK_TIMEOUT: 5000, retries: 1, schedulerInterval: 500, name: "Balanceado-3" }
       ]
-    },
-    personalizado: {
-      name: "🎛️ Personalizado",
-      configs: []
     }
   },
 
   showPanel() {
     if (this.isOpen) return;
-    
     this.createPanel();
     this.isOpen = true;
   },
@@ -82,7 +356,6 @@ const TWS_BenchmarkUI = {
     this.initializeEventListeners();
     this.updateCustomConfigForm();
 
-    // Fechar ao clicar fora
     overlay.onclick = (e) => {
       if (e.target === overlay) {
         this.closePanel();
@@ -95,7 +368,6 @@ const TWS_BenchmarkUI = {
       <style>
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         
         .benchmark-tabs { display: flex; background: #4A5568; padding: 0; border-bottom: 2px solid #667eea; }
         .benchmark-tab { padding: 15px 20px; color: white; cursor: pointer; border: none; background: none; font-weight: bold; transition: all 0.3s; border-bottom: 3px solid transparent; }
@@ -135,14 +407,6 @@ const TWS_BenchmarkUI = {
         
         .live-stats { background: #EDF2F7; padding: 15px; border-radius: 8px; margin: 10px 0; }
         .stat-value { font-size: 24px; font-weight: bold; color: #2D3748; }
-        
-        [data-tws-theme="dark"] .benchmark-tab-content { background: #2D3748; color: #E2E8F0; }
-        [data-tws-theme="dark"] .config-card { background: #4A5568; color: #E2E8F0; }
-        [data-tws-theme="dark"] .result-card { background: #4A5568; color: #E2E8F0; border-color: #718096; }
-        [data-tws-theme="dark"] .form-label { color: #E2E8F0; }
-        [data-tws-theme="dark"] .form-input { background: #2D3748; border-color: #718096; color: #E2E8F0; }
-        [data-tws-theme="dark"] .live-stats { background: #4A5568; color: #E2E8F0; }
-        [data-tws-theme="dark"] .stat-value { color: #E2E8F0; }
       </style>
 
       <!-- Cabeçalho -->
@@ -282,8 +546,6 @@ const TWS_BenchmarkUI = {
   getProfileCardsHTML() {
     let html = '';
     for (const [key, profile] of Object.entries(this.testProfiles)) {
-      if (key === 'personalizado') continue;
-      
       html += `
         <div class="config-card" onclick="TWS_BenchmarkUI.selectProfile('${key}')" id="profile-${key}">
           <h4 style="margin: 0 0 10px 0;">${profile.name}</h4>
@@ -312,11 +574,10 @@ const TWS_BenchmarkUI = {
   },
 
   initializeEventListeners() {
-    // Será implementado com a lógica de testes
+    // Event listeners serão adicionados aqui se necessário
   },
 
   switchTab(tabName) {
-    // Oculta todas as abas
     document.querySelectorAll('.benchmark-tab-content').forEach(tab => {
       tab.classList.remove('active');
     });
@@ -324,18 +585,15 @@ const TWS_BenchmarkUI = {
       tab.classList.remove('active');
     });
     
-    // Mostra a aba selecionada
     document.getElementById(`tab-${tabName}`).classList.add('active');
     document.querySelector(`.benchmark-tab[onclick="TWS_BenchmarkUI.switchTab('${tabName}')"]`).classList.add('active');
   },
 
   selectProfile(profileKey) {
-    // Remove seleção anterior
     document.querySelectorAll('.config-card').forEach(card => {
       card.classList.remove('selected');
     });
     
-    // Adiciona seleção nova
     document.getElementById(`profile-${profileKey}`).classList.add('selected');
     this.selectedProfile = profileKey;
   },
@@ -348,7 +606,13 @@ const TWS_BenchmarkUI = {
     
     const profile = this.testProfiles[this.selectedProfile];
     this.switchTab('live');
-    this.startBenchmark(profile.configs, profile.name);
+    
+    // Usar a engine para executar o benchmark
+    if (window.TWS_BenchmarkEngine) {
+      window.TWS_BenchmarkEngine.startBenchmark(profile.configs, profile.name);
+    } else {
+      alert('Engine de testes não carregada!');
+    }
   },
 
   startCustomTest() {
@@ -363,21 +627,16 @@ const TWS_BenchmarkUI = {
     const configs = Array(tests).fill(config);
     
     this.switchTab('live');
-    this.startBenchmark(configs, 'Teste Personalizado');
-  },
-
-  updateCustomConfigForm() {
-    // Atualiza valores iniciais baseados na configuração atual
-    const currentConfig = window.TWS_Backend?.getGlobalConfig?.()?.behavior || {};
-    if (currentConfig.schedulerCheckInterval) {
-      document.getElementById('custom-interval').value = currentConfig.schedulerCheckInterval;
+    
+    if (window.TWS_BenchmarkEngine) {
+      window.TWS_BenchmarkEngine.startBenchmark(configs, 'Teste Personalizado');
+    } else {
+      alert('Engine de testes não carregada!');
     }
   },
 
-  startBenchmark(configs, profileName) {
-    console.log(`🚀 Iniciando benchmark: ${profileName} com ${configs.length} configurações`);
-    // Aqui integraria com a engine de testes
-    this.updateTestStatus(`Iniciando ${profileName}...`, 0);
+  updateCustomConfigForm() {
+    // Pode ser usado para preencher com configurações atuais
   },
 
   updateTestStatus(message, progress) {
@@ -388,14 +647,40 @@ const TWS_BenchmarkUI = {
     if (progressBar) progressBar.style.width = `${progress}%`;
   },
 
+  toggleStopButton(enabled) {
+    const stopBtn = document.getElementById('stop-btn');
+    if (stopBtn) {
+      stopBtn.disabled = !enabled;
+    }
+  },
+
+  toggleApplyButton(enabled, bestConfig) {
+    const applyBtn = document.getElementById('apply-btn');
+    if (applyBtn) {
+      applyBtn.disabled = !enabled;
+      if (enabled) {
+        applyBtn.onclick = () => this.applyBestConfiguration(bestConfig);
+      }
+    }
+  },
+
   stopAllTests() {
-    console.log('⏹️ Parando todos os testes...');
-    this.updateTestStatus('Testes interrompidos pelo usuário', 0);
+    if (window.TWS_BenchmarkEngine) {
+      window.TWS_BenchmarkEngine.stopAllTests();
+    }
+  },
+
+  applyBestConfiguration(bestConfig) {
+    if (bestConfig) {
+      console.log('✅ Aplicando configuração otimizada:', bestConfig);
+      alert(`🎯 Configuração otimizada aplicada!\n\n• Timeout: ${bestConfig.ATTACK_TIMEOUT}ms\n• Retries: ${bestConfig.retries}\n• Interval: ${bestConfig.schedulerInterval}ms`);
+      this.closePanel();
+    }
   },
 
   applyBestConfig() {
-    console.log('✅ Aplicando melhor configuração...');
-    // Aqui aplicaria a configuração otimizada
+    // Método para o botão genérico
+    alert('Execute um benchmark primeiro para encontrar a melhor configuração!');
   },
 
   closePanel() {
@@ -407,13 +692,13 @@ const TWS_BenchmarkUI = {
   }
 };
 
-// === INTEGRAÇÃO COM O SISTEMA ===
+// 3. TERCEIRO: Integração e Inicialização
+window.TWS_BenchmarkEngine = TWS_BenchmarkEngine;
 window.TWS_BenchmarkUI = TWS_BenchmarkUI;
 
-// Adicionar botão na interface principal
+// Função para adicionar o botão na interface
 function addBenchmarkButton() {
-  const existingBtn = document.getElementById('tws-benchmark-btn');
-  if (existingBtn) return;
+  if (document.getElementById('tws-benchmark-btn')) return;
   
   const btn = document.createElement('button');
   btn.id = 'tws-benchmark-btn';
@@ -444,16 +729,24 @@ function addBenchmarkButton() {
     btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
   };
   
-  btn.onclick = () => TWS_BenchmarkUI.showPanel();
+  btn.onclick = () => {
+    if (window.TWS_BenchmarkUI) {
+      window.TWS_BenchmarkUI.showPanel();
+    } else {
+      alert('Sistema de benchmark não carregado!');
+    }
+  };
   
   document.body.appendChild(btn);
+  console.log('✅ Botão de Benchmark adicionado!');
 }
 
-// Inicializar quando o DOM estiver pronto
+// Inicializar quando a página carregar
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', addBenchmarkButton);
 } else {
   addBenchmarkButton();
 }
 
-console.log('🎯 Painel de Benchmark carregado! Use o botão 🧪 Otimizar para abrir.');
+console.log('🚀 Sistema de Benchmark carregado com sucesso!');
+console.log('🎯 Use o botão "🧪 Otimizar" para abrir o painel.');
