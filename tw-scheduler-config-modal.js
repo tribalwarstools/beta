@@ -1203,56 +1203,58 @@ function migrateOldConfig() {
       }
     };
 
-    window.saveConfig = function() {
-      const config = getConfig();
-      
-      // Salvar velocidades das unidades
-      document.querySelectorAll('.tws-config-input').forEach(input => {
-        const unit = input.dataset.unit;
-        const value = parseFloat(input.value) || defaultConfig.velocidadesUnidades[unit];
-        config.velocidadesUnidades[unit] = Math.max(0.1, value);
-      });
-      
-      // Salvar configurações do Telegram
-      TelegramBotReal.updateFromModal();
-      Object.assign(config.telegram, TelegramBotReal.getConfig());
-      
-      // Salvar outras configurações
-      config.theme = document.getElementById('theme-select').value;
-      config.behavior.showNotifications = document.getElementById('show-notifications').checked;
-      config.behavior.soundOnComplete = document.getElementById('sound-on-complete').checked;
-      config.behavior.autoStartScheduler = document.getElementById('auto-start-scheduler').checked;
-      config.behavior.retryOnFail = document.getElementById('retry-on-fail').checked;
-      config.behavior.confirmDeletion = document.getElementById('confirm-deletion').checked;
-      config.behavior.askBeforeSend = document.getElementById('ask-before-send').checked;
-      config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
-      
-      // ✅ NOVO: Salvar schedulerCheckInterval
-      // CORREÇÃO NO window.saveConfig():
-      let schedulerInterval;
-      
-      if (intervalSelect.value === 'custom') {
-        schedulerInterval = parseInt(customInput.value) || 1000;
-      } else {
-        schedulerInterval = parseInt(intervalSelect.value) || 50; // ← 50ms fallback correto
-      }
-      
-      // Validar limites
-      config.behavior.schedulerCheckInterval = Math.max(50, Math.min(30000, schedulerInterval));
-      
-      if (saveConfig(config)) {
-        showStatus('✅ Configurações salvas com sucesso!', 'success');
-        updateTelegramStats();
-        
-        // Reiniciar scheduler se estiver ativo
-        if (window.TWS_Backend && window.TWS_Backend.startScheduler) {
-          setTimeout(() => {
-            window.TWS_Backend.startScheduler();
-            showStatus('🔄 Scheduler reiniciado com novo intervalo!', 'success');
-          }, 500);
-        }
-      }
-    };
+window.saveConfig = function() {
+  const config = getConfig();
+  
+  // Salvar velocidades das unidades
+  document.querySelectorAll('.tws-config-input').forEach(input => {
+    const unit = input.dataset.unit;
+    const value = parseFloat(input.value) || defaultConfig.velocidadesUnidades[unit];
+    config.velocidadesUnidades[unit] = Math.max(0.1, value);
+  });
+  
+  // Salvar configurações do Telegram
+  TelegramBotReal.updateFromModal();
+  Object.assign(config.telegram, TelegramBotReal.getConfig());
+  
+  // Salvar outras configurações
+  config.theme = document.getElementById('theme-select').value;
+  config.behavior.showNotifications = document.getElementById('show-notifications').checked;
+  config.behavior.soundOnComplete = document.getElementById('sound-on-complete').checked;
+  config.behavior.autoStartScheduler = document.getElementById('auto-start-scheduler').checked;
+  config.behavior.retryOnFail = document.getElementById('retry-on-fail').checked;
+  config.behavior.confirmDeletion = document.getElementById('confirm-deletion').checked;
+  config.behavior.askBeforeSend = document.getElementById('ask-before-send').checked;
+  config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
+  
+  // ✅ CORRIGIDO: Salvar schedulerCheckInterval
+  const intervalSelect = document.getElementById('scheduler-check-interval');
+  const customInput = document.getElementById('scheduler-check-interval-custom');
+  
+  let schedulerInterval;
+  
+  if (intervalSelect.value === 'custom') {
+    schedulerInterval = parseInt(customInput.value) || 50; // ✅ Fallback para 50ms
+  } else {
+    schedulerInterval = parseInt(intervalSelect.value) || 50; // ✅ Fallback para 50ms
+  }
+  
+  // Validar limites (50ms mínimo, 30s máximo)
+  config.behavior.schedulerCheckInterval = Math.max(50, Math.min(30000, schedulerInterval));
+  
+  if (saveConfig(config)) {
+    showStatus('✅ Configurações salvas com sucesso!', 'success');
+    updateTelegramStats();
+    
+    // Reiniciar scheduler se estiver ativo
+    if (window.TWS_Backend && window.TWS_Backend.startScheduler) {
+      setTimeout(() => {
+        window.TWS_Backend.startScheduler();
+        showStatus('🔄 Scheduler reiniciado com novo intervalo!', 'success');
+      }, 500);
+    }
+  }
+};
 
     window.saveAndCloseConfig = function() {
       window.saveConfig();
