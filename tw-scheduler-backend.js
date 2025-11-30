@@ -579,7 +579,7 @@ function startScheduler() {
       const diff = t - now;
 
       // Janela de execução: até 1s após o horário agendado
-      if (diff <= 0 && diff > -1000) {
+      if (diff <= 0 && diff >= -1000) {
         // Agrupar por horário para execução simultânea
         if (!ataquesPorHorario[a.datetime]) {
           ataquesPorHorario[a.datetime] = [];
@@ -904,6 +904,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
