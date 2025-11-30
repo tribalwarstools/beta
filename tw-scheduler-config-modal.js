@@ -29,7 +29,7 @@
       soundOnComplete: false,
       retryOnFail: true,
       maxRetries: 3,
-      delayBetweenAttacks: 1000,
+      schedulerCheckInterval: 1000, // ✅ NOVO: substitui delayBetweenAttacks
       confirmDeletion: true,
       askBeforeSend: false
     },
@@ -368,6 +368,82 @@
     const deltaX = Math.abs(x1 - x2);
     const deltaY = Math.abs(y1 - y2);
     return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
+  // === FUNÇÕES AUXILIARES PARA SCHEDULER CHECK INTERVAL ===
+  function calculatePrecision(interval) {
+    return Math.ceil(interval / 2);
+  }
+
+  function getPrecisionColor(interval) {
+    if (interval <= 100) return '#C6F6D5'; // Verde - alta precisão
+    if (interval <= 500) return '#E6FFFA'; // Verde água - boa precisão  
+    if (interval <= 1000) return '#EBF8FF'; // Azul - balanceado
+    if (interval <= 2000) return '#FEFCBF'; // Amarelo - econômico
+    return '#FED7D7'; // Vermelho - baixa precisão
+  }
+
+  function updateIntervalPrecision() {
+    const select = document.getElementById('scheduler-check-interval');
+    const customInput = document.getElementById('scheduler-check-interval-custom');
+    const precisionEl = document.getElementById('interval-precision');
+    
+    if (!select || !precisionEl) return;
+    
+    let intervalValue;
+    
+    if (select.value === 'custom') {
+      intervalValue = parseInt(customInput.value) || 1000;
+    } else {
+      intervalValue = parseInt(select.value) || 1000;
+    }
+    
+    const precision = calculatePrecision(intervalValue);
+    precisionEl.innerHTML = `🎯 Precisão atual: ±${precision}ms`;
+    precisionEl.style.background = getPrecisionColor(intervalValue);
+  }
+
+  function setupIntervalControls() {
+    const select = document.getElementById('scheduler-check-interval');
+    const customInput = document.getElementById('scheduler-check-interval-custom');
+    
+    if (!select || !customInput) return;
+    
+    // Mostrar/ocultar campo personalizado
+    select.addEventListener('change', function() {
+      if (this.value === 'custom') {
+        customInput.style.display = 'block';
+        customInput.focus();
+      } else {
+        customInput.style.display = 'none';
+      }
+      updateIntervalPrecision();
+    });
+    
+    // Atualizar precisão quando campo personalizado mudar
+    customInput.addEventListener('input', updateIntervalPrecision);
+    
+    // Inicializar
+    updateIntervalPrecision();
+  }
+
+  function migrateOldConfig() {
+    try {
+      const config = getConfig();
+      
+      // Migrar delayBetweenAttacks para schedulerCheckInterval se necessário
+      if (config.behavior.delayBetweenAttacks && !config.behavior.schedulerCheckInterval) {
+        console.log('[Config] Migrando delayBetweenAttacks para schedulerCheckInterval');
+        config.behavior.schedulerCheckInterval = config.behavior.delayBetweenAttacks;
+        delete config.behavior.delayBetweenAttacks;
+        saveConfig(config);
+      }
+      
+      return config;
+    } catch (e) {
+      console.error('[Config] Erro na migração:', e);
+      return getConfig();
+    }
   }
 
   // === MODAL DE CONFIGURAÇÕES ===
@@ -848,13 +924,36 @@
                      id="max-retries" value="${config.behavior.maxRetries}" min="1" max="10" style="width: 120px;" />
             </div>
             
+            <!-- ✅ NOVO: schedulerCheckInterval substituindo delayBetweenAttacks -->
             <div class="tws-form-group">
-              <label class="tws-form-label" for="delay-between-attacks">Delay entre ataques (ms):</label>
-              <input type="number" class="tws-form-input" 
-                     id="delay-between-attacks" value="${config.behavior.delayBetweenAttacks}" min="0" max="10000" style="width: 150px;" />
-              <small style="color: #718096; font-size: 12px;">
-                Recomendado: 1000ms (1 segundo) para evitar detecção
+              <label class="tws-form-label" for="scheduler-check-interval">Intervalo do Scheduler (ms):</label>
+              <select class="tws-form-input" id="scheduler-check-interval" style="width: 200px;">
+                <option value="50" ${config.behavior.schedulerCheckInterval === 50 ? 'selected' : ''}>⚡ 50ms - Máxima Precisão</option>
+                <option value="100" ${config.behavior.schedulerCheckInterval === 100 ? 'selected' : ''}>⚡ 100ms - Alta Precisão</option>
+                <option value="250" ${config.behavior.schedulerCheckInterval === 250 ? 'selected' : ''}>⭐ 250ms - Rápido</option>
+                <option value="500" ${config.behavior.schedulerCheckInterval === 500 ? 'selected' : ''}>⭐ 500ms - Balanceado</option>
+                <option value="1000" ${config.behavior.schedulerCheckInterval === 1000 || !config.behavior.schedulerCheckInterval ? 'selected' : ''}>⭐ 1000ms - Padrão (Recomendado)</option>
+                <option value="2000" ${config.behavior.schedulerCheckInterval === 2000 ? 'selected' : ''}>🔋 2000ms - Econômico</option>
+                <option value="5000" ${config.behavior.schedulerCheckInterval === 5000 ? 'selected' : ''}>🔋 5000ms - Muito Econômico</option>
+                <option value="custom">🎛️ Personalizado</option>
+              </select>
+              
+              <!-- Campo personalizado (inicialmente oculto) -->
+              <input type="number" class="tws-form-input" id="scheduler-check-interval-custom" 
+                     value="${config.behavior.schedulerCheckInterval}" min="50" max="30000" step="50" 
+                     style="width: 150px; display: none; margin-top: 5px;" 
+                     placeholder="Digite o valor em ms" />
+              
+              <small style="color: #718096; font-size: 12px; display: block; margin-top: 5px;">
+                ⏰ Controla a precisão de detecção dos ataques agendados<br>
+                🔄 Menor intervalo = maior precisão (±) mas mais consumo de CPU<br>
+                💡 Recomendado: 1000ms (1 segundo) para melhor balanceamento
               </small>
+              
+              <!-- Indicador de precisão -->
+              <div id="interval-precision" style="margin-top: 8px; font-size: 12px; padding: 5px; border-radius: 4px; background: #E6FFFA; color: #234E52;">
+                🎯 Precisão atual: ±${calculatePrecision(config.behavior.schedulerCheckInterval || 1000)}ms
+              </div>
             </div>
           </div>
         </div>
@@ -933,6 +1032,11 @@
     setTimeout(() => {
       TelegramBotReal.populateModal();
       updateTelegramStats();
+    }, 100);
+
+    // Inicializar controles do intervalo
+    setTimeout(() => {
+      setupIntervalControls();
     }, 100);
 
     // === FUNÇÕES GLOBAIS TEMPORÁRIAS ===
@@ -1118,11 +1222,31 @@
       config.behavior.confirmDeletion = document.getElementById('confirm-deletion').checked;
       config.behavior.askBeforeSend = document.getElementById('ask-before-send').checked;
       config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
-      config.behavior.delayBetweenAttacks = parseInt(document.getElementById('delay-between-attacks').value) || 1000;
+      
+      // ✅ NOVO: Salvar schedulerCheckInterval
+      const intervalSelect = document.getElementById('scheduler-check-interval');
+      let schedulerInterval;
+      
+      if (intervalSelect.value === 'custom') {
+        schedulerInterval = parseInt(document.getElementById('scheduler-check-interval-custom').value) || 1000;
+      } else {
+        schedulerInterval = parseInt(intervalSelect.value) || 1000;
+      }
+      
+      // Validar limites
+      config.behavior.schedulerCheckInterval = Math.max(50, Math.min(30000, schedulerInterval));
       
       if (saveConfig(config)) {
         showStatus('✅ Configurações salvas com sucesso!', 'success');
         updateTelegramStats();
+        
+        // Reiniciar scheduler se estiver ativo
+        if (window.TWS_Backend && window.TWS_Backend.startScheduler) {
+          setTimeout(() => {
+            window.TWS_Backend.startScheduler();
+            showStatus('🔄 Scheduler reiniciado com novo intervalo!', 'success');
+          }, 500);
+        }
       }
     };
 
@@ -1219,6 +1343,9 @@
       window.TWS_ConfigModal = {};
     }
     
+    // Migrar configurações antigas
+    migrateOldConfig();
+    
     window.TWS_ConfigModal.show = showConfigModal;
     window.TWS_ConfigModal.getConfig = getConfig;
     window.TWS_ConfigModal.saveConfig = saveConfig;
@@ -1226,7 +1353,7 @@
     // Aplicar configurações ao carregar
     applyConfig(getConfig());
     
-    console.log('[TW Config] ✅ Modal de configurações carregado com Telegram REAL!');
+    console.log('[TW Config] ✅ Modal de configurações carregado com schedulerCheckInterval!');
   }
 
   // Inicializar
