@@ -502,39 +502,41 @@
 // 📖 DOCUMENTAÇÃO DE USO
 // ═══════════════════════════════════════════════════════════════
 
-console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║           TWS BENCHMARK - MODO REAL ATIVADO                   ║
-╚═══════════════════════════════════════════════════════════════╝
-
-🎯 COMO USAR:
-
-1. Abra o painel de benchmark (botão "🧪 Otimizar")
-2. Escolha um perfil de teste
-3. Clique em "🔥 Modo REAL (Backend)"
-4. Confirme a execução
-5. Aguarde os resultados reais
-
-⚡ DIFERENÇAS:
-
-┌─────────────────┬──────────────────┬──────────────────┐
-│     Aspecto     │   Modo Simulado  │    Modo REAL     │
-├─────────────────┼──────────────────┼──────────────────┤
-│ Velocidade      │ Rápido (2-3s)    │ Lento (30-60s)   │
-│ Ataques Reais   │ ❌ Não           │ ✅ Sim           │
-│ Tropas Usadas   │ ❌ Não           │ ✅ 1 lanceiro    │
-│ Precisão        │ Estimativa       │ 100% Real        │
-│ Configuração    │ Sugestões        │ Dados Reais      │
-└─────────────────┴──────────────────┴──────────────────┘
-
-⚠️ ATENÇÃO:
-• Modo REAL usa ataques verdadeiros do backend
-• Consome 1 lanceiro por teste (3 por config)
-• Resultados são 100% precisos para seu ambiente
-• Recomendado para otimização final
-
-🔧 API DISPONÍVEL:
-• TWS_BenchmarkBackendAdapter
-• TWS_RealBenchmarkEngine
-• TWS_BenchmarkUI (atualizada)
-`);
+console.log([
+  '',
+  '╔═══════════════════════════════════════════════════════════════╗',
+  '║           TWS BENCHMARK - MODO REAL ATIVADO                   ║',
+  '╚═══════════════════════════════════════════════════════════════╝',
+  '',
+  '🎯 COMO USAR:',
+  '',
+  '1. Abra o painel de benchmark (botão "🧪 Otimizar")',
+  '2. Escolha um perfil de teste',
+  '3. Clique em "🔥 Modo REAL (Backend)"',
+  '4. Confirme a execução',
+  '5. Aguarde os resultados reais',
+  '',
+  '⚡ DIFERENÇAS:',
+  '',
+  '┌─────────────────┬──────────────────┬──────────────────┐',
+  '│     Aspecto     │   Modo Simulado  │    Modo REAL     │',
+  '├─────────────────┼──────────────────┼──────────────────┤',
+  '│ Velocidade      │ Rápido (2-3s)    │ Lento (30-60s)   │',
+  '│ Ataques Reais   │ ❌ Não           │ ✅ Sim           │',
+  '│ Tropas Usadas   │ ❌ Não           │ ✅ 1 lanceiro    │',
+  '│ Precisão        │ Estimativa       │ 100% Real        │',
+  '│ Configuração    │ Sugestões        │ Dados Reais      │',
+  '└─────────────────┴──────────────────┴──────────────────┘',
+  '',
+  '⚠️ ATENÇÃO:',
+  '• Modo REAL usa ataques verdadeiros do backend',
+  '• Consome 1 lanceiro por teste (3 por config)',
+  '• Resultados são 100% precisos para seu ambiente',
+  '• Recomendado para otimização final',
+  '',
+  '🔧 API DISPONÍVEL:',
+  '• TWS_BenchmarkBackendAdapter',
+  '• TWS_RealBenchmarkEngine',
+  '• TWS_BenchmarkUI (atualizada)',
+  ''
+].join('\n'));
