@@ -316,7 +316,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     panel.style.cssText = `position:fixed;top:60px;right:10px;width:90%;max-width:1000px;max-height:80vh;background:#F4E4C1;border:3px solid #8B4513;border-radius:8px;padding:15px;z-index:99998;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.4);font-family:Arial,sans-serif;display:none;`;
     panel.innerHTML = `
       <div style="margin-bottom:15px;">
-        <h2 style="margin:0 0 10px 0;color:#8B4513;">⚔️ Agendador TW (4.2)</h2>
+        <h2 style="margin:0 0 10px 0;color:#8B4513;">⚔️ Agendador TW (4.3)</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
           <button onclick="TWS_Panel.addManual()" style="padding:6px 12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📋 BBCode</button>
@@ -399,6 +399,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
 
 
