@@ -193,7 +193,7 @@ function getAttackFingerprint(a) {
     const setStatus = (msg) => { try{ if(statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); };
 
 // No início do executeAttack, após setStatus
-const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
+const ATTACK_TIMEOUT = 3000; // 5 segundos por ataque
 
 
     
@@ -579,7 +579,7 @@ function startScheduler() {
       const diff = t - now;
 
       // Janela de execução: até 10s após o horário agendado
-      if (diff <= 0 && diff > -10000) {
+      if (diff <= 0 && diff > -2000) {
         // Agrupar por horário para execução simultânea
         if (!ataquesPorHorario[a.datetime]) {
           ataquesPorHorario[a.datetime] = [];
@@ -904,6 +904,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
