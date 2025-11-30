@@ -29,7 +29,7 @@
       soundOnComplete: false,
       retryOnFail: true,
       maxRetries: 3,
-      schedulerCheckInterval: 1000, // ✅ NOVO: substitui delayBetweenAttacks
+      schedulerCheckInterval: 50, // ✅ NOVO: substitui delayBetweenAttacks
       confirmDeletion: true,
       askBeforeSend: false
     },
@@ -927,16 +927,20 @@
             <!-- ✅ NOVO: schedulerCheckInterval substituindo delayBetweenAttacks -->
             <div class="tws-form-group">
               <label class="tws-form-label" for="scheduler-check-interval">Intervalo do Scheduler (ms):</label>
+
               <select class="tws-form-input" id="scheduler-check-interval" style="width: 200px;">
-                <option value="50" ${config.behavior.schedulerCheckInterval === 50 ? 'selected' : ''}>⚡ 50ms - Máxima Precisão</option>
-                <option value="100" ${config.behavior.schedulerCheckInterval === 100 ? 'selected' : ''}>⚡ 100ms - Alta Precisão</option>
-                <option value="250" ${config.behavior.schedulerCheckInterval === 250 ? 'selected' : ''}>⭐ 250ms - Rápido</option>
-                <option value="500" ${config.behavior.schedulerCheckInterval === 500 ? 'selected' : ''}>⭐ 500ms - Balanceado</option>
-                <option value="1000" ${config.behavior.schedulerCheckInterval === 1000 || !config.behavior.schedulerCheckInterval ? 'selected' : ''}>⭐ 1000ms - Padrão (Recomendado)</option>
-                <option value="2000" ${config.behavior.schedulerCheckInterval === 2000 ? 'selected' : ''}>🔋 2000ms - Econômico</option>
-                <option value="5000" ${config.behavior.schedulerCheckInterval === 5000 ? 'selected' : ''}>🔋 5000ms - Muito Econômico</option>
-                <option value="custom">🎛️ Personalizado</option>
-              </select>
+                  <option value="50" ${config.behavior.schedulerCheckInterval === 50 || !config.behavior.schedulerCheckInterval ? 'selected' : ''}>⚡ 50ms - Padrão (Máxima Precisão)</option>
+                  <option value="100" ${config.behavior.schedulerCheckInterval === 100 ? 'selected' : ''}>⚡ 100ms - Alta Precisão</option>
+                  <option value="250" ${config.behavior.schedulerCheckInterval === 250 ? 'selected' : ''}>⭐ 250ms - Rápido</option>
+                  <option value="500" ${config.behavior.schedulerCheckInterval === 500 ? 'selected' : ''}>⭐ 500ms - Balanceado</option>
+                  <option value="1000" ${config.behavior.schedulerCheckInterval === 1000 ? 'selected' : ''}>⭐ 1000ms - Moderado</option>
+                  <option value="2000" ${config.behavior.schedulerCheckInterval === 2000 ? 'selected' : ''}>🔋 2000ms - Econômico</option>
+                  <option value="5000" ${config.behavior.schedulerCheckInterval === 5000 ? 'selected' : ''}>🔋 5000ms - Muito Econômico</option>
+                  <option value="custom">🎛️ Personalizado</option>
+          </select>
+
+
+              
               
               <!-- Campo personalizado (inicialmente oculto) -->
               <input type="number" class="tws-form-input" id="scheduler-check-interval-custom" 
