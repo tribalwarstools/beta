@@ -985,7 +985,7 @@ function migrateOldConfig() {
               </button>
             </div>
             
-            <div style="background: #EDF2F7; padding: 15px; border-radius: 6px;">
+            <div style="background: #2D3748; padding: 15px; border-radius: 6px;">
               <h4 style="margin-top: 0;">📊 Estatísticas do Sistema</h4>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
                 <div>Agendamentos: <span id="stats-agendamentos">${window.TWS_Backend ? window.TWS_Backend.getList().length : 0}</span></div>
