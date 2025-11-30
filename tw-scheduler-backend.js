@@ -522,7 +522,7 @@ function getGlobalConfig() {
     const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
     return {
       behavior: {
-        schedulerCheckInterval: 1000, // padrão: 1 segundo
+        schedulerCheckInterval: 10, // padrão: 1 segundo
         retryOnFail: true,
         maxRetries: 3,
         ...saved.behavior
@@ -904,6 +904,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
