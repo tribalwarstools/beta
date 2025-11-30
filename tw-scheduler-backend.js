@@ -193,7 +193,7 @@ function getAttackFingerprint(a) {
     const setStatus = (msg) => { try{ if(statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); };
 
 // No início do executeAttack, após setStatus
-const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
+const ATTACK_TIMEOUT = 3000; // 3 segundos por ataque
 
 
     
@@ -904,6 +904,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
