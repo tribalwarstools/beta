@@ -509,47 +509,10 @@ const SchedulerMetrics = {
 // ✅ #3 SCHEDULER MELHORADO (Principal)
 // ═════════════════════════════════════════════════════════
 
-// ═════════════════════════════════════════════════════════
-// ✅ FUNÇÃO COMPLETA: startScheduler() com Intervalo Configurável
-// ═════════════════════════════════════════════════════════
-
-// ┌─────────────────────────────────────────────────────────┐
-// │ ADICIONE ESTA FUNÇÃO AUXILIAR ANTES DO startScheduler() │
-// └─────────────────────────────────────────────────────────┘
-
-function getGlobalConfig() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
-    return {
-      behavior: {
-        schedulerCheckInterval: 1000, // padrão: 1 segundo
-        retryOnFail: true,
-        maxRetries: 3,
-        ...saved.behavior
-      }
-    };
-  } catch (e) {
-    console.error('[Backend] Erro ao ler config global:', e);
-    return { behavior: { schedulerCheckInterval: 1000, retryOnFail: true, maxRetries: 3 } };
-  }
-}
-
-// ┌─────────────────────────────────────────────────────────┐
-// │ FUNÇÃO PRINCIPAL: startScheduler()                      │
-// │ SUBSTITUA A FUNÇÃO COMPLETA NO SEU BACKEND              │
-// └─────────────────────────────────────────────────────────┘
-
 function startScheduler() {
   if (_schedulerInterval) clearInterval(_schedulerInterval);
   
-  // ✅ LER INTERVALO DA CONFIGURAÇÃO
-  const config = getGlobalConfig();
-  const checkIntervalMs = config.behavior.schedulerCheckInterval || 1000;
-  
-  console.log(`[Scheduler] ✅ Iniciando com intervalo de ${checkIntervalMs}ms`);
-  
-  // Cleanup a cada 6 horas (ajustado pelo intervalo)
-  const cleanupThreshold = Math.floor(21600000 / checkIntervalMs); // 6 horas em ciclos
+  // Cleanup a cada 6 horas
   let cleanupCounter = 0;
   
   _schedulerInterval = setInterval(async () => {
@@ -580,7 +543,7 @@ function startScheduler() {
 
       // Janela de execução: até 10s após o horário agendado
       if (diff <= 0 && diff > -10000) {
-        // Agrupar por horário para execução simultânea
+        // Agrupar por horário para evitar explosão simultânea
         if (!ataquesPorHorario[a.datetime]) {
           ataquesPorHorario[a.datetime] = [];
         }
@@ -615,111 +578,114 @@ function startScheduler() {
       }
     }
 
-    // ┌─ FASE 3: EXECUÇÃO SIMULTÂNEA ─┐
-    // Executar TODOS os ataques do mesmo horário simultaneamente
+// ┌─ FASE 3: EXECUÇÃO SIMULTÂNEA ─┐
+// Executar TODOS os ataques do mesmo horário simultaneamente
 
-    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      if (ataques.length > 0) {
-        console.log(`[Scheduler] Executando ${ataques.length} ataques simultâneos para ${horario}`);
+for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
+  if (ataques.length > 0) {
+    console.log(`[Scheduler] Executando ${ataques.length} ataques simultâneos para ${horario}`);
+    
+    // Preparar todas as promessas de execução
+    const executionPromises = ataques.map(a => {
+      return (async () => {
+        // ✅ Double-check: skip se já foi finalizado
+        if (a.done) {
+          return { attack: a, success: false, skipped: true };
+        }
+
+        // ✅ Calcular fingerprint para evitar reprocessamento
+        const fingerprint = getAttackFingerprint(a);
         
-        // Preparar todas as promessas de execução
-        const executionPromises = ataques.map(a => {
-          return (async () => {
-            // ✅ Double-check: skip se já foi finalizado
-            if (a.done) {
-              return { attack: a, success: false, skipped: true };
-            }
+        try {
+          // Executar o ataque
+          const success = await executeAttack(a);
 
-            // ✅ Calcular fingerprint para evitar reprocessamento
-            const fingerprint = getAttackFingerprint(a);
-            
-            try {
-              // Executar o ataque
-              const success = await executeAttack(a);
+          // ✅ ✅ ✅ TELEGRAM NOTIFICATIONS - ADICIONE AQUI
+          if (success) {
+            // Notificação de sucesso
+            await sendTelegramNotification('attack_success', {
+              origin: a.origem,
+              target: a.alvo,
+              units: TROOP_LIST.map(u => a[u] > 0 ? `${a[u]} ${u}` : null).filter(Boolean).join(', ') || 'Nenhuma tropa especificada',
+              travelTime: 'Calculando...' // Você pode calcular isso se tiver as velocidades
+            });
+          } else {
+            // Notificação de falha
+            await sendTelegramNotification('attack_failure', {
+              origin: a.origem,
+              target: a.alvo,
+              reason: a.statusText || 'Falha na execução do comando',
+              suggestion: 'Verifique se as tropas estão disponíveis'
+            });
+          }
+          // ✅ ✅ ✅ FIM DAS NOTIFICAÇÕES
 
-              // ✅ TELEGRAM NOTIFICATIONS
-              if (success) {
-                await sendTelegramNotification('attack_success', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  units: TROOP_LIST.map(u => a[u] > 0 ? `${a[u]} ${u}` : null).filter(Boolean).join(', ') || 'Nenhuma tropa especificada',
-                  travelTime: 'Calculando...'
-                });
-              } else {
-                await sendTelegramNotification('attack_failure', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  reason: a.statusText || 'Falha na execução do comando',
-                  suggestion: 'Verifique se as tropas estão disponíveis'
-                });
-              }
+          // Registrar resultado
+          a.done = true;
+          a.success = success;
+          
+          if (success) {
+            markAttackProcessed(fingerprint);
+            a.status = 'sent';
+            a.statusText = '✅ Enviado';
+            SchedulerMetrics.recordExecution(true);
+          } else {
+            a.status = 'failed';
+            a.statusText = '❌ Falhou (verificar manualmente)';
+            SchedulerMetrics.recordExecution(false);
+          }
 
-              // Registrar resultado
-              a.done = true;
-              a.success = success;
-              
-              if (success) {
-                markAttackProcessed(fingerprint);
-                a.status = 'sent';
-                a.statusText = '✅ Enviado';
-                SchedulerMetrics.recordExecution(true);
-              } else {
-                a.status = 'failed';
-                a.statusText = '❌ Falhou (verificar manualmente)';
-                SchedulerMetrics.recordExecution(false);
-              }
+          return { attack: a, success: success, error: null };
 
-              return { attack: a, success: success, error: null };
+        } catch (err) {
+          // Erro na execução
+          a.done = true;
+          a.success = false;
+          a.error = err.message;
+          a.status = 'failed';
+          a.statusText = `❌ Falha: ${err.message}`;
+          SchedulerMetrics.recordExecution(false);
 
-            } catch (err) {
-              // Erro na execução
-              a.done = true;
-              a.success = false;
-              a.error = err.message;
-              a.status = 'failed';
-              a.statusText = `❌ Falha: ${err.message}`;
-              SchedulerMetrics.recordExecution(false);
+          // ✅ ✅ ✅ NOTIFICAÇÃO DE ERRO - ADICIONE AQUI
+          await sendTelegramNotification('system_error', {
+            module: 'Scheduler',
+            error: err.message,
+            details: `Ataque: ${a.origem} → ${a.alvo}`,
+            action: 'Verificar console para detalhes'
+          });
 
-              // ✅ NOTIFICAÇÃO DE ERRO
-              await sendTelegramNotification('system_error', {
-                module: 'Scheduler',
-                error: err.message,
-                details: `Ataque: ${a.origem} → ${a.alvo}`,
-                action: 'Verificar console para detalhes'
-              });
+          console.error(
+            `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
+            err.message
+          );
 
-              console.error(
-                `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
-                err.message
-              );
+          return { attack: a, success: false, error: err.message };
 
-              return { attack: a, success: false, error: err.message };
+        } finally {
+          // ✅ Sempre desbloquear
+          a.locked = false;
+          _executing.delete(a._id);
+        }
+      })();
+    });
 
-            } finally {
-              // ✅ Sempre desbloquear
-              a.locked = false;
-              _executing.delete(a._id);
-            }
-          })();
-        });
-
-        // ⚡ EXECUTAR TODOS SIMULTANEAMENTE
-        const results = await Promise.allSettled(executionPromises);
-        
-        // Salvar todos os resultados de uma vez
-        setList(list);
-        
-        // Log de resultados
-        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-        console.log(`[Scheduler] Lote ${horario}: ${successful}/${ataques.length} bem-sucedidos`);
-      }
-    }
+    // ⚡ EXECUTAR TODOS SIMULTANEAMENTE
+    const results = await Promise.allSettled(executionPromises);
+    
+    // Salvar todos os resultados de uma vez
+    setList(list);
+    
+    // Log de resultados
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    console.log(`[Scheduler] Lote ${horario}: ${successful}/${ataques.length} bem-sucedidos`);
+  }
+}
 
     // ┌─ FASE 4: LIMPEZA ─┐
     // Cleanup periódico
     
     cleanupCounter++;
-    if (cleanupCounter >= cleanupThreshold) {
+    if (cleanupCounter >= 21600) { // ~6 horas em ciclos de 1s
       cleanupProcessedAttacks();
       cleanupCounter = 0;
     }
@@ -727,46 +693,11 @@ function startScheduler() {
     // ┌─ MÉTRICAS ─┐
     SchedulerMetrics.end();
 
-  }, checkIntervalMs); // ✅ USAR INTERVALO CONFIGURÁVEL
+  }, 1000); // ✅ Pulsa a cada 1 segundo
 
-  console.log(`[Scheduler] ✅ Iniciado (v2.0 - Intervalo: ${checkIntervalMs}ms)`);
+  console.log('[Scheduler] ✅ Iniciado (v2.0 - Melhorado com proteções)');
 }
 
-// ═════════════════════════════════════════════════════════
-// 📊 COMO FUNCIONA
-// ═════════════════════════════════════════════════════════
-
-/*
-EXECUÇÃO SIMULTÂNEA MANTIDA:
-✅ Todos os ataques do MESMO horário executam juntos (Promise.allSettled)
-✅ Não há delay entre ataques do mesmo horário
-✅ Chegam juntos no alvo
-
-INTERVALO CONFIGURÁVEL:
-✅ checkIntervalMs controla a frequência de checagem
-✅ Menor intervalo = maior precisão de detecção
-✅ Não afeta a execução simultânea
-
-EXEMPLO:
-10 ataques agendados para 14:00:00 com intervalo de 1000ms:
-
-📍 13:59:59 → Scheduler checa: "ainda não é hora"
-📍 14:00:00 → Scheduler checa: "é hora! executar TODOS"
-⚡ 14:00:00.050 → Todos os 10 ataques partem JUNTOS
-✅ Resultado: Todos chegam no alvo simultaneamente
-
-CONFIGURAÇÃO NO MODAL:
-• 100ms = Precisão máxima (±0.1s) ⚡⚡⚡⚡⚡
-• 1000ms = Balanceado (±1s) ⭐ [RECOMENDADO]
-• 5000ms = Econômico (±5s) 🔋
-
-BENEFÍCIOS:
-• Mantém timing preciso dos ataques
-• Configurável por perfil de uso
-• Economia de CPU quando necessário
-• Sem impacto na execução simultânea
-*/
-  
 // ═════════════════════════════════════════════════════════
 // ✅ #4 FUNÇÕES DE DEBUG (Novas)
 // ═════════════════════════════════════════════════════════
@@ -904,8 +835,6 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
-
-
 
 
 
