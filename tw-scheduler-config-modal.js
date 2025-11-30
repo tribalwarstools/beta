@@ -1,910 +1,1365 @@
 (function () {
   'use strict';
 
-  // === Configs / Constantes ===
-  const STORAGE_KEY = 'tw_scheduler_multi_v1';
-  const PANEL_STATE_KEY = 'tws_panel_state';
-  const TROOP_LIST = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
-  const world = location.hostname.split('.')[0];
-  const VILLAGE_TXT_URL = `https://${world}.tribalwars.com.br/map/village.txt`;
-  let _villageMap = {};
-  let _myVillages = [];
-  let _schedulerInterval = null;
-
-  // Proteções / estados locais
-  const _executing = new Set();
-  // Usamos Set de fingerprints apenas para casos bem-sucedidos (evita reprocessar envios já enviados)
-  const _processedAttacks = new Set();
-
-  // Contador para fallback de ids
-  let _idCounter = Date.now();
-
-  // Gera ID único robusto
-  function generateUniqueId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
+  // === CONFIGURAÇÕES GLOBAIS ===
+  const CONFIG_STORAGE_KEY = 'tws_global_config_v2';
+  
+  // Configurações padrão
+  const defaultConfig = {
+    velocidadesUnidades: {
+      spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
+      light: 10, marcher: 10, heavy: 11, ram: 30, catapult: 30,
+      knight: 10, snob: 35
+    },
+    telegram: {
+      enabled: false,
+      botToken: '',
+      chatId: '',
+      notifications: {
+        success: true,
+        failure: true,
+        farmCycle: false,
+        error: true
+      }
+    },
+    theme: 'light',
+    behavior: {
+      autoStartScheduler: true,
+      showNotifications: true,
+      soundOnComplete: false,
+      retryOnFail: true,
+      maxRetries: 3,
+      schedulerCheckInterval: 1000, // ✅ NOVO: substitui delayBetweenAttacks
+      confirmDeletion: true,
+      askBeforeSend: false
+    },
+    security: {
+      confirmMassActions: true,
+      backupInterval: 86400000
     }
-    const timestamp = Date.now();
-    const counter = ++_idCounter;
-    const random = Math.random().toString(36).substr(2, 9);
-    const perf = (typeof performance !== 'undefined' && performance.now) 
-      ? performance.now().toString(36) 
-      : Math.random().toString(36).substr(2, 5);
-    return `${timestamp}_${counter}_${random}_${perf}`;
-  }
+  };
 
-  // Parse de datas: aceita com ou sem segundos (dd/mm/yyyy hh:mm ou dd/mm/yyyy hh:mm:ss)
-  function parseDateTimeToMs(str) {
-    const m = str?.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (!m) return NaN;
-    const [, d, mo, y, hh, mm, ss = '00'] = m;
-    return new Date(+y, +mo - 1, +d, +hh, +mm, +ss).getTime();
-  }
+  // === MÓDULO TELEGRAM REAL ===
+  const TelegramBotReal = {
+    baseUrl: 'https://api.telegram.org/bot',
+    timeout: 10000,
 
-  // Validação de coord (retorna normalizado ou null)
-  function parseCoord(s) {
-    if (!s) return null;
-    const t = s.trim();
-    const match = t.match(/^(\d{1,4})\|(\d{1,4})$/);
-    if (!match) return null;
-    const x = parseInt(match[1], 10);
-    const y = parseInt(match[2], 10);
-    if (x < 0 || x > 9999 || y < 0 || y > 9999) return null;
-    return `${x}|${y}`;
-  }
-  function isValidCoord(s){ return parseCoord(s)!==null; }
-
-  function getMapSection(x, y) {
-    const sections = [];
-    if (x <= 249) sections.push('Oeste');
-    else if (x >= 251) sections.push('Leste');
-    else sections.push('Centro');
-
-    if (y <= 249) sections.push('Norte');
-    else if (y >= 251) sections.push('Sul');
-    else sections.push('Centro');
-
-    return sections.join('-');
-  }
-
-  function getDistance(coord1, coord2) {
-    const c1 = parseCoord(coord1);
-    const c2 = parseCoord(coord2);
-    if (!c1 || !c2) return null;
-    const [x1, y1] = c1.split('|').map(Number);
-    const [x2, y2] = c2.split('|').map(Number);
-    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-  }
-
-  // fingerprint 
-function getAttackFingerprint(a) {
-  const dt = parseDateTimeToMs(a.datetime);
-  const dtKey = isNaN(dt) ? (a.datetime || '') : String(dt);
-
-  // fingerprint inclui _id para permitir ataques idênticos simultâneos
-  return `${a._id}_${a.origemId || a.origem}_${a.alvo}_${dtKey}`;
-}
-
-
-  // Safefetch com timeout
-  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-  function safeTimeout(ms = 8000) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ms);
-    return { controller, timeout };
-  }
-  async function safeFetch(url, options = {}, retries = 1) {
-    for (let i = 0; i <= retries; i++) {
+    getConfig() {
       try {
-        return await fetch(url, options);
+        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
+        return saved.telegram || defaultConfig.telegram;
       } catch (e) {
-        if (i === retries) throw e;
-        await sleep(150);
+        return defaultConfig.telegram;
       }
-    }
-  }
+    },
 
-  // === Village.txt loader
-  async function loadVillageTxt() {
-    try {
-      const res = await fetch(VILLAGE_TXT_URL, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Falha ao buscar village.txt: ' + res.status);
-      const text = await res.text();
-      const map = {};
-      const myVillages = [];
-      for (const line of text.trim().split('\n')) {
-        const [id, name, x, y, playerId] = line.split(',');
-        const coord = `${x}|${y}`;
-        map[coord] = id;
-        if (playerId === (window.game_data?.player?.id || '').toString()) {
-          const clean = decodeURIComponent((name || '').replace(/\+/g, ' '));
-          myVillages.push({ id, name: clean, coord });
-        }
-      }
-      _villageMap = map;
-      _myVillages = myVillages;
-      console.log(`[TWS_Backend] Carregadas ${myVillages.length} aldeias próprias`);
-      return { map, myVillages };
-    } catch (err) {
-      console.error('[TWS_Backend] loadVillageTxt error:', err);
-      return { map: {}, myVillages: [] };
-    }
-  }
-
-  // === Ler tropas da tela /place (fallbacks robustos)
-  async function getVillageTroops(villageId) {
-    try {
-      const placeUrl = `${location.protocol}//${location.host}/game.php?village=${villageId}&screen=place`;
-      const res = await fetch(placeUrl, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Falha ao carregar /place: ' + res.status);
-      const html = await res.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-
-      const troops = {};
-      TROOP_LIST.forEach(u => {
-        let availableEl = doc.querySelector(`#units_entry_all_${u}`) ||
-                          doc.querySelector(`#units_home_${u}`) ||
-                          doc.querySelector(`[id*="${u}"][class*="unit"]`) ||
-                          doc.querySelector(`[class*="${u}"]`);
-        let available = 0;
-        if (availableEl) {
-          const txt = (availableEl.textContent || '').replace(/\./g,'').replace(/,/g,'').trim();
-          const m = txt.match(/(\d+)/g);
-          if (m) available = parseInt(m.join(''), 10);
-        }
-        troops[u] = available;
-      });
-
-      console.log(`[TWS_Backend] Tropas da aldeia ${villageId}:`, troops);
-      return troops;
-    } catch (err) {
-      console.error('[TWS_Backend] getVillageTroops error:', err);
-      return null;
-    }
-  }
-
-  // === Valida tropas
-  function validateTroops(requested, available) {
-    const errors = [];
-    TROOP_LIST.forEach(u => {
-      const req = Number(requested[u] || 0);
-      const avail = Number(available[u] || 0);
-      if (req > avail) errors.push(`${u}: solicitado ${req}, disponível ${avail}`);
-    });
-    return errors;
-  }
-
-  // === Detectar confirmação na resposta HTML
-  function isAttackConfirmed(htmlText) {
-    if (/screen=info_command.*type=own/i.test(htmlText)) return true;
-    if (/<tr class="command-row">/i.test(htmlText) && /data-command-id=/i.test(htmlText)) return true;
-    const successPatterns = [
-      /attack sent/i, /attack in queue/i, /enviado/i, /ataque enviado/i,
-      /enfileirad/i, /A batalha começou/i, /march started/i, /comando enviado/i,
-      /tropas enviadas/i, /foi enfileirado/i, /command sent/i, /comando foi criado/i
-    ];
-    return successPatterns.some(p => p.test(htmlText));
-  }
-
-  // === executeAttack (faz todo fluxo via fetch)
-  async function executeAttack(cfg) {
-    const statusEl = document.getElementById('tws-status');
-    const setStatus = (msg) => { try{ if(statusEl) statusEl.innerHTML = msg; }catch{} console.log('[TWScheduler]', msg); };
-
-// No início do executeAttack, após setStatus
-const ATTACK_TIMEOUT = 5000; // 5 segundos por ataque
-
-
-    
-    // resolver origemId
-    const origemId = cfg.origemId || _villageMap[cfg.origem];
-    if (!origemId) {
-      setStatus(`❌ Origem ${cfg.origem || cfg.origemId} não encontrada!`);
-      throw new Error('Origem não encontrada');
-    }
-
-    // validar alvo
-    const [x, y] = (cfg.alvo || '').split('|');
-    if (!x || !y) {
-      setStatus(`❌ Alvo inválido: ${cfg.alvo}`);
-      throw new Error('Alvo inválido');
-    }
-
-    setStatus(`🔍 Verificando tropas disponíveis em ${cfg.origem}...`);
-    const availableTroops = await getVillageTroops(origemId);
-    if (availableTroops) {
-      const errors = validateTroops(cfg, availableTroops);
-      if (errors.length) {
-        setStatus(`❌ Tropas insuficientes: ${errors.join(', ')}`);
-        // atualiza status no objeto para o frontend exibir
-        cfg.status = 'no_troops';
-        cfg.statusText = `Sem tropas: ${errors.slice(0,2).join(', ')}`;
-        throw new Error('Tropas insuficientes');
-      }
-    }
-
-    const placeUrl = `${location.protocol}//${location.host}/game.php?village=${origemId}&screen=place`;
-    try {
-      // 1) GET /place
-      // Modifique o safeTimeout dentro do executeAttack:
-      const { controller: c1, timeout: t1 } = safeTimeout(ATTACK_TIMEOUT);
-      const getRes = await safeFetch(placeUrl, { credentials: 'same-origin', signal: c1.signal });
-      clearTimeout(t1);
-      if (!getRes.ok) throw new Error(`GET /place falhou: HTTP ${getRes.status}`);
-      const html = await getRes.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-
-      let form = doc.querySelector('#command-data-form') || doc.querySelector('form[action*="screen=place"]') || doc.forms[0];
-      if (!form) throw new Error('Form de envio não encontrado');
-
-      // 2) construir payload inicial
-      const payloadObj = {};
-      form.querySelectorAll('input, select, textarea').forEach(inp => {
-        const name = inp.name;
-        if (!name) return;
-        if (inp.type === 'checkbox' || inp.type === 'radio') {
-          if (inp.checked) payloadObj[name] = inp.value || 'on';
-        } else {
-          payloadObj[name] = inp.value || '';
-        }
-      });
-
-      payloadObj['x'] = String(x);
-      payloadObj['y'] = String(y);
-      TROOP_LIST.forEach(u => payloadObj[u] = String(cfg[u] !== undefined ? cfg[u] : '0'));
-
-      const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
-      if (submitBtn) {
-        const n = submitBtn.name;
-        const v = submitBtn.value || '';
-        if (n) payloadObj[n] = v;
-      }
-
-      if (!payloadObj['x'] || !payloadObj['y']) throw new Error('Payload sem coordenadas.');
-      if (Object.keys(payloadObj).length < 5) throw new Error('Payload incompleto.');
-
-      const urlEncoded = Object.entries(payloadObj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-      let postUrl = form.getAttribute('action') || placeUrl;
-      if (postUrl.startsWith('/')) postUrl = `${location.protocol}//${location.host}${postUrl}`;
-
-      // 3) POST inicial (tela de confirmação)
-      setStatus(`⏳ Enviando comando...`);
-      const { controller: c2, timeout: t2 } = safeTimeout(ATTACK_TIMEOUT);
-      const postRes = await safeFetch(postUrl, {
-        method: 'POST',
-        credentials: 'same-origin',
-        signal: c2.signal,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest',
-          'Accept': 'text/html,application/xhtml+xml',
-          'Cache-Control': 'no-cache'
-        },
-        body: urlEncoded
-      }, 1);
-      clearTimeout(t2);
-      if (!postRes.ok) throw new Error(`POST inicial falhou: HTTP ${postRes.status}`);
-      const postText = await postRes.text();
-      const postDoc = parser.parseFromString(postText, 'text/html');
-
-      // 4) Form de confirmação → POST FINAL (auto-confirm if present)
-      let confirmForm = postDoc.querySelector('form[action*="try=confirm"]') || postDoc.querySelector('#command-data-form') || postDoc.forms[0];
-      if (confirmForm) {
-        const confirmPayload = {};
-        confirmForm.querySelectorAll('input, select, textarea').forEach(inp => {
-          const name = inp.name;
-          if (!name) return;
-          if (inp.type === 'checkbox' || inp.type === 'radio') {
-            if (inp.checked) confirmPayload[name] = inp.value || 'on';
-          } else {
-            confirmPayload[name] = inp.value || '';
+    updateFromModal() {
+      try {
+        const config = {
+          enabled: document.getElementById('telegram-enabled')?.checked || false,
+          botToken: document.getElementById('telegram-token')?.value.trim() || '',
+          chatId: document.getElementById('telegram-chatid')?.value.trim() || '',
+          notifications: {
+            success: document.getElementById('telegram-notif-success')?.checked !== false,
+            failure: document.getElementById('telegram-notif-failure')?.checked !== false,
+            farmCycle: document.getElementById('telegram-notif-farm')?.checked || false,
+            error: document.getElementById('telegram-notif-error')?.checked !== false
           }
-        });
+        };
 
-        const btn = confirmForm.querySelector('#troop_confirm_submit, button[type="submit"], input[type="submit"]');
-        if (btn) {
-          const n = btn.name;
-          const v = btn.value || '';
-          if (n) confirmPayload[n] = v;
-        }
-
-        if (Object.keys(confirmPayload).length < 5) throw new Error('Confirm payload incompleto.');
-
-        const confirmEncoded = Object.entries(confirmPayload).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-        let confirmUrl = confirmForm.getAttribute('action') || postRes.url || placeUrl;
-        if (confirmUrl.startsWith('/')) confirmUrl = `${location.protocol}//${location.host}${confirmUrl}`;
-
-        setStatus('⏳ Confirmando ataque (auto-fetch)...');
-        const { controller: c3, timeout: t3 } = safeTimeout(ATTACK_TIMEOUT);
-        const confirmRes = await safeFetch(confirmUrl, {
-          method: 'POST',
-          credentials: 'same-origin',
-          signal: c3.signal,
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Cache-Control': 'no-cache'
-          },
-          body: confirmEncoded
-        }, 1);
-        clearTimeout(t3);
-        if (!confirmRes.ok) throw new Error(`POST confirmação falhou: HTTP ${confirmRes.status}`);
-        const finalText = await confirmRes.text();
-        if (isAttackConfirmed(finalText)) {
-          setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
-          return true;
-        } else {
-          setStatus(`⚠️ Confirmação concluída, mas sem padrão claro.`);
-          return false;
-        }
-      }
-
-      // Se não houve form de confirmação
-      if (isAttackConfirmed(postText)) {
-        setStatus(`✅ Ataque enviado: ${cfg.origem} → ${cfg.alvo}`);
+        const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
+        saved.telegram = config;
+        localStorage.setItem('tws_global_config_v2', JSON.stringify(saved));
         return true;
-      } else {
-        setStatus('⚠️ Resposta não indicou confirmação; verificar manualmente.');
+      } catch (e) {
+        console.error('[Telegram] Erro ao atualizar:', e);
         return false;
       }
+    },
 
-    } catch (err) {
-      console.error('[TWScheduler] Erro executeAttack:', err);
-      setStatus(`❌ Erro: ${err.message}`);
-      throw err;
-    }
-  }
-
-  // === Storage helpers
-  function getList() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch (e) {
-      console.error('[TWS_Backend] Erro ao ler lista:', e);
-      return [];
-    }
-  }
-  function setList(list) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      if (window.renderTable) window.renderTable();
-    } catch (e) {
-      console.error('[TWS_Backend] Erro ao salvar lista:', e);
-    }
-  }
-
-  // === importarDeBBCode (regex 1-4 dígitos)
-  function importarDeBBCode(bbcode) {
-    const linhas = bbcode.split('[*]').filter(l => l.trim() !== '');
-    const agendamentos = [];
-    for (const linha of linhas) {
-      const coords = linha.match(/(\d{1,4}\|\d{1,4})/g) || [];
-      const origem = coords[0] || '';
-      const destino = coords[1] || '';
-      const dataHora = linha.match(/(\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}(?::\d{2})?)/)?.[1] || '';
-      const url = linha.match(/\[url=(.*?)\]/)?.[1] || '';
-      const params = {};
-      if (url) {
-        const query = url.split('?')[1];
-        if (query) {
-          query.split('&').forEach(p => {
-            const [k, v] = p.split('=');
-            params[k] = decodeURIComponent(v || '');
-          });
-        }
-      }
-      const origemId = params.village || _villageMap[origem];
-      const uniqueId = generateUniqueId();
-      const cfg = {
-        _id: uniqueId,
-        origem,
-        origemId,
-        alvo: destino,
-        datetime: dataHora,
-        done: false,
-        locked: false,
-        status: 'scheduled',
-        statusText: 'Agendado'
-      };
-      TROOP_LIST.forEach(u => { cfg[u] = Number(params['att_' + u] || 0); });
-      if (origem && destino && dataHora) agendamentos.push(cfg);
-    }
-    console.log(`[TWS_Backend] Importados ${agendamentos.length} agendamentos do BBCode`);
-    return agendamentos;
-  }
-
-  // === Scheduler ====//
-
-
-  // === SCHEDULER MELHORADO - Versão 2.0 ===
-
-// ═════════════════════════════════════════════════════════
-// ✅ #1 LIMPEZA DE MEMÓRIA (Novo)
-// ═════════════════════════════════════════════════════════
-
-const _processedAttacksWithTTL = new Map(); // timestamp → fingerprint
-const PROCESSED_ATTACKS_TTL = 86400000; // 24 horas em ms
-
-function cleanupProcessedAttacks() {
-  const now = Date.now();
-  let cleaned = 0;
-  
-  for (const [timestamp, fingerprint] of _processedAttacksWithTTL.entries()) {
-    if (now - timestamp > PROCESSED_ATTACKS_TTL) {
-      _processedAttacksWithTTL.delete(timestamp);
-      cleaned++;
-    }
-  }
-  
-  if (cleaned > 0) {
-    console.log(`[Scheduler] Limpeza: ${cleaned} fingerprints antigos removidos (${_processedAttacksWithTTL.size} restantes)`);
-  }
-}
-
-function isAttackProcessed(fingerprint) {
-  return _processedAttacksWithTTL.has(fingerprint);
-}
-
-function markAttackProcessed(fingerprint) {
-  _processedAttacksWithTTL.set(Date.now(), fingerprint);
-}
-
-// ═════════════════════════════════════════════════════════
-// ✅ #2 MONITORAMENTO DE PERFORMANCE (Novo)
-// ═════════════════════════════════════════════════════════
-
-const SchedulerMetrics = {
-  cycleStart: null,
-  cycleEnd: null,
-  executionsThisCycle: 0,
-  successCount: 0,
-  failureCount: 0,
-  lastCycleDuration: 0,
-
-  start() {
-    this.cycleStart = Date.now();
-    this.executionsThisCycle = 0;
-    this.successCount = 0;
-    this.failureCount = 0;
-  },
-
-  recordExecution(success) {
-    this.executionsThisCycle++;
-    if (success) this.successCount++;
-    else this.failureCount++;
-  },
-
-  end() {
-    this.cycleEnd = Date.now();
-    this.lastCycleDuration = this.cycleEnd - this.cycleStart;
-    
-    if (this.executionsThisCycle > 0) {
-      const taxa = ((this.successCount / this.executionsThisCycle) * 100).toFixed(1);
-      console.log(
-        `[Scheduler] Ciclo concluído: ` +
-        `${this.executionsThisCycle} exec | ` +
-        `${this.successCount}✅ ${this.failureCount}❌ | ` +
-        `${taxa}% taxa de sucesso | ` +
-        `${this.lastCycleDuration}ms`
-      );
-    }
-  },
-
-  getStats() {
-    return {
-      lastCycleDuration: this.lastCycleDuration,
-      successCount: this.successCount,
-      failureCount: this.failureCount,
-      successRate: this.executionsThisCycle > 0 
-        ? ((this.successCount / this.executionsThisCycle) * 100).toFixed(1) 
-        : 0
-    };
-  }
-};
-
-// ═════════════════════════════════════════════════════════
-// ✅ #3 SCHEDULER MELHORADO (Principal)
-// ═════════════════════════════════════════════════════════
-
-// ═════════════════════════════════════════════════════════
-// ✅ FUNÇÃO COMPLETA: startScheduler() com Intervalo Configurável
-// ═════════════════════════════════════════════════════════
-
-// ┌─────────────────────────────────────────────────────────┐
-// │ ADICIONE ESTA FUNÇÃO AUXILIAR ANTES DO startScheduler() │
-// └─────────────────────────────────────────────────────────┘
-
-function getGlobalConfig() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('tws_global_config_v2') || '{}');
-    return {
-      behavior: {
-        schedulerCheckInterval: 1000, // padrão: 1 segundo
-        retryOnFail: true,
-        maxRetries: 3,
-        ...saved.behavior
-      }
-    };
-  } catch (e) {
-    console.error('[Backend] Erro ao ler config global:', e);
-    return { behavior: { schedulerCheckInterval: 1000, retryOnFail: true, maxRetries: 3 } };
-  }
-}
-
-// ┌─────────────────────────────────────────────────────────┐
-// │ FUNÇÃO PRINCIPAL: startScheduler()                      │
-// │ SUBSTITUA A FUNÇÃO COMPLETA NO SEU BACKEND              │
-// └─────────────────────────────────────────────────────────┘
-
-function startScheduler() {
-  if (_schedulerInterval) clearInterval(_schedulerInterval);
-  
-  // ✅ LER INTERVALO DA CONFIGURAÇÃO
-  const config = getGlobalConfig();
-  const checkIntervalMs = config.behavior.schedulerCheckInterval || 1000;
-  
-  console.log(`[Scheduler] ✅ Iniciando com intervalo de ${checkIntervalMs}ms`);
-  
-  // Cleanup a cada 6 horas (ajustado pelo intervalo)
-  const cleanupThreshold = Math.floor(21600000 / checkIntervalMs); // 6 horas em ciclos
-  let cleanupCounter = 0;
-  
-  _schedulerInterval = setInterval(async () => {
-    SchedulerMetrics.start();
-    
-    const list = getList();
-    const now = Date.now();
-    const ataquesPorHorario = {};
-    let needsSave = false;
-
-    // ┌─ FASE 1: AGRUPAMENTO ─┐
-    // Detectar ataques que devem ser executados AGORA
-    
-    for (const a of list) {
-      // Skip se já está travado ou concluído
-      if (a.locked || a.done) {
-        continue;
-      }
-
-      // Parse datetime
-      const t = parseDateTimeToMs(a.datetime);
-      if (!t || isNaN(t)) {
-        console.warn(`[Scheduler] Datetime inválido: ${a.datetime}`);
-        continue;
-      }
-
-      const diff = t - now;
-
-      // Janela de execução: até 10s após o horário agendado
-      if (diff <= 0 && diff > -10000) {
-        // Agrupar por horário para execução simultânea
-        if (!ataquesPorHorario[a.datetime]) {
-          ataquesPorHorario[a.datetime] = [];
-        }
-        ataquesPorHorario[a.datetime].push(a);
-      }
-    }
-
-    // ┌─ FASE 2: MARCAÇÃO ─┐
-    // Marcar ataques como "em execução"
-    
-    const ataquesPendentes = Object.values(ataquesPorHorario).flat();
-    
-    if (ataquesPendentes.length > 0) {
-      ataquesPendentes.forEach(a => {
-        // ✅ Proteção: skip se já está rodando
-        if (_executing.has(a._id)) {
-          console.warn(`[Scheduler] Ataque já em execução: ${a._id}`);
-          return;
-        }
-
-        a.locked = true;
-        a.status = 'executing';
-        a.statusText = 'Enviando...';
-        a.executedAt = new Date().toISOString();
-        _executing.add(a._id);
-        needsSave = true;
-      });
-
-      // Salvar estado de MARCAÇÃO
-      if (needsSave) {
-        setList(list);
-      }
-    }
-
-    // ┌─ FASE 3: EXECUÇÃO SIMULTÂNEA ─┐
-    // Executar TODOS os ataques do mesmo horário simultaneamente
-
-    for (const [horario, ataques] of Object.entries(ataquesPorHorario)) {
-      if (ataques.length > 0) {
-        console.log(`[Scheduler] Executando ${ataques.length} ataques simultâneos para ${horario}`);
+    populateModal() {
+      try {
+        const config = this.getConfig();
         
-        // Preparar todas as promessas de execução
-        const executionPromises = ataques.map(a => {
-          return (async () => {
-            // ✅ Double-check: skip se já foi finalizado
-            if (a.done) {
-              return { attack: a, success: false, skipped: true };
+        const setValue = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) {
+            if (el.type === 'checkbox') {
+              el.checked = value;
+            } else {
+              el.value = value;
             }
+          }
+        };
 
-            // ✅ Calcular fingerprint para evitar reprocessamento
-            const fingerprint = getAttackFingerprint(a);
-            
-            try {
-              // Executar o ataque
-              const success = await executeAttack(a);
+        setValue('telegram-enabled', config.enabled);
+        setValue('telegram-token', config.botToken);
+        setValue('telegram-chatid', config.chatId);
+        setValue('telegram-notif-success', config.notifications?.success);
+        setValue('telegram-notif-failure', config.notifications?.failure);
+        setValue('telegram-notif-farm', config.notifications?.farmCycle);
+        setValue('telegram-notif-error', config.notifications?.error);
 
-              // ✅ TELEGRAM NOTIFICATIONS
-              if (success) {
-                await sendTelegramNotification('attack_success', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  units: TROOP_LIST.map(u => a[u] > 0 ? `${a[u]} ${u}` : null).filter(Boolean).join(', ') || 'Nenhuma tropa especificada',
-                  travelTime: 'Calculando...'
-                });
-              } else {
-                await sendTelegramNotification('attack_failure', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  reason: a.statusText || 'Falha na execução do comando',
-                  suggestion: 'Verifique se as tropas estão disponíveis'
-                });
-              }
+        this.updateUIState();
+      } catch (e) {
+        console.error('[Telegram] Erro ao preencher modal:', e);
+      }
+    },
 
-              // Registrar resultado
-              a.done = true;
-              a.success = success;
-              
-              if (success) {
-                markAttackProcessed(fingerprint);
-                a.status = 'sent';
-                a.statusText = '✅ Enviado';
-                SchedulerMetrics.recordExecution(true);
-              } else {
-                a.status = 'failed';
-                a.statusText = '❌ Falhou (verificar manualmente)';
-                SchedulerMetrics.recordExecution(false);
-              }
+    updateUIState() {
+      const config = this.getConfig();
+      const inputs = ['telegram-token', 'telegram-chatid'];
+      const checkboxes = ['telegram-notif-success', 'telegram-notif-failure', 'telegram-notif-farm', 'telegram-notif-error'];
+      
+      inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !config.enabled;
+      });
+      
+      checkboxes.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !config.enabled;
+      });
+    },
 
-              return { attack: a, success: success, error: null };
+    validateConfig() {
+      const config = this.getConfig();
+      
+      if (!config.enabled) {
+        return { valid: false, error: '❌ Telegram desativado' };
+      }
+      
+      if (!config.botToken || config.botToken.trim() === '') {
+        return { valid: false, error: '❌ Token do bot não configurado' };
+      }
+      
+      if (!config.chatId || config.chatId.trim() === '') {
+        return { valid: false, error: '❌ Chat ID não configurado' };
+      }
+      
+      if (!config.botToken.includes(':')) {
+        return { valid: false, error: '❌ Formato de token inválido' };
+      }
+      
+      return { valid: true };
+    },
 
-            } catch (err) {
-              // Erro na execução
-              a.done = true;
-              a.success = false;
-              a.error = err.message;
-              a.status = 'failed';
-              a.statusText = `❌ Falha: ${err.message}`;
-              SchedulerMetrics.recordExecution(false);
+    async makeRequest(method, params = {}) {
+      const config = this.getConfig();
+      
+      if (!config.enabled) {
+        return { success: false, error: 'Telegram desativado' };
+      }
 
-              // ✅ NOTIFICAÇÃO DE ERRO
-              await sendTelegramNotification('system_error', {
-                module: 'Scheduler',
-                error: err.message,
-                details: `Ataque: ${a.origem} → ${a.alvo}`,
-                action: 'Verificar console para detalhes'
-              });
+      const url = `${this.baseUrl}${config.botToken}/${method}`;
 
-              console.error(
-                `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
-                err.message
-              );
+      const payload = {
+        ...params,
+        chat_id: config.chatId
+      };
 
-              return { attack: a, success: false, error: err.message };
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-            } finally {
-              // ✅ Sempre desbloquear
-              a.locked = false;
-              _executing.delete(a._id);
-            }
-          })();
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
 
-        // ⚡ EXECUTAR TODOS SIMULTANEAMENTE
-        const results = await Promise.allSettled(executionPromises);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.ok) {
+          throw new Error(data.description || 'Erro desconhecido da API');
+        }
+
+        return { success: true, data: data.result };
+      } catch (error) {
+        console.error('[Telegram] Erro na requisição:', error);
+        return { 
+          success: false, 
+          error: this.getErrorMessage(error)
+        };
+      }
+    },
+
+    getErrorMessage(error) {
+      const message = error.message || 'Erro desconhecido';
+      
+      if (message.includes('400')) return '❌ Requisição inválida - verifique o Chat ID';
+      if (message.includes('401')) return '❌ Token inválido ou expirado';
+      if (message.includes('403')) return '❌ Bot bloqueado pelo usuário';
+      if (message.includes('404')) return '❌ Chat não encontrado';
+      if (message.includes('429')) return '❌ Muitas requisições - aguarde um pouco';
+      if (message.includes('500')) return '❌ Erro interno do servidor do Telegram';
+      if (message.includes('network') || message.includes('Failed to fetch')) return '❌ Erro de conexão - verifique sua internet';
+      if (message.includes('abort')) return '❌ Tempo esgotado - servidor não respondeu';
+      
+      return `❌ ${message}`;
+    },
+
+    async testConnection() {
+      const validation = this.validateConfig();
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
+      const result = await this.makeRequest('getMe');
+      
+      if (result.success) {
+        const botInfo = result.data;
+        return {
+          success: true,
+          message: '✅ Conexão bem-sucedida!',
+          details: `🤖 Bot: @${botInfo.username}\n🆔 ID: ${botInfo.id}\n📝 Nome: ${botInfo.first_name}`
+        };
+      } else {
+        return { success: false, error: result.error };
+      }
+    },
+
+    async sendTestMessage() {
+      const validation = this.validateConfig();
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
+      const timestamp = new Date().toLocaleString('pt-BR');
+      const message = `🧪 <b>Mensagem de Teste</b>\n\n⏰ <b>${timestamp}</b>\n\n🤖 <b>Bot:</b> TW Scheduler\n✅ <b>Status:</b> Sistema operacional\n📡 <b>Conexão:</b> Estável\n⏰ <b>Horário:</b> ${timestamp}`;
+
+      const result = await this.makeRequest('sendMessage', {
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      });
+
+      if (result.success) {
+        this.addToHistory(message, 'sent');
+      } else {
+        this.addToHistory(message, 'failed');
+      }
+
+      return result;
+    },
+
+    addToHistory(message, status) {
+      try {
+        const history = this.getHistory();
+        history.unshift({
+          message: message.substring(0, 200),
+          status,
+          timestamp: new Date().toISOString(),
+          type: 'outgoing'
+        });
+
+        // Manter apenas os últimos 50 registros
+        if (history.length > 50) {
+          history.splice(50);
+        }
+
+        localStorage.setItem('tws_telegram_history', JSON.stringify(history));
+      } catch (e) {
+        console.error('[Telegram] Erro ao salvar histórico:', e);
+      }
+    },
+
+    getHistory() {
+      try {
+        return JSON.parse(localStorage.getItem('tws_telegram_history') || '[]');
+      } catch (e) {
+        return [];
+      }
+    },
+
+    getStats() {
+      const history = this.getHistory();
+      const sent = history.filter(msg => msg.status === 'sent').length;
+      const failed = history.filter(msg => msg.status === 'failed').length;
+      
+      return {
+        total: history.length,
+        sent,
+        failed,
+        successRate: history.length > 0 ? Math.round((sent / history.length) * 100) : 0
+      };
+    },
+
+    clearHistory() {
+      try {
+        localStorage.removeItem('tws_telegram_history');
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+  };
+
+  // === GERENCIAMENTO DE CONFIGURAÇÕES ===
+  function getConfig() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || '{}');
+      return { ...defaultConfig, ...saved };
+    } catch (e) {
+      console.error('[Config] Erro ao carregar configurações:', e);
+      return defaultConfig;
+    }
+  }
+
+  function saveConfig(newConfig) {
+    try {
+      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
+      applyConfig(newConfig);
+      return true;
+    } catch (e) {
+      console.error('[Config] Erro ao salvar configurações:', e);
+      return false;
+    }
+  }
+
+  function applyConfig(config) {
+    // Aplicar tema
+    applyTheme(config.theme);
+    
+    // Aplicar velocidades das tropas globalmente
+    if (window.TWS_Backend && config.velocidadesUnidades) {
+      window.TWS_Backend._internal.velocidadesUnidades = config.velocidadesUnidades;
+    }
+    
+    console.log('[Config] Configurações aplicadas');
+  }
+
+  function applyTheme(theme) {
+    const isDark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-tws-theme', isDark ? 'dark' : 'light');
+  }
+
+  // === FUNÇÕES AUXILIARES ===
+  function getUnitDisplayName(unit) {
+    const names = {
+      spear: 'Lanceiro',
+      sword: 'Espadachim',
+      axe: 'Bárbaro',
+      archer: 'Arqueiro',
+      spy: 'Espião',
+      light: 'Cav. Leve',
+      marcher: 'Arqueiro Cav.',
+      heavy: 'Cav. Pesado',
+      ram: 'Ariete',
+      catapult: 'Catapulta',
+      knight: 'Paladino',
+      snob: 'Nobre'
+    };
+    return names[unit] || unit;
+  }
+
+  function calcularDistancia(coord1, coord2) {
+    const [x1, y1] = coord1.split('|').map(Number);
+    const [x2, y2] = coord2.split('|').map(Number);
+    const deltaX = Math.abs(x1 - x2);
+    const deltaY = Math.abs(y1 - y2);
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  }
+
+  // === FUNÇÕES AUXILIARES PARA SCHEDULER CHECK INTERVAL ===
+  function calculatePrecision(interval) {
+    return Math.ceil(interval / 2);
+  }
+
+  function getPrecisionColor(interval) {
+    if (interval <= 100) return '#C6F6D5'; // Verde - alta precisão
+    if (interval <= 500) return '#E6FFFA'; // Verde água - boa precisão  
+    if (interval <= 1000) return '#EBF8FF'; // Azul - balanceado
+    if (interval <= 2000) return '#FEFCBF'; // Amarelo - econômico
+    return '#FED7D7'; // Vermelho - baixa precisão
+  }
+
+  function updateIntervalPrecision() {
+    const select = document.getElementById('scheduler-check-interval');
+    const customInput = document.getElementById('scheduler-check-interval-custom');
+    const precisionEl = document.getElementById('interval-precision');
+    
+    if (!select || !precisionEl) return;
+    
+    let intervalValue;
+    
+    if (select.value === 'custom') {
+      intervalValue = parseInt(customInput.value) || 1000;
+    } else {
+      intervalValue = parseInt(select.value) || 1000;
+    }
+    
+    const precision = calculatePrecision(intervalValue);
+    precisionEl.innerHTML = `🎯 Precisão atual: ±${precision}ms`;
+    precisionEl.style.background = getPrecisionColor(intervalValue);
+  }
+
+  function setupIntervalControls() {
+    const select = document.getElementById('scheduler-check-interval');
+    const customInput = document.getElementById('scheduler-check-interval-custom');
+    
+    if (!select || !customInput) return;
+    
+    // Mostrar/ocultar campo personalizado
+    select.addEventListener('change', function() {
+      if (this.value === 'custom') {
+        customInput.style.display = 'block';
+        customInput.focus();
+      } else {
+        customInput.style.display = 'none';
+      }
+      updateIntervalPrecision();
+    });
+    
+    // Atualizar precisão quando campo personalizado mudar
+    customInput.addEventListener('input', updateIntervalPrecision);
+    
+    // Inicializar
+    updateIntervalPrecision();
+  }
+
+  function migrateOldConfig() {
+    try {
+      const config = getConfig();
+      
+      // Migrar delayBetweenAttacks para schedulerCheckInterval se necessário
+      if (config.behavior.delayBetweenAttacks && !config.behavior.schedulerCheckInterval) {
+        console.log('[Config] Migrando delayBetweenAttacks para schedulerCheckInterval');
+        config.behavior.schedulerCheckInterval = config.behavior.delayBetweenAttacks;
+        delete config.behavior.delayBetweenAttacks;
+        saveConfig(config);
+      }
+      
+      return config;
+    } catch (e) {
+      console.error('[Config] Erro na migração:', e);
+      return getConfig();
+    }
+  }
+
+  // === MODAL DE CONFIGURAÇÕES ===
+  function showConfigModal() {
+    const existing = document.getElementById('tws-config-modal');
+    if (existing) existing.remove();
+
+    const config = getConfig();
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'tws-config-modal';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.2s ease;
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: 3px solid #4A5568;
+      border-radius: 12px;
+      padding: 0;
+      width: 95%;
+      max-width: 1000px;
+      height: 85vh;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      animation: slideIn 0.3s ease;
+    `;
+
+    modal.innerHTML = `
+      <style>
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { transform: translateY(-50px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
         
-        // Salvar todos os resultados de uma vez
-        setList(list);
+        .tws-config-tabs {
+          display: flex;
+          background: #4A5568;
+          padding: 0;
+          flex-shrink: 0;
+          border-bottom: 2px solid #667eea;
+        }
+        .tws-config-tab {
+          padding: 15px 20px;
+          color: white;
+          cursor: pointer;
+          border: none;
+          background: none;
+          font-weight: bold;
+          transition: all 0.3s;
+          border-bottom: 3px solid transparent;
+        }
+        .tws-config-tab:hover {
+          background: #5a6578;
+        }
+        .tws-config-tab.active {
+          background: #667eea;
+          border-bottom-color: #48BB78;
+        }
+        .tws-config-content-wrapper {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .tws-config-tab-content {
+          display: none;
+          padding: 20px;
+          background: #F7FAFC;
+          overflow-y: auto;
+          flex: 1;
+          color: #2D3748;
+        }
+        .tws-config-tab-content.active {
+          display: block;
+        }
+        .tws-config-section {
+          background: white;
+          border-radius: 8px;
+          padding: 20px;
+          margin: 10px 0;
+          border-left: 4px solid #667eea;
+          color: #2D3748;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tws-config-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
+          margin-top: 15px;
+        }
+        .tws-config-item {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          padding: 10px;
+          background: #F7FAFC;
+          border-radius: 6px;
+          border: 1px solid #E2E8F0;
+          transition: all 0.2s;
+        }
+        .tws-config-item:hover {
+          border-color: #667eea;
+          transform: translateY(-1px);
+        }
+        .tws-config-label {
+          font-weight: bold;
+          font-size: 13px;
+          color: #4A5568;
+          text-transform: capitalize;
+        }
+        .tws-config-input-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .tws-config-input {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid #CBD5E0;
+          border-radius: 4px;
+          text-align: center;
+          font-size: 14px;
+          background: white;
+          color: #2D3748;
+          transition: border-color 0.3s;
+        }
+        .tws-config-input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .tws-config-unit {
+          font-size: 11px;
+          color: #718096;
+          white-space: nowrap;
+        }
+        .tws-config-btn {
+          padding: 10px 16px;
+          border: none;
+          border-radius: 6px;
+          color: white;
+          font-weight: bold;
+          cursor: pointer;
+          margin: 5px;
+          transition: all 0.3s;
+          font-size: 14px;
+        }
+        .tws-config-btn:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .tws-config-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none !important;
+        }
+        .btn-primary { background: #667eea; }
+        .btn-success { background: #48BB78; }
+        .btn-warning { background: #ED8936; }
+        .btn-danger { background: #F56565; }
+        .btn-secondary { background: #718096; }
         
-        // Log de resultados
-        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-        console.log(`[Scheduler] Lote ${horario}: ${successful}/${ataques.length} bem-sucedidos`);
+        .tws-form-group {
+          margin-bottom: 15px;
+        }
+        .tws-form-label {
+          display: block;
+          font-weight: bold;
+          margin-bottom: 8px;
+          color: #2D3748;
+          font-size: 14px;
+        }
+        .tws-form-input {
+          width: 50%;
+          padding: 10px;
+          border: 1px solid #CBD5E0;
+          border-radius: 6px;
+          font-size: 14px;
+          transition: border-color 0.3s;
+          background: white;
+          color: #2D3748;
+        }
+        .tws-form-input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .tws-checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+          color: #2D3748;
+        }
+        .tws-checkbox-group input[type="checkbox"] {
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+        }
+        .tws-checkbox-group label {
+          font-size: 14px;
+          color: #4A5568;
+          cursor: pointer;
+        }
+
+        /* Status indicators */
+        .tws-status {
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: bold;
+          margin: 5px 0;
+          white-space: pre-wrap;
+          line-height: 1.4;
+        }
+        .tws-status-success {
+          background: #C6F6D5;
+          color: #22543D;
+          border: 1px solid #48BB78;
+        }
+        .tws-status-error {
+          background: #FED7D7;
+          color: #742A2A;
+          border: 1px solid #F56565;
+        }
+        .tws-status-warning {
+          background: #FEEBC8;
+          color: #744210;
+          border: 1px solid #ED8936;
+        }
+
+        /* Dark theme */
+        [data-tws-theme="dark"] .tws-config-tab-content {
+          background: #2D3748;
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-section {
+          background: #4A5568;
+          color: #E2E8F0 !important;
+          border-left-color: #667eea;
+        }
+        [data-tws-theme="dark"] .tws-config-item {
+          background: #2D3748;
+          border-color: #718096;
+        }
+        [data-tws-theme="dark"] .tws-config-input {
+          background: #1A202C;
+          border-color: #718096;
+          color: #E2E8F0;
+        }
+        [data-tws-theme="dark"] .tws-config-input:focus {
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        [data-tws-theme="dark"] .tws-config-label {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-config-unit {
+          color: #CBD5E0;
+        }
+        [data-tws-theme="dark"] .tws-form-label {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-form-input {
+          background: #1A202C;
+          border-color: #718096;
+          color: #E2E8F0;
+        }
+        [data-tws-theme="dark"] .tws-form-input:focus {
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        [data-tws-theme="dark"] .tws-checkbox-group {
+          color: #E2E8F0 !important;
+        }
+        [data-tws-theme="dark"] .tws-checkbox-group label {
+          color: #E2E8F0 !important;
+        }
+      </style>
+
+      <!-- Cabeçalho -->
+      <div style="background: #4A5568; padding: 20px; text-align: center; border-bottom: 3px solid #667eea; flex-shrink: 0;">
+        <div style="font-size: 24px; font-weight: bold; color: white;">⚙️ CONFIGURAÇÕES GLOBAIS</div>
+        <div style="color: #E2E8F0; font-size: 14px; margin-top: 5px;">
+          Ajuste velocidades, Telegram, aparência e comportamento do sistema
+        </div>
+      </div>
+
+      <!-- Abas -->
+      <div class="tws-config-tabs">
+        <button class="tws-config-tab active" onclick="switchConfigTab('unidades')">🎯 Unidades</button>
+        <button class="tws-config-tab" onclick="switchConfigTab('telegram')">🤖 Telegram</button>
+        <button class="tws-config-tab" onclick="switchConfigTab('aparencia')">🎨 Aparência</button>
+        <button class="tws-config-tab" onclick="switchConfigTab('comportamento')">⚡ Comportamento</button>
+        <button class="tws-config-tab" onclick="switchConfigTab('backup')">💾 Backup</button>
+      </div>
+
+      <!-- Conteúdo das Abas -->
+      <div class="tws-config-content-wrapper">
+        <!-- ABA: UNIDADES -->
+        <div id="tab-unidades" class="tws-config-tab-content active">
+          <div class="tws-config-section">
+            <h3 style="margin-top: 0; color: #2D3748;">🎯 Velocidades das Unidades</h3>
+            <p style="color: #718096; font-size: 13px; margin-bottom: 15px;">
+              Ajuste as velocidades conforme as configurações do seu mundo. Valores em minutos por campo.
+            </p>
+            
+            <div class="tws-config-grid" id="unit-speed-config">
+              ${Object.entries(config.velocidadesUnidades).map(([unit, speed]) => `
+                <div class="tws-config-item">
+                  <div class="tws-config-label">${getUnitDisplayName(unit)}</div>
+                  <div class="tws-config-input-wrapper">
+                    <input type="number" class="tws-config-input" data-unit="${unit}" 
+                           value="${speed}" min="1" max="100" step="0.1" />
+                    <span class="tws-config-unit">min/campo</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="tws-config-btn btn-secondary" onclick="resetUnitSpeeds()">
+                🔄 Resetar Velocidades
+              </button>
+              <button class="tws-config-btn btn-success" onclick="testUnitSpeed()">
+                🧪 Testar Cálculo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABA: TELEGRAM -->
+        <div id="tab-telegram" class="tws-config-tab-content">
+          <div class="tws-config-section">
+            <h3 style="margin-top: 0; color: #2D3748;">🤖 Configurações do Telegram</h3>
+            
+            <div class="tws-form-group">
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="telegram-enabled" ${config.telegram.enabled ? 'checked' : ''}>
+                <label for="telegram-enabled">Ativar notificações do Telegram</label>
+              </div>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="telegram-token">Bot Token:</label>
+              <input type="password" class="tws-form-input" 
+                     id="telegram-token" value="${config.telegram.botToken}" placeholder="123456789:ABCdefGHIjkl..." />
+              <small style="color: #718096; font-size: 12px;">
+                Obtenha com @BotFather no Telegram
+              </small>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="telegram-chatid">Chat ID:</label>
+              <input type="text" class="tws-form-input" 
+                     id="telegram-chatid" value="${config.telegram.chatId}" placeholder="-100123456789" />
+              <small style="color: #718096; font-size: 12px;">
+                Use @userinfobot para obter seu Chat ID
+              </small>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label">Notificações:</label>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="tws-checkbox-group">
+                  <input type="checkbox" id="telegram-notif-success" ${config.telegram.notifications.success ? 'checked' : ''}>
+                  <label for="telegram-notif-success">✅ Ataques bem-sucedidos</label>
+                </div>
+                <div class="tws-checkbox-group">
+                  <input type="checkbox" id="telegram-notif-failure" ${config.telegram.notifications.failure ? 'checked' : ''}>
+                  <label for="telegram-notif-failure">❌ Ataques falhos</label>
+                </div>
+                <div class="tws-checkbox-group">
+                  <input type="checkbox" id="telegram-notif-farm" ${config.telegram.notifications.farmCycle ? 'checked' : ''}>
+                  <label for="telegram-notif-farm">🔄 Ciclos de Farm</label>
+                </div>
+                <div class="tws-checkbox-group">
+                  <input type="checkbox" id="telegram-notif-error" ${config.telegram.notifications.error ? 'checked' : ''}>
+                  <label for="telegram-notif-error">🚨 Erros do sistema</label>
+                </div>
+              </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+              <button class="tws-config-btn btn-primary" onclick="testTelegram()">
+                🧪 Testar Conexão
+              </button>
+              
+              <button class="tws-config-btn btn-success" onclick="sendTestMessage()">
+                📤 Enviar Teste
+              </button>
+            </div>
+
+            <!-- Status do Telegram -->
+            <div id="telegram-status" style="margin-top: 15px;"></div>
+
+            <!-- Estatísticas -->
+            <div id="telegram-stats" style="margin-top: 15px; font-size: 12px; color: #718096;"></div>
+          </div>
+        </div>
+
+        <!-- ABA: APARÊNCIA -->
+        <div id="tab-aparencia" class="tws-config-tab-content">
+          <div class="tws-config-section">
+            <h3 style="margin-top: 0; color: #2D3748;">🎨 Aparência e Tema</h3>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="theme-select">Tema:</label>
+              <select class="tws-form-input" id="theme-select">
+                <option value="light" ${config.theme === 'light' ? 'selected' : ''}>🌞 Claro</option>
+                <option value="dark" ${config.theme === 'dark' ? 'selected' : ''}>🌙 Escuro</option>
+                <option value="auto" ${config.theme === 'auto' ? 'selected' : ''}>⚡ Automático (Sistema)</option>
+              </select>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label">Notificações:</label>
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="show-notifications" ${config.behavior.showNotifications ? 'checked' : ''}>
+                <label for="show-notifications">Mostrar notificações na tela</label>
+              </div>
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="sound-on-complete" ${config.behavior.soundOnComplete ? 'checked' : ''}>
+                <label for="sound-on-complete">Som quando ataques são concluídos</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABA: COMPORTAMENTO -->
+        <div id="tab-comportamento" class="tws-config-tab-content">
+          <div class="tws-config-section">
+            <h3 style="margin-top: 0; color: #2D3748;">⚡ Comportamento do Sistema</h3>
+            
+            <div class="tws-form-group">
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="auto-start-scheduler" ${config.behavior.autoStartScheduler ? 'checked' : ''}>
+                <label for="auto-start-scheduler">Iniciar scheduler automaticamente</label>
+              </div>
+              
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="retry-on-fail" ${config.behavior.retryOnFail ? 'checked' : ''}>
+                <label for="retry-on-fail">Tentar novamente em caso de falha</label>
+              </div>
+
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="confirm-deletion" ${config.behavior.confirmDeletion ? 'checked' : ''}>
+                <label for="confirm-deletion">Confirmar antes de excluir</label>
+              </div>
+
+              <div class="tws-checkbox-group">
+                <input type="checkbox" id="ask-before-send" ${config.behavior.askBeforeSend ? 'checked' : ''}>
+                <label for="ask-before-send">Perguntar antes de enviar ataques</label>
+              </div>
+            </div>
+            
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="max-retries">Máximo de tentativas:</label>
+              <input type="number" class="tws-form-input" 
+                     id="max-retries" value="${config.behavior.maxRetries}" min="1" max="10" style="width: 120px;" />
+            </div>
+            
+            <!-- ✅ NOVO: schedulerCheckInterval substituindo delayBetweenAttacks -->
+            <div class="tws-form-group">
+              <label class="tws-form-label" for="scheduler-check-interval">Intervalo do Scheduler (ms):</label>
+              <select class="tws-form-input" id="scheduler-check-interval" style="width: 200px;">
+                <option value="50" ${config.behavior.schedulerCheckInterval === 50 ? 'selected' : ''}>⚡ 50ms - Máxima Precisão</option>
+                <option value="100" ${config.behavior.schedulerCheckInterval === 100 ? 'selected' : ''}>⚡ 100ms - Alta Precisão</option>
+                <option value="250" ${config.behavior.schedulerCheckInterval === 250 ? 'selected' : ''}>⭐ 250ms - Rápido</option>
+                <option value="500" ${config.behavior.schedulerCheckInterval === 500 ? 'selected' : ''}>⭐ 500ms - Balanceado</option>
+                <option value="1000" ${config.behavior.schedulerCheckInterval === 1000 || !config.behavior.schedulerCheckInterval ? 'selected' : ''}>⭐ 1000ms - Padrão (Recomendado)</option>
+                <option value="2000" ${config.behavior.schedulerCheckInterval === 2000 ? 'selected' : ''}>🔋 2000ms - Econômico</option>
+                <option value="5000" ${config.behavior.schedulerCheckInterval === 5000 ? 'selected' : ''}>🔋 5000ms - Muito Econômico</option>
+                <option value="custom">🎛️ Personalizado</option>
+              </select>
+              
+              <!-- Campo personalizado (inicialmente oculto) -->
+              <input type="number" class="tws-form-input" id="scheduler-check-interval-custom" 
+                     value="${config.behavior.schedulerCheckInterval}" min="50" max="30000" step="50" 
+                     style="width: 150px; display: none; margin-top: 5px;" 
+                     placeholder="Digite o valor em ms" />
+              
+              <small style="color: #718096; font-size: 12px; display: block; margin-top: 5px;">
+                ⏰ Controla a precisão de detecção dos ataques agendados<br>
+                🔄 Menor intervalo = maior precisão (±) mas mais consumo de CPU<br>
+                💡 Recomendado: 1000ms (1 segundo) para melhor balanceamento
+              </small>
+              
+              <!-- Indicador de precisão -->
+              <div id="interval-precision" style="margin-top: 8px; font-size: 12px; padding: 5px; border-radius: 4px; background: #E6FFFA; color: #234E52;">
+                🎯 Precisão atual: ±${calculatePrecision(config.behavior.schedulerCheckInterval || 1000)}ms
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABA: BACKUP -->
+        <div id="tab-backup" class="tws-config-tab-content">
+          <div class="tws-config-section">
+            <h3 style="margin-top: 0; color: #2D3748;">💾 Backup e Restauração</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+              <button class="tws-config-btn btn-success" onclick="exportConfig()">
+                📤 Exportar Configurações
+              </button>
+              
+              <button class="tws-config-btn btn-primary" onclick="importConfig()">
+                📥 Importar Configurações
+              </button>
+              
+              <button class="tws-config-btn btn-warning" onclick="backupData()">
+                💾 Backup Completo
+              </button>
+              
+              <button class="tws-config-btn btn-danger" onclick="resetConfig()">
+                🗑️ Resetar Tudo
+              </button>
+            </div>
+            
+            <div style="background: #EDF2F7; padding: 15px; border-radius: 6px;">
+              <h4 style="margin-top: 0;">📊 Estatísticas do Sistema</h4>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                <div>Agendamentos: <span id="stats-agendamentos">${window.TWS_Backend ? window.TWS_Backend.getList().length : 0}</span></div>
+                <div>Farms: <span id="stats-farms">${window.TWS_FarmInteligente ? window.TWS_FarmInteligente._getFarmList().length : 0}</span></div>
+                <div>Configurações: <span id="stats-config-size">${Math.round(JSON.stringify(config).length / 1024 * 100) / 100}</span> KB</div>
+                <div>Telegram: <span id="stats-telegram">${config.telegram.enabled ? '✅ Ativo' : '❌ Inativo'}</span></div>
+              </div>
+            </div>
+
+            <!-- Histórico do Telegram -->
+            <div style="margin-top: 20px;">
+              <h4 style="margin-bottom: 10px;">📨 Histórico do Telegram</h4>
+              <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="tws-config-btn btn-secondary" onclick="viewTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  📋 Ver Histórico
+                </button>
+                <button class="tws-config-btn btn-warning" onclick="clearTelegramHistory()" style="padding: 8px 12px; font-size: 12px;">
+                  🗑️ Limpar Histórico
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rodapé -->
+      <div style="background: #F7FAFC; padding: 15px; text-align: center; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; flex-shrink: 0;">
+        <button class="tws-config-btn btn-secondary" onclick="closeConfigModal()">
+          ❌ Cancelar
+        </button>
+        
+        <div>
+          <button class="tws-config-btn btn-warning" onclick="saveConfig()">
+            💾 Salvar
+          </button>
+          
+          <button class="tws-config-btn btn-success" onclick="saveAndCloseConfig()">
+            ✅ Salvar e Fechar
+          </button>
+        </div>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Inicializar configurações do Telegram
+    setTimeout(() => {
+      TelegramBotReal.populateModal();
+      updateTelegramStats();
+    }, 100);
+
+    // Inicializar controles do intervalo
+    setTimeout(() => {
+      setupIntervalControls();
+    }, 100);
+
+    // === FUNÇÕES GLOBAIS TEMPORÁRIAS ===
+    window.switchConfigTab = function(tabName) {
+      document.querySelectorAll('.tws-config-tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tws-config-tab-content').forEach(content => content.classList.remove('active'));
+      
+      document.querySelector(`.tws-config-tab[onclick="switchConfigTab('${tabName}')"]`).classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+    };
+
+    window.resetUnitSpeeds = function() {
+      if (confirm('Resetar velocidades para valores padrão?')) {
+        const config = getConfig();
+        config.velocidadesUnidades = { ...defaultConfig.velocidadesUnidades };
+        saveConfig(config);
+        
+        document.querySelectorAll('.tws-config-input').forEach(input => {
+          const unit = input.dataset.unit;
+          input.value = config.velocidadesUnidades[unit];
+        });
+        
+        showStatus('✅ Velocidades resetadas para padrão!', 'success');
+      }
+    };
+
+    window.testUnitSpeed = function() {
+      const origem = prompt('Coordenada de origem (ex: 500|500):', '500|500');
+      const destino = prompt('Coordenada de destino (ex: 501|501):', '501|501');
+      
+      if (origem && destino) {
+        const config = getConfig();
+        const distancia = calcularDistancia(origem, destino);
+        const unidadeMaisLenta = 'spear';
+        const velocidade = config.velocidadesUnidades[unidadeMaisLenta];
+        const tempo = distancia * velocidade;
+        
+        alert(`🧪 TESTE DE CÁLCULO:\n\n📍 ${origem} → ${destino}\n📏 Distância: ${distancia.toFixed(2)} campos\n🐌 Unidade: ${unidadeMaisLenta}\n⚡ Velocidade: ${velocidade} min/campo\n⏱️ Tempo: ${tempo.toFixed(1)} min`);
+      }
+    };
+
+    window.testTelegram = async function() {
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      
+      try {
+        btn.innerHTML = '⏳ Testando...';
+        btn.disabled = true;
+        showTelegramStatus('⏳ Testando conexão com Telegram...', 'warning');
+
+        TelegramBotReal.updateFromModal();
+        const result = await TelegramBotReal.testConnection();
+
+        if (result.success) {
+          showTelegramStatus(`✅ ${result.message}\n${result.details}`, 'success');
+        } else {
+          showTelegramStatus(result.error, 'error');
+        }
+      } catch (error) {
+        showTelegramStatus(`❌ Erro inesperado: ${error.message}`, 'error');
+      } finally {
+        btn.innerHTML = '🧪 Testar Conexão';
+        btn.disabled = false;
+        updateTelegramStats();
+      }
+    };
+
+    window.sendTestMessage = async function() {
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      
+      try {
+        btn.innerHTML = '📤 Enviando...';
+        btn.disabled = true;
+        showTelegramStatus('📤 Enviando mensagem de teste...', 'warning');
+
+        TelegramBotReal.updateFromModal();
+        const result = await TelegramBotReal.sendTestMessage();
+
+        if (result.success) {
+          showTelegramStatus('✅ Mensagem de teste enviada com sucesso!', 'success');
+        } else {
+          showTelegramStatus(`❌ Erro: ${result.error}`, 'error');
+        }
+      } catch (error) {
+        showTelegramStatus(`❌ Erro inesperado: ${error.message}`, 'error');
+      } finally {
+        btn.innerHTML = '📤 Enviar Teste';
+        btn.disabled = false;
+        updateTelegramStats();
+      }
+    };
+
+    window.exportConfig = function() {
+      const config = getConfig();
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tws_config_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('✅ Configurações exportadas com sucesso!', 'success');
+    };
+
+    window.importConfig = function() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const importedConfig = JSON.parse(event.target.result);
+            if (confirm('Importar estas configurações? Isso substituirá suas configurações atuais.')) {
+              saveConfig(importedConfig);
+              showStatus('✅ Configurações importadas com sucesso!', 'success');
+              setTimeout(() => location.reload(), 1000);
+            }
+          } catch (error) {
+            showStatus('❌ Erro ao importar arquivo: formato inválido', 'error');
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    };
+
+    window.backupData = function() {
+      const backup = {
+        config: getConfig(),
+        schedules: window.TWS_Backend ? window.TWS_Backend.getList() : [],
+        farms: window.TWS_FarmInteligente ? window.TWS_FarmInteligente._getFarmList() : [],
+        timestamp: new Date().toISOString(),
+        version: '1.0'
+      };
+      
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tws_backup_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('✅ Backup completo realizado!', 'success');
+    };
+
+    window.resetConfig = function() {
+      if (confirm('⚠️ TEM CERTEZA?\n\nIsso resetará TODAS as configurações para os valores padrão.')) {
+        localStorage.removeItem(CONFIG_STORAGE_KEY);
+        applyConfig(defaultConfig);
+        showStatus('✅ Configurações resetadas! Recarregando...', 'success');
+        setTimeout(() => {
+          closeConfigModal();
+          location.reload();
+        }, 1500);
+      }
+    };
+
+    window.saveConfig = function() {
+      const config = getConfig();
+      
+      // Salvar velocidades das unidades
+      document.querySelectorAll('.tws-config-input').forEach(input => {
+        const unit = input.dataset.unit;
+        const value = parseFloat(input.value) || defaultConfig.velocidadesUnidades[unit];
+        config.velocidadesUnidades[unit] = Math.max(0.1, value);
+      });
+      
+      // Salvar configurações do Telegram
+      TelegramBotReal.updateFromModal();
+      Object.assign(config.telegram, TelegramBotReal.getConfig());
+      
+      // Salvar outras configurações
+      config.theme = document.getElementById('theme-select').value;
+      config.behavior.showNotifications = document.getElementById('show-notifications').checked;
+      config.behavior.soundOnComplete = document.getElementById('sound-on-complete').checked;
+      config.behavior.autoStartScheduler = document.getElementById('auto-start-scheduler').checked;
+      config.behavior.retryOnFail = document.getElementById('retry-on-fail').checked;
+      config.behavior.confirmDeletion = document.getElementById('confirm-deletion').checked;
+      config.behavior.askBeforeSend = document.getElementById('ask-before-send').checked;
+      config.behavior.maxRetries = parseInt(document.getElementById('max-retries').value) || 3;
+      
+      // ✅ NOVO: Salvar schedulerCheckInterval
+      const intervalSelect = document.getElementById('scheduler-check-interval');
+      let schedulerInterval;
+      
+      if (intervalSelect.value === 'custom') {
+        schedulerInterval = parseInt(document.getElementById('scheduler-check-interval-custom').value) || 1000;
+      } else {
+        schedulerInterval = parseInt(intervalSelect.value) || 1000;
+      }
+      
+      // Validar limites
+      config.behavior.schedulerCheckInterval = Math.max(50, Math.min(30000, schedulerInterval));
+      
+      if (saveConfig(config)) {
+        showStatus('✅ Configurações salvas com sucesso!', 'success');
+        updateTelegramStats();
+        
+        // Reiniciar scheduler se estiver ativo
+        if (window.TWS_Backend && window.TWS_Backend.startScheduler) {
+          setTimeout(() => {
+            window.TWS_Backend.startScheduler();
+            showStatus('🔄 Scheduler reiniciado com novo intervalo!', 'success');
+          }, 500);
+        }
+      }
+    };
+
+    window.saveAndCloseConfig = function() {
+      window.saveConfig();
+      window.closeConfigModal();
+    };
+
+    window.closeConfigModal = function() {
+      const modal = document.getElementById('tws-config-modal');
+      if (modal) modal.remove();
+      
+      // Limpar funções globais temporárias
+      const functions = [
+        'switchConfigTab', 'resetUnitSpeeds', 'testUnitSpeed', 'testTelegram', 'sendTestMessage',
+        'exportConfig', 'importConfig', 'backupData', 'resetConfig', 'saveConfig', 
+        'saveAndCloseConfig', 'closeConfigModal', 'viewTelegramHistory', 'clearTelegramHistory'
+      ];
+      
+      functions.forEach(fn => {
+        delete window[fn];
+      });
+    };
+
+    window.viewTelegramHistory = function() {
+      const history = TelegramBotReal.getHistory();
+      const stats = TelegramBotReal.getStats();
+      
+      const historyText = history.slice(0, 10).map((msg, i) => 
+        `${i + 1}. ${new Date(msg.timestamp).toLocaleString()} - ${msg.status === 'sent' ? '✅' : '❌'} ${msg.message}`
+      ).join('\n');
+      
+      alert(`📊 Estatísticas do Telegram:\n\n` +
+            `📨 Total: ${stats.total} mensagens\n` +
+            `✅ Enviadas: ${stats.sent}\n` +
+            `❌ Falhas: ${stats.failed}\n` +
+            `📈 Taxa de sucesso: ${stats.successRate}%\n\n` +
+            `📋 Últimas mensagens:\n${historyText || 'Nenhuma mensagem no histórico'}`);
+    };
+
+    window.clearTelegramHistory = function() {
+      if (confirm('Limpar todo o histórico do Telegram?')) {
+        if (TelegramBotReal.clearHistory()) {
+          showStatus('✅ Histórico do Telegram limpo!', 'success');
+          updateTelegramStats();
+        }
+      }
+    };
+
+    // === FUNÇÕES AUXILIARES ===
+    function showStatus(message, type) {
+      alert(message);
+    }
+
+    function showTelegramStatus(message, type) {
+      const statusEl = document.getElementById('telegram-status');
+      if (statusEl) {
+        statusEl.innerHTML = `<div class="tws-status tws-status-${type}">${message}</div>`;
       }
     }
 
-    // ┌─ FASE 4: LIMPEZA ─┐
-    // Cleanup periódico
-    
-    cleanupCounter++;
-    if (cleanupCounter >= cleanupThreshold) {
-      cleanupProcessedAttacks();
-      cleanupCounter = 0;
+    function updateTelegramStats() {
+      const stats = TelegramBotReal.getStats();
+      const statsEl = document.getElementById('telegram-stats');
+      if (statsEl) {
+        statsEl.innerHTML = `
+          <div style="background: #EDF2F7; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <strong>📊 Estatísticas:</strong><br>
+            📨 Total: ${stats.total} mensagens | 
+            ✅ ${stats.sent} enviadas | 
+            ❌ ${stats.failed} falhas | 
+            📈 ${stats.successRate}% sucesso
+          </div>
+        `;
+      }
     }
 
-    // ┌─ MÉTRICAS ─┐
-    SchedulerMetrics.end();
+    // Fechar modal ao clicar fora
+    overlay.onclick = function(e) {
+      if (e.target === overlay) {
+        window.closeConfigModal();
+      }
+    };
 
-  }, checkIntervalMs); // ✅ USAR INTERVALO CONFIGURÁVEL
-
-  console.log(`[Scheduler] ✅ Iniciado (v2.0 - Intervalo: ${checkIntervalMs}ms)`);
-}
-
-// ═════════════════════════════════════════════════════════
-// 📊 COMO FUNCIONA
-// ═════════════════════════════════════════════════════════
-
-/*
-EXECUÇÃO SIMULTÂNEA MANTIDA:
-✅ Todos os ataques do MESMO horário executam juntos (Promise.allSettled)
-✅ Não há delay entre ataques do mesmo horário
-✅ Chegam juntos no alvo
-
-INTERVALO CONFIGURÁVEL:
-✅ checkIntervalMs controla a frequência de checagem
-✅ Menor intervalo = maior precisão de detecção
-✅ Não afeta a execução simultânea
-
-EXEMPLO:
-10 ataques agendados para 14:00:00 com intervalo de 1000ms:
-
-📍 13:59:59 → Scheduler checa: "ainda não é hora"
-📍 14:00:00 → Scheduler checa: "é hora! executar TODOS"
-⚡ 14:00:00.050 → Todos os 10 ataques partem JUNTOS
-✅ Resultado: Todos chegam no alvo simultaneamente
-
-CONFIGURAÇÃO NO MODAL:
-• 100ms = Precisão máxima (±0.1s) ⚡⚡⚡⚡⚡
-• 1000ms = Balanceado (±1s) ⭐ [RECOMENDADO]
-• 5000ms = Econômico (±5s) 🔋
-
-BENEFÍCIOS:
-• Mantém timing preciso dos ataques
-• Configurável por perfil de uso
-• Economia de CPU quando necessário
-• Sem impacto na execução simultânea
-*/
-  
-// ═════════════════════════════════════════════════════════
-// ✅ #4 FUNÇÕES DE DEBUG (Novas)
-// ═════════════════════════════════════════════════════════
-
-function getSchedulerStats() {
-  return {
-    executingCount: _executing.size,
-    processedCount: _processedAttacksWithTTL.size,
-    metrics: SchedulerMetrics.getStats(),
-    ttwlBudget: `${(_processedAttacksWithTTL.size * 100 / 1024).toFixed(2)} KB`
-  };
-}
-
-function dumpSchedulerState() {
-  const stats = getSchedulerStats();
-  console.table({
-    'Em Execução': stats.executingCount,
-    'Processados (24h)': stats.processedCount,
-    'Última Taxa': `${stats.metrics.successRate}%`,
-    'Último Ciclo': `${stats.metrics.lastCycleDuration}ms`,
-    'Memória': stats.ttwlBudget
-  });
-}
-
-// ═════════════════════════════════════════════════════════
-// ✅ TELEGRAM NOTIFICATIONS - VERSÃO MELHORADA
-// ═════════════════════════════════════════════════════════
-
-async function sendTelegramNotification(type, data) {
-  // Fallback se TelegramBotReal não estiver disponível
-  const Telegram = window.TelegramBotReal || {
-    getConfig: () => ({ enabled: false }),
-    makeRequest: () => Promise.resolve({ success: false })
-  };
-  
-  try {
-    const config = Telegram.getConfig();
-    if (!config.enabled) return;
-    
-    let message = '';
-    const timestamp = new Date().toLocaleString('pt-BR');
-    
-    switch (type) {
-      case 'attack_success':
-        if (!config.notifications?.success) return;
-        message = `✅ <b>Ataque Bem-Sucedido</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🎯 <b>Origem:</b> ${data.origin || 'N/A'}\n` +
-                 `🎯 <b>Destino:</b> ${data.target || 'N/A'}\n` +
-                 `⚔️ <b>Unidades:</b> ${data.units || 'N/A'}\n` +
-                 `⏱️ <b>Status:</b> Comando enviado com sucesso`;
-        break;
-        
-      case 'attack_failure':
-        if (!config.notifications?.failure) return;
-        message = `❌ <b>Ataque Falhado</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🎯 <b>Origem:</b> ${data.origin || 'N/A'}\n` +
-                 `🎯 <b>Destino:</b> ${data.target || 'N/A'}\n` +
-                 `🚫 <b>Motivo:</b> ${data.reason || 'Erro desconhecido'}\n` +
-                 `💡 <b>Sugestão:</b> ${data.suggestion || 'Verificar configurações'}`;
-        break;
-        
-      case 'system_error':
-        if (!config.notifications?.error) return;
-        message = `🚨 <b>Erro do Sistema</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🔧 <b>Módulo:</b> ${data.module || 'Desconhecido'}\n` +
-                 `❌ <b>Erro:</b> ${data.error || 'N/A'}\n` +
-                 `📝 <b>Detalhes:</b> ${data.details || 'N/A'}\n` +
-                 `⚡ <b>Ação:</b> ${data.action || 'Verificar o console'}`;
-        break;
-        
-      default:
-        return; // Tipo não reconhecido
-    }
-    
-    const result = await Telegram.makeRequest('sendMessage', {
-      text: message,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true
+    // Event listeners para atualização em tempo real
+    document.getElementById('telegram-enabled')?.addEventListener('change', () => {
+      TelegramBotReal.updateUIState();
     });
-    
-    if (result.success) {
-      console.log(`[Telegram] Notificação ${type} enviada com sucesso`);
-    } else {
-      console.warn(`[Telegram] Falha ao enviar notificação ${type}:`, result.error);
+  }
+
+  // === INICIALIZAÇÃO ===
+  function init() {
+    if (!window.TWS_ConfigModal) {
+      window.TWS_ConfigModal = {};
     }
     
-  } catch (error) {
-    console.error('[Telegram] Erro ao enviar notificação:', error);
+    // Migrar configurações antigas
+    migrateOldConfig();
+    
+    window.TWS_ConfigModal.show = showConfigModal;
+    window.TWS_ConfigModal.getConfig = getConfig;
+    window.TWS_ConfigModal.saveConfig = saveConfig;
+    
+    // Aplicar configurações ao carregar
+    applyConfig(getConfig());
+    
+    console.log('[TW Config] ✅ Modal de configurações carregado com schedulerCheckInterval!');
   }
-}
 
-  
-// ═════════════════════════════════════════════════════════
-// ✅ EXPORTAR API
-// ═════════════════════════════════════════════════════════
-
-window.TWS_SchedulerDebug = {
-  getStats: getSchedulerStats,
-  dumpState: dumpSchedulerState,
-  getMetrics: () => SchedulerMetrics,
-  clearProcessed: () => _processedAttacksWithTTL.clear()
-};
-
-console.log('[Scheduler] Debug API disponível em: window.TWS_SchedulerDebug');
-
-
-
-// === Export API ===
-window.TWS_Backend = {
-  loadVillageTxt,
-  parseDateTimeToMs,
-  getList,
-  setList,
-  startScheduler,
-  importarDeBBCode,
-  executeAttack,
-  getVillageTroops,
-  validateTroops,
-  generateUniqueId,
-  getAttackFingerprint,
-  sendTelegramNotification, // ✅ ADICIONE ESTA LINHA AQUI!
-  TROOP_LIST,
-  STORAGE_KEY,
-  PANEL_STATE_KEY,
-  _internal: {
-    get villageMap(){ return _villageMap; },
-    get myVillages(){ return _myVillages; },
-    get executing(){ return _executing; },
-    get processedAttacks(){ return _processedAttacks; }
+  // Inicializar
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
-};
-
-  console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
-
-
-
-
