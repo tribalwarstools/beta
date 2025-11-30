@@ -55,10 +55,7 @@
     const msgEl = document.getElementById('tws-validation-msg');
     
     if (!villageId) {
-      TROOP_LIST.forEach(u => {
-        const input = document.getElementById(`tws-troop-${u}`);
-        if (input) input.value = '0';
-      });
+      clearTroops();
       return;
     }
 
@@ -97,7 +94,26 @@
     }
   }
 
-  // === Carrega aldeias no select ===
+  // === ✅ Limpar todas as tropas ===
+  function clearTroops() {
+    TROOP_LIST.forEach(u => {
+      const input = document.getElementById(`tws-troop-${u}`);
+      if (input) input.value = '0';
+    });
+    
+    const msgEl = document.getElementById('tws-validation-msg');
+    msgEl.textContent = '✅ Tropas limpas!';
+    msgEl.className = 'tws-validation-msg tws-validation-success';
+    msgEl.style.display = 'block';
+    
+    setTimeout(() => {
+      msgEl.style.display = 'none';
+    }, 2000);
+    
+    console.log('[Modal] ✅ Tropas limpas');
+  }
+
+  // === Carrega aldeias no select (ORDENADAS ALFABETICAMENTE) ===
   async function loadVillageSelect() {
     const select = document.getElementById('tws-origem');
     if (!select) {
@@ -122,8 +138,12 @@
         }
         
         console.log(`[Modal] ✅ ${updated.length} aldeias carregadas`);
+        
+        // ✅ ORDENAR ALDEIAS ALFABETICAMENTE
+        const sortedVillages = updated.sort((a, b) => a.name.localeCompare(b.name));
+        
         select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
-          updated.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
+          sortedVillages.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
       } catch (error) {
         console.error('[Modal] ❌ Erro ao carregar aldeias:', error);
         select.innerHTML = '<option value="">❌ Erro ao carregar aldeias</option>';
@@ -131,8 +151,11 @@
       return;
     }
 
+    // ✅ ORDENAR ALDEIAS ALFABETICAMENTE
+    const sortedVillages = myVillages.sort((a, b) => a.name.localeCompare(b.name));
+    
     select.innerHTML = '<option value="">Selecione uma aldeia...</option>' + 
-      myVillages.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
+      sortedVillages.map(v => `<option value="${v.id}" data-coord="${v.coord}">${v.name} (${v.coord})</option>`).join('');
   }
 
   // === Processa submit do formulário ===
@@ -396,6 +419,10 @@
           background: #9E9E9E;
           color: white;
         }
+        .tws-btn-warning {
+          background: #ff9800;
+          color: white;
+        }
         .tws-validation-msg {
           padding: 10px;
           margin-top: 10px;
@@ -414,6 +441,12 @@
           background: #E5FFE5;
           border: 1px solid #00CC00;
           color: #008800;
+        }
+        .tws-troops-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 5px;
         }
       </style>
 
@@ -445,7 +478,12 @@
 
         <!-- Tropas -->
         <div class="tws-form-group">
-          <label class="tws-form-label">🪖 Tropas:</label>
+          <div class="tws-troops-header">
+            <label class="tws-form-label">🪖 Tropas:</label>
+            <button type="button" id="tws-clear-troops" class="tws-btn tws-btn-warning" style="padding: 5px 10px; font-size: 12px;">
+              🗑️ Limpar Tropas
+            </button>
+          </div>
           <div class="tws-troops-grid">
             ${TROOP_LIST.map(u => `
               <div class="tws-troop-input">
@@ -475,8 +513,8 @@
     // Somente botão cancelar fecha o modal (pedido do usuário)
     document.getElementById('tws-btn-cancel').onclick = () => overlay.remove();
 
-    // NOTA: removido handler que fechava o modal ao clicar no overlay/fundo
-    // overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    // ✅ Botão para limpar tropas
+    document.getElementById('tws-clear-troops').onclick = clearTroops;
     
     // ✅ Auto-preencher tropas ao mudar aldeia
     document.getElementById('tws-origem').onchange = (e) => {
@@ -538,5 +576,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler Modal] ✅ Carregado com validação de coordenadas corrigida e comportamento de modal ajustado!');
+  console.log('[TW Scheduler Modal] ✅ Carregado com aldeias ordenadas e botão limpar tropas!');
 })();
