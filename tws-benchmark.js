@@ -19,11 +19,46 @@
       }
       
       const backend = window.TWS_Backend;
-      const myVillages = backend._internal?.myVillages || [];
+      
+      // DEBUG: Ver estrutura do backend
+      console.log('[DEBUG] Backend._internal:', backend._internal);
+      console.log('[DEBUG] Chaves disponíveis:', Object.keys(backend._internal || {}));
+      
+      // Tentar múltiplas formas de acessar aldeias
+      let myVillages = [];
+      
+      // Método 1: _internal.myVillages
+      if (backend._internal && backend._internal.myVillages) {
+        myVillages = backend._internal.myVillages;
+        console.log('[DEBUG] Aldeias via _internal.myVillages:', myVillages.length);
+      }
+      
+      // Método 2: Chamar loadVillageTxt() se disponível
+      if (myVillages.length === 0 && backend.loadVillageTxt) {
+        console.log('[DEBUG] Tentando loadVillageTxt()...');
+        try {
+          const data = await backend.loadVillageTxt();
+          myVillages = data.myVillages || [];
+          console.log('[DEBUG] Aldeias via loadVillageTxt():', myVillages.length);
+        } catch (e) {
+          console.error('[DEBUG] Erro ao carregar aldeias:', e);
+        }
+      }
+      
+      // Método 3: Verificar se já foram carregadas
+      if (myVillages.length === 0 && backend._internal) {
+        const internal = backend._internal;
+        if (typeof internal.myVillages === 'function') {
+          myVillages = internal.myVillages();
+          console.log('[DEBUG] Aldeias via função:', myVillages.length);
+        }
+      }
       
       if (myVillages.length === 0) {
-        throw new Error('Nenhuma aldeia própria encontrada');
+        throw new Error('Nenhuma aldeia própria encontrada. Execute primeiro: TWS_Backend.loadVillageTxt()');
       }
+      
+      console.log('[DEBUG] Aldeias disponíveis:', myVillages.length);
       
       const sourceVillage = myVillages[0];
       const coords = sourceVillage.coord.split('|').map(Number);
