@@ -325,22 +325,85 @@
       const profile = this.testProfiles[this.selectedProfile];
       this.switchTab('results');
       
-      document.getElementById('progress-section').style.display = 'block';
-      document.getElementById('stop-btn').style.display = 'block';
+      const progressSection = document.getElementById('progress-section');
+      const statusText = document.getElementById('status-text');
+      const progressFill = document.getElementById('progress-fill');
+      const resultsDisplay = document.getElementById('results-display');
+      const stopBtn = document.getElementById('stop-btn');
+      const applyBtn = document.getElementById('apply-btn');
       
-      if (window.TWS_RealBenchmarkEngine) {
+      // Mostrar progress
+      progressSection.style.display = 'block';
+      stopBtn.style.display = 'block';
+      resultsDisplay.innerHTML = '';
+      
+      if (!window.TWS_RealBenchmarkEngine) {
+        alert('Engine de benchmark não carregada!');
+        return;
+      }
+
+      if (!window.TWS_Backend) {
+        alert('Backend TWS não carregado!');
+        return;
+      }
+
+      // Carregar aldeias
+      statusText.textContent = 'Carregando aldeias...';
+      progressFill.style.width = '10%';
+      
+      try {
         await window.TWS_Backend.loadVillageTxt();
-        window.TWS_RealBenchmarkEngine.startRealBenchmark(profile.configs, profile.name);
         
-        // Aguardar resultados e exibir
-        const checkResults = setInterval(function() {
-          if (!window.TWS_RealBenchmarkEngine.isTesting) {
-            clearInterval(checkResults);
-            TWS_BenchmarkUI.displayResults(window.TWS_RealBenchmarkEngine.results);
-            document.getElementById('stop-btn').style.display = 'none';
-            document.getElementById('apply-btn').style.display = 'block';
+        statusText.textContent = 'Iniciando benchmark...';
+        progressFill.style.width = '20%';
+        
+        // Iniciar benchmark
+        const totalConfigs = profile.configs.length;
+        let currentConfig = 0;
+        
+        // Monitorar progresso
+        const progressInterval = setInterval(function() {
+          if (window.TWS_RealBenchmarkEngine.isTesting) {
+            const completed = window.TWS_RealBenchmarkEngine.results.length;
+            const progress = 20 + (completed / totalConfigs) * 70;
+            progressFill.style.width = progress + '%';
+            statusText.textContent = 'Testando configuração ' + (completed + 1) + ' de ' + totalConfigs + '...';
           }
-        }, 1000);
+        }, 500);
+        
+        // Executar benchmark
+        await window.TWS_RealBenchmarkEngine.startRealBenchmark(profile.configs, profile.name);
+        
+        // Limpar interval
+        clearInterval(progressInterval);
+        
+        // Aguardar um pouco para garantir que finalizou
+        setTimeout(function() {
+          statusText.textContent = 'Processando resultados...';
+          progressFill.style.width = '95%';
+          
+          setTimeout(function() {
+            progressFill.style.width = '100%';
+            statusText.textContent = 'Concluído!';
+            
+            // Exibir resultados
+            TWS_BenchmarkUI.displayResults(window.TWS_RealBenchmarkEngine.results);
+            
+            // Esconder progress após 1s
+            setTimeout(function() {
+              progressSection.style.display = 'none';
+              stopBtn.style.display = 'none';
+              applyBtn.style.display = 'block';
+            }, 1000);
+          }, 500);
+        }, 500);
+        
+      } catch (error) {
+        console.error('Erro no benchmark:', error);
+        statusText.textContent = 'Erro: ' + error.message;
+        progressFill.style.width = '0%';
+        alert('Erro ao executar benchmark: ' + error.message);
+        stopBtn.style.display = 'none';
       }
     },
 
@@ -360,21 +423,70 @@
       }
 
       this.switchTab('results');
-      document.getElementById('progress-section').style.display = 'block';
-      document.getElementById('stop-btn').style.display = 'block';
+      
+      const progressSection = document.getElementById('progress-section');
+      const statusText = document.getElementById('status-text');
+      const progressFill = document.getElementById('progress-fill');
+      const resultsDisplay = document.getElementById('results-display');
+      const stopBtn = document.getElementById('stop-btn');
+      const applyBtn = document.getElementById('apply-btn');
+      
+      progressSection.style.display = 'block';
+      stopBtn.style.display = 'block';
+      resultsDisplay.innerHTML = '';
 
-      if (window.TWS_RealBenchmarkEngine) {
+      if (!window.TWS_RealBenchmarkEngine || !window.TWS_Backend) {
+        alert('Sistema não carregado corretamente!');
+        return;
+      }
+
+      statusText.textContent = 'Carregando aldeias...';
+      progressFill.style.width = '10%';
+
+      try {
         await window.TWS_Backend.loadVillageTxt();
-        window.TWS_RealBenchmarkEngine.startRealBenchmark(configs, 'Teste Personalizado');
         
-        const checkResults = setInterval(function() {
-          if (!window.TWS_RealBenchmarkEngine.isTesting) {
-            clearInterval(checkResults);
-            TWS_BenchmarkUI.displayResults(window.TWS_RealBenchmarkEngine.results);
-            document.getElementById('stop-btn').style.display = 'none';
-            document.getElementById('apply-btn').style.display = 'block';
+        statusText.textContent = 'Iniciando teste personalizado...';
+        progressFill.style.width = '20%';
+        
+        const totalConfigs = testCount;
+        
+        const progressInterval = setInterval(function() {
+          if (window.TWS_RealBenchmarkEngine.isTesting) {
+            const completed = window.TWS_RealBenchmarkEngine.results.length;
+            const progress = 20 + (completed / totalConfigs) * 70;
+            progressFill.style.width = progress + '%';
+            statusText.textContent = 'Teste ' + (completed + 1) + ' de ' + totalConfigs + '...';
           }
-        }, 1000);
+        }, 500);
+
+        await window.TWS_RealBenchmarkEngine.startRealBenchmark(configs, 'Teste Personalizado');
+        
+        clearInterval(progressInterval);
+        
+        setTimeout(function() {
+          statusText.textContent = 'Processando resultados...';
+          progressFill.style.width = '95%';
+          
+          setTimeout(function() {
+            progressFill.style.width = '100%';
+            statusText.textContent = 'Concluído!';
+            
+            TWS_BenchmarkUI.displayResults(window.TWS_RealBenchmarkEngine.results);
+            
+            setTimeout(function() {
+              progressSection.style.display = 'none';
+              stopBtn.style.display = 'none';
+              applyBtn.style.display = 'block';
+            }, 1000);
+          }, 500);
+        }, 500);
+        
+      } catch (error) {
+        console.error('Erro:', error);
+        statusText.textContent = 'Erro: ' + error.message;
+        alert('Erro: ' + error.message);
+        stopBtn.style.display = 'none';
       }
     },
 
