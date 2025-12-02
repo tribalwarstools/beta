@@ -1547,11 +1547,13 @@
   }
 
   // === INICIALIZAÇÃO ===
-  function init() {
+// === INICIALIZAÇÃO ===
+function init() {
     if (!window.TWS_FarmInteligente) {
-      window.TWS_FarmInteligente = {};
+        window.TWS_FarmInteligente = {};
     }
     
+    // ✅ EXPOR AS FUNÇÕES PRINCIPAIS
     window.TWS_FarmInteligente.show = showFarmModal;
     window.TWS_FarmInteligente.convertToFarm = convertToFarm;
     window.TWS_FarmInteligente.convertAgendamentosEmMassa = convertAgendamentosEmMassa;
@@ -1562,11 +1564,14 @@
     window.TWS_FarmInteligente._enviarAgora = enviarFarmAgora;
     window.TWS_FarmInteligente._recarregarVelocidades = recarregarVelocidades;
     
+    // ✅ ADICIONAR ESTA LINHA (FALTAVA):
+    window.TWS_FarmInteligente._getVelocidadesUnidades = getVelocidadesUnidades;
+    
     startFarmMonitor();
     
     console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas, Recuperação Completa e Velocidades Unificadas!');
     console.log('[TW Farm Inteligente] ⚙️ Usando velocidades do Config Modal: ', getVelocidadesUnidades());
-  }
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
