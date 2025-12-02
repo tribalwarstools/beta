@@ -2,11 +2,40 @@
   'use strict';
 
   // === SISTEMA DE CÁLCULO DO PAINEL DE ATAQUES ===
-  const velocidadesUnidades = {
-      spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
-      light: 10, marcher: 10, heavy: 11, ram: 30, catapult: 30,
-      knight: 10, snob: 35
-  };
+  
+  // REMOVER a definição hardcoded e usar a do Config Modal
+  // Função para obter velocidades do Config Modal
+  function getVelocidadesUnidades() {
+      try {
+          // Tentar obter do Config Modal
+          if (window.TWS_ConfigModal && window.TWS_ConfigModal.getConfig) {
+              const config = window.TWS_ConfigModal.getConfig();
+              return config.velocidadesUnidades || getVelocidadesPadrao();
+          }
+          
+          // Tentar obter do localStorage
+          const savedConfig = localStorage.getItem('tws_global_config_v2');
+          if (savedConfig) {
+              const config = JSON.parse(savedConfig);
+              return config.velocidadesUnidades || getVelocidadesPadrao();
+          }
+          
+          // Fallback para valores padrão
+          return getVelocidadesPadrao();
+      } catch (error) {
+          console.warn('[Farm] Erro ao obter velocidades, usando padrão:', error);
+          return getVelocidadesPadrao();
+      }
+  }
+
+  // Valores padrão como fallback
+  function getVelocidadesPadrao() {
+      return {
+          spear: 18, sword: 22, axe: 18, archer: 18, spy: 9,
+          light: 10, marcher: 10, heavy: 11, ram: 30, catapult: 30,
+          knight: 10, snob: 35
+      };
+  }
 
   const unidadesPorVelocidade = [
       'snob', 'catapult', 'ram', 'sword', 'spear', 'archer', 'axe',
@@ -31,7 +60,7 @@
       return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
   }
 
-  // ✅ CALCULA TEMPO DE VIAGEM
+  // ✅ CALCULA TEMPO DE VIAGEM (USANDO VELOCIDADES DO CONFIG MODAL)
   function calculateTravelTime(origem, destino, troops) {
       try {
           const distancia = calcularDistancia(origem, destino);
@@ -42,7 +71,10 @@
               return 3600;
           }
           
-          const velocidadeBase = velocidadesUnidades[unidadeMaisLenta];
+          // ✅ USAR VELOCIDADES DO CONFIG MODAL
+          const velocidadesUnidades = getVelocidadesUnidades();
+          const velocidadeBase = velocidadesUnidades[unidadeMaisLenta] || 18; // Fallback
+          
           const tempoMinutos = distancia * velocidadeBase;
           const tempoSegundos = tempoMinutos * 60;
           
@@ -279,7 +311,7 @@
       // ✅ AGORA PERMITIDO: "Enviar Agora" sem verificações
 
       // ✅ CONFIRMAÇÃO
-      if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediatamente.`)) {
+      if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediamente.`)) {
           return false;
       }
 
@@ -880,6 +912,8 @@
       
       const distancia = calcularDistancia(farm.origem, farm.alvo);
       const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
+      // ✅ OBTER VELOCIDADES ATUAIS
+      const velocidadesUnidades = getVelocidadesUnidades();
       const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
       const tempoIda = distancia * velocidade;
       const tempoVolta = tempoIda;
@@ -907,6 +941,7 @@
               </div>
               <div style="color: #666; font-size: 10px; margin-top: 2px;">
                 📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo 
+                <small style="color: #999;">(Configuração global)</small>
               </div>
               <div style="color: #888; font-size: 10px; margin-top: 1px;">
                 ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
@@ -994,11 +1029,74 @@
     return html;
   }
 
+  // ═════════════════════════════════════════════════════════
+  // ✅ FUNÇÃO PARA RECARREGAR VELOCIDADES
+  // ═════════════════════════════════════════════════════════
+
+  function recarregarVelocidades() {
+      console.log('[Farm] Recarregando velocidades das unidades');
+      
+      // Recalcular nextRun para todos os farms ativos
+      const farms = getFarmList().filter(f => !f.paused && f.active !== false);
+      const lista = getList();
+      
+      farms.forEach(farm => {
+          if (farm.agendamentoBaseId >= lista.length) return;
+          
+          const agendamento = lista[farm.agendamentoBaseId];
+          if (!agendamento || agendamento.done) return;
+          
+          // Recalcular tempo de viagem com novas velocidades
+          const travelTimeToTarget = calculateTravelTime(farm.origem, farm.alvo, farm.troops);
+          const returnTime = calculateReturnTime(farm.origem, farm.alvo, farm.troops);
+          const totalCycleTime = travelTimeToTarget + returnTime + (farm.intervalo * 60);
+          
+          // Atualizar próximo horário
+          const now = new Date();
+          const nextRunTime = new Date(now.getTime() + (totalCycleTime * 1000));
+          farm.nextRun = formatDateTime(nextRunTime);
+          farm.lastReturnTime = returnTime;
+          
+          FarmLogger.log('RECALCULATED_SPEEDS', farm, {
+              travelTime: travelTimeToTarget,
+              returnTime: returnTime,
+              totalCycleTime: totalCycleTime
+          });
+      });
+      
+      setFarmList(getFarmList()); // Salvar alterações
+      
+      // Atualizar UI se estiver visível
+      if (document.getElementById('farm-list-container')) {
+          document.getElementById('farm-list-container').innerHTML = renderFarmList();
+      }
+      
+      console.log('[Farm] Velocidades recarregadas para', farms.length, 'farms');
+  }
+
+  // ═════════════════════════════════════════════════════════
+  // ✅ MONITORAMENTO DE MUDANÇAS NAS CONFIGURAÇÕES
+  // ═════════════════════════════════════════════════════════
+
+  function iniciarMonitorConfig() {
+      let ultimaConfig = JSON.stringify(getVelocidadesUnidades());
+      
+      setInterval(() => {
+          const configAtual = JSON.stringify(getVelocidadesUnidades());
+          if (configAtual !== ultimaConfig) {
+              console.log('[Farm] Configurações de velocidade alteradas, recalculando...');
+              ultimaConfig = configAtual;
+              recarregarVelocidades();
+          }
+      }, 10000); // Verificar a cada 10 segundos
+  }
+
   function startFarmMonitor() {
     setInterval(monitorAgendamentosParaFarm, 10000);
     setInterval(verificarFarmsAtrasados, 15000); // 🆕 VERIFICA ATRASOS
     setInterval(cleanupOrphanFarms, 60000);
-    console.log('[Farm Inteligente] ✅ Monitor iniciado com verificação de atrasos!');
+    iniciarMonitorConfig(); // 🆕 MONITORAR MUDANÇAS NAS CONFIGURAÇÕES
+    console.log('[Farm Inteligente] ✅ Monitor iniciado com verificação de atrasos e velocidades unificadas!');
   }
 
   function showFarmModal() {
@@ -1048,13 +1146,27 @@
         .btn-warning { background: #FF9800; }
         .btn-danger { background: #F44336; }
         .btn-info { background: #9C27B0; }
+        .config-info {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 10px;
+            vertical-align: middle;
+            cursor: help;
+        }
       </style>
 
       <!-- Cabeçalho -->
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
-        <div style="font-size: 24px; font-weight: bold; color: white;">🌾 FARM INTELIGENTE v2.2</div>
+        <div style="font-size: 24px; font-weight: bold; color: white;">
+          🌾 FARM INTELIGENTE v2.2
+          <span class="config-info" title="Velocidades das unidades configuradas globalmente">⚙️ Config Global</span>
+        </div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com reset de tentativas e recuperação completa
+          Sistema automático com reset de tentativas e recuperação completa - Velocidades unificadas
         </div>
       </div>
 
@@ -1069,6 +1181,10 @@
           ✅ Distância Euclidiana correta para TW<br>
           ✅ Logging detalhado de eventos<br>
           ✅ 🚀 BOTÃO "ENVIAR AGORA" para falhas<br>
+          <strong>🎯 VELOCIDADES UNIFICADAS:</strong><br>
+          ✅ Usa configurações globais do Config Modal<br>
+          ✅ Atualização automática quando velocidades mudam<br>
+          ✅ Fallback para valores padrão se necessário<br>
           <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>
           ✅ Múltiplos farms no mesmo alvo<br>
           ✅ Mesmas tropas, mesmo alvo<br>
@@ -1098,6 +1214,9 @@
             <button class="farm-btn btn-primary" onclick="TWS_FarmInteligente._viewStats()">
               📈 Ver Estatísticas
             </button>
+            <button class="farm-btn btn-warning" onclick="TWS_FarmInteligente._recarregarVelocidades()">
+              🔄 Recarregar Velocidades
+            </button>
           </div>
         </div>
 
@@ -1108,7 +1227,8 @@
 
       <!-- Rodapé -->
       <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        Farm Inteligente v2.2 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | Eventos: ${FarmLogger.history.length}
+        Farm Inteligente v2.2 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | 
+        Eventos: ${FarmLogger.history.length} | Velocidades: Configuração Global
       </div>
     `;
 
@@ -1389,6 +1509,10 @@
           successCycles: farms.reduce((a, b) => a + (b.stats?.successRuns || 0), 0),
           events: FarmLogger.history.length
         };
+        
+        // Obter configurações de velocidade
+        const velocidades = getVelocidadesUnidades();
+        const configSource = window.TWS_ConfigModal ? 'Config Modal Global' : 'Fallback Local';
 
         alert(
           '📊 ESTATÍSTICAS DO FARM INTELIGENTE\n\n' +
@@ -1398,8 +1522,18 @@
           `Ciclos Total: ${stats.totalCycles}\n` +
           `Ciclos Sucesso: ${stats.successCycles}\n` +
           `Taxa de Sucesso: ${stats.totalCycles > 0 ? ((stats.successCycles / stats.totalCycles) * 100).toFixed(1) : 0}%\n\n` +
-          `Eventos Registrados: ${stats.events}`
+          `Eventos Registrados: ${stats.events}\n\n` +
+          `⚙️ CONFIGURAÇÃO DE VELOCIDADES:\n` +
+          `Fonte: ${configSource}\n` +
+          `Lanceiro: ${velocidades.spear} min/campo\n` +
+          `Espadachim: ${velocidades.sword} min/campo\n` +
+          `Cav. Leve: ${velocidades.light} min/campo`
         );
+      },
+      
+      _recarregarVelocidades() {
+        recarregarVelocidades();
+        alert('✅ Velocidades recarregadas da configuração global!');
       }
     };
 
@@ -1426,10 +1560,12 @@
     window.TWS_FarmInteligente._getFarmList = getFarmList;
     window.TWS_FarmInteligente.FarmLogger = FarmLogger;
     window.TWS_FarmInteligente._enviarAgora = enviarFarmAgora;
+    window.TWS_FarmInteligente._recarregarVelocidades = recarregarVelocidades;
     
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas e Recuperação Completa!');
+    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas, Recuperação Completa e Velocidades Unificadas!');
+    console.log('[TW Farm Inteligente] ⚙️ Usando velocidades do Config Modal: ', getVelocidadesUnidades());
   }
 
   if (document.readyState === 'loading') {
