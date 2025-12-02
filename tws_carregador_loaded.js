@@ -9,19 +9,19 @@
             'https://tribalwarstools.github.io/beta/',
             'https://cdn.jsdelivr.net/gh/tribalwarstools/beta@latest/'
         ],
+
 scripts: [
     { file: 'telegram-bot.js', check: 'TelegramBotReal' },
     { file: 'tw-scheduler-backend.js', check: 'TWS_Backend' },
     { file: 'tw-scheduler-multitab-lock.js', check: 'TWS_MultiTabLock' },
-    { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },
-    { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' },
-    { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal' },
-    { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal' },  // ✨ NOVO
-    { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente' },  // ✨ NOVO
-    { file: 'tw-scheduler-config-modal.js', check: 'TWS_ConfigModal' },  // ✨ NOVO
-    
-    
+    { file: 'tw-scheduler-config-modal.js', check: 'TWS_ConfigModal' },      // 1º modal (configurações)
+    { file: 'tw-scheduler-modal.js', check: 'TWS_Modal' },                   // 2º modal (principal)
+    { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal' },      // 3º modal (BBCode)
+    { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal' },          // 4º modal (teste)
+    { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente' },    // 5º modal (farm - usa config)
+    { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel' },                // POR ÚLTIMO!
 ],
+        
         timeout: 15000,
         retries: 2
     };
