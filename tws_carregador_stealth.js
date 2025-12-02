@@ -8,7 +8,7 @@
     }
     window.__TWS_STEALTH_CARREGADOR_V2 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 2.1 (ordem corrigida)');
+    console.log('[Stealth] Inicializado - Versão 2.2');
 
     // ⭐ CONFIGURAÇÃO COM ORDEM CORRIGIDA ⭐
     const CONFIG = {
