@@ -1,4 +1,4 @@
-// tws_carregador_stealth.js - VERSÃO 2.1 CORRIGIDA
+// tws_carregador_stealth.js - VERSÃO 2.2
 (function() {
     'use strict';
 
@@ -14,35 +14,34 @@
     const CONFIG = {
         baseUrl: 'https://tribalwarstools.github.io/beta/',
         
-        scripts: [
-            // 1. Backend (base de tudo)
-            { file: 'tw-scheduler-backend.js', check: 'TWS_Backend', essential: true },
-            
-            // 2. Config modal (necessário para farm e frontend)
-            { file: 'tw-scheduler-config-modal.js', check: 'TWS_ConfigModal', essential: true },
-            
-            // 3. MultiTab Lock (depende do backend)
-            { file: 'tw-scheduler-multitab-lock.js', check: 'TWS_MultiTabLock', essential: false },
-            
-            // 4. Modais principais (em ordem de dependência)
-            { file: 'tw-scheduler-modal.js', check: 'TWS_Modal', essential: false },
-            { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal', essential: false },
-            { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal', essential: false },
-            
-            // 5. Farm modal (precisa do config modal para velocidades)
-            { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente', essential: false },
-            
-            // 6. Telegram bot (independente)
-            { file: 'telegram-bot.js', check: 'TelegramBotReal', essential: false },
-            
-            // 7. Frontend POR ÚLTIMO (precisa de TODOS os modais)
-            { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel', essential: true }
-        ],
-        
-        delays: {
-            essential: [0, 5000, 0], // backend (0), config (5s), frontend (0)
-            nonEssential: [0, 10000, 15000, 20000, 25000, 30000] // outros 6 scripts
-        }
+// NOVA ORDEM DEFINITIVA:
+scripts: [
+    // 1. Backend (base de tudo)
+    { file: 'tw-scheduler-backend.js', check: 'TWS_Backend', essential: true },
+    
+    // 2. Config modal (necessário para farm)
+    { file: 'tw-scheduler-config-modal.js', check: 'TWS_ConfigModal', essential: false },
+    
+    // 3. MultiTab Lock
+    { file: 'tw-scheduler-multitab-lock.js', check: 'TWS_MultiTabLock', essential: false },
+    
+    // 4. Todos os modais ANTES do frontend
+    { file: 'tw-scheduler-modal.js', check: 'TWS_Modal', essential: false },
+    { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal', essential: false },
+    { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal', essential: false },
+    { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente', essential: false },
+    
+    // 5. Telegram bot
+    { file: 'telegram-bot.js', check: 'TelegramBotReal', essential: false },
+    
+    // 6. Frontend POR ÚLTIMO (depois de TUDO)
+    { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel', essential: true }
+],
+
+delays: {
+    essential: [0], // só o backend é realmente essencial
+    nonEssential: [5000, 0, 10000, 15000, 20000, 25000, 30000, 35000, 0] // 9 scripts não-essenciais
+}
     };
 
     // ⭐ FUNÇÃO PRINCIPAL STEALTH ⭐
