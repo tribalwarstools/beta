@@ -1,20 +1,20 @@
-// tws_carregador_stealth.js - CARREGADOR STEALTH
+// tws_carregador_stealth.js - VERSÃO 2.0 CORRIGIDA
 (function() {
     'use strict';
 
     // ⭐ VERIFICAÇÃO DE DUPLICIDADE MELHORADA ⭐
-    if (window.__TWS_STEALTH_CARREGADOR) {
+    if (window.__TWS_STEALTH_CARREGADOR_V2) {
         console.log('[Stealth] Já carregado, ignorando...');
         return;
     }
-    window.__TWS_STEALTH_CARREGADOR = true;
+    window.__TWS_STEALTH_CARREGADOR_V2 = Date.now();
+
+    console.log('[Stealth] Inicializado - Versão 2.0');
 
     // ⭐ CONFIGURAÇÃO SIMPLIFICADA ⭐
     const CONFIG = {
-        // URL base - mantenha igual para compatibilidade
         baseUrl: 'https://tribalwarstools.github.io/beta/',
         
-        // Ordem de carregamento OTIMIZADA
         scripts: [
             { file: 'tw-scheduler-backend.js', check: 'TWS_Backend', essential: true },
             { file: 'tw-scheduler-frontend.js', check: 'TWS_Panel', essential: true },
@@ -27,42 +27,34 @@
             { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente', essential: false }
         ],
         
-        // Delays mais inteligentes (foco nos essenciais primeiro)
         delays: {
-            essential: [0, 5000],           // Backend e Frontend rápido
-            nonEssential: [10000, 15000, 20000, 25000, 30000, 35000, 40000]
+            essential: [0, 5000],
+            nonEssential: [10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000]
         }
     };
 
-    // ⭐ FUNÇÃO PRINCIPAL STEALTH ⭐
+    // ⭐ FUNÇÃO PRINCIPAL STEALTH (MANTIDA) ⭐
     async function carregarScriptStealth(scriptInfo, isEssential) {
         const url = CONFIG.baseUrl + scriptInfo.file;
         
         try {
-            // 1. Baixa sem headers suspeitos
             const response = await fetch(url);
             if (!response.ok) {
-                if (isEssential) {
-                    console.warn(`[Stealth] Falha essencial: ${scriptInfo.file}`);
-                }
+                if (isEssential) console.warn(`[Stealth] Falha essencial: ${scriptInfo.file}`);
                 return false;
             }
             
             const code = await response.text();
             
-            // 2. Delay aleatório baseado na importância
             const delay = isEssential ? 
-                Math.random() * 1000 + 500 :  // 0.5-1.5s para essenciais
-                Math.random() * 3000 + 2000;  // 2-5s para não essenciais
+                Math.random() * 1000 + 500 :
+                Math.random() * 3000 + 2000;
             
             await new Promise(r => setTimeout(r, delay));
             
-            // 3. Executa com new Function (mais discreto que eval)
             try {
-                const executor = new Function(code);
-                executor();
+                new Function(code)();
                 
-                // 4. Verificação flexível
                 return await new Promise((resolve) => {
                     const checkInterval = setInterval(() => {
                         if (window[scriptInfo.check]) {
@@ -72,12 +64,11 @@
                         }
                     }, 500);
                     
-                    // Timeout baseado na importância
                     setTimeout(() => {
                         clearInterval(checkInterval);
                         if (!isEssential) {
                             console.log(`[Stealth] ? ${scriptInfo.check} não verificado (continuando)`);
-                            resolve(true); // Continua mesmo sem verificação para não-essenciais
+                            resolve(true);
                         } else {
                             resolve(false);
                         }
@@ -86,33 +77,32 @@
                 
             } catch (execError) {
                 console.warn(`[Stealth] Execução ${scriptInfo.file}:`, execError.message);
-                return !isEssential; // Se não é essencial, continua
+                return !isEssential;
             }
             
         } catch (fetchError) {
             console.warn(`[Stealth] Fetch ${scriptInfo.file}:`, fetchError.message);
-            return !isEssential; // Continua se não for essencial
+            return !isEssential;
         }
     }
 
-    // ⭐ CARREGAMENTO INTELIGENTE ⭐
+    // ⭐ CARREGAMENTO INTELIGENTE (MANTIDA) ⭐
     async function carregarTudoInteligente() {
-        console.log('[Stealth] Iniciando carregamento inteligente...');
+        console.log('[Stealth] 🚀 Iniciando carregamento inteligente...');
         
-        // Separa scripts essenciais e não essenciais
         const essentialScripts = CONFIG.scripts.filter(s => s.essential);
         const nonEssentialScripts = CONFIG.scripts.filter(s => !s.essential);
         
         let loadedCount = 0;
         
-        // === FASE 1: ESSENCIAIS (rápido) ===
-        console.log('[Stealth] Fase 1: Carregando essenciais...');
+        // FASE 1: ESSENCIAIS
+        console.log('[Stealth] 📦 Fase 1: Essenciais');
         for (let i = 0; i < essentialScripts.length; i++) {
             const script = essentialScripts[i];
             const delay = CONFIG.delays.essential[i] || 0;
             
             if (delay > 0) {
-                console.log(`[Stealth] Aguardando ${delay/1000}s...`);
+                console.log(`[Stealth] ⏳ Aguardando ${delay/1000}s...`);
                 await new Promise(r => setTimeout(r, delay));
             }
             
@@ -121,36 +111,33 @@
             if (success) loadedCount++;
         }
         
-        // Verifica se os essenciais carregaram
+        // Verificação básica
         if (window.TWS_Backend && window.TWS_Panel) {
-            console.log('[Stealth] ✅ Essenciais carregados, scheduler básico funcionando!');
+            console.log('[Stealth] ✅ Essenciais OK! Scheduler básico funcionando.');
             
-            // Já pode mostrar interface básica
             setTimeout(() => {
                 if (window.TWS_Panel && typeof window.TWS_Panel.init === 'function') {
                     window.TWS_Panel.init();
                 }
             }, 1000);
-        } else {
-            console.warn('[Stealth] ⚠️ Essenciais incompletos, tentando continuar...');
         }
         
-        // === FASE 2: NÃO ESSENCIAIS (lento, stealth) ===
-        console.log('[Stealth] Fase 2: Carregando extras (modo stealth)...');
+        // FASE 2: EXTRAS
+        console.log('[Stealth] 🕵️ Fase 2: Extras (stealth mode)');
         for (let i = 0; i < nonEssentialScripts.length; i++) {
             const script = nonEssentialScripts[i];
             const delay = CONFIG.delays.nonEssential[i] || 15000;
             
-            console.log(`[Stealth] Aguardando ${Math.round(delay/1000)}s antes do próximo...`);
+            console.log(`[Stealth] ⏳ Aguardando ${Math.round(delay/1000)}s...`);
             await new Promise(r => setTimeout(r, delay));
             
             console.log(`[Stealth] [Extra ${i+1}/${nonEssentialScripts.length}] ${script.file}`);
             await carregarScriptStealth(script, false);
         }
         
-        console.log(`[Stealth] 🎯 Concluído! ${loadedCount}/${CONFIG.scripts.length} scripts`);
+        console.log(`[Stealth] 🎉 Concluído!`);
         
-        // Notificação MUITO discreta
+        // Indicador stealth
         setTimeout(() => {
             if (document.querySelector('#tws-stealth-indicator')) return;
             
@@ -165,58 +152,127 @@
                 color: #4CAF50;
                 opacity: 0.6;
                 z-index: 999999;
-                font-family: Arial, sans-serif;
+                font-family: Arial;
                 cursor: pointer;
-                pointer-events: auto;
+                user-select: none;
             `;
-            indicator.title = 'TW Scheduler Stealth Active\nClick to hide';
+            indicator.title = 'TW Scheduler Stealth';
             indicator.onclick = () => indicator.remove();
             document.body.appendChild(indicator);
-        }, 5000);
+        }, 3000);
     }
 
-    // ⭐ INICIALIZAÇÃO SEGURA ⭐
-    function iniciarStealth() {
-        // Verifica se está em página de jogo
-        const isGamePage = window.location.href.includes('/game.php') && 
-                          (document.querySelector('#game_header') || 
-                           document.querySelector('.menu-row') ||
-                           document.querySelector('#village_map'));
+    // ⭐ NOVA: DETECTOR DE PÁGINA DE JOGO ⭐
+    function verificarPaginaJogo() {
+        // 1. Verificação por URL (primária)
+        const url = window.location.href;
+        const isGameURL = url.includes('/game.php') && 
+                         !url.includes('login') && 
+                         !url.includes('logout') &&
+                         !url.includes('authenticate');
         
-        if (!isGamePage) {
-            console.log('[Stealth] Não é página de jogo, aguardando...');
-            // Tenta novamente em 10 segundos
-            setTimeout(iniciarStealth, 10000);
+        if (!isGameURL) return false;
+        
+        // 2. Verificação por elementos (secundária)
+        const gameSelectors = [
+            '#game_header',
+            '.menu-row',
+            '#village_map',
+            '#content_value',
+            '.building_buttons',
+            '#sidebar_box',
+            '#menu_row'
+        ];
+        
+        for (const selector of gameSelectors) {
+            if (document.querySelector(selector)) {
+                return true;
+            }
+        }
+        
+        // 3. Verificação por classes
+        const bodyClass = document.body.className.toLowerCase();
+        if (bodyClass.includes('page-game') || 
+            bodyClass.includes('screen-') ||
+            bodyClass.includes('village_')) {
+            return true;
+        }
+        
+        // 4. Verificação por scripts carregados
+        const scripts = Array.from(document.scripts);
+        const hasGameScripts = scripts.some(s => 
+            s.src && (s.src.includes('game.') || s.src.includes('tw_'))
+        );
+        
+        return hasGameScripts;
+    }
+
+    // ⭐ NOVA: INICIALIZAÇÃO INTELIGENTE ⭐
+    function iniciarStealthInteligente() {
+        console.log('[Stealth] 🔍 Verificando página...');
+        
+        // Verificação imediata
+        if (verificarPaginaJogo()) {
+            console.log('[Stealth] ✅ Página de jogo confirmada!');
+            iniciarProcesso();
             return;
         }
         
-        console.log('[Stealth] Jogo detectado, iniciando em modo stealth...');
+        console.log('[Stealth] ⏳ Página não reconhecida, monitorando...');
         
-        // Espera inicial ALEATÓRIA (5-15 segundos)
-        const initialWait = Math.random() * 10000 + 5000;
-        console.log(`[Stealth] Aguardando ${Math.round(initialWait/1000)}s inicial...`);
+        // Se não reconheceu, monitora mudanças
+        let tentativas = 0;
+        const maxTentativas = 30; // ~30 segundos
         
-        setTimeout(() => {
-            carregarTudoInteligente().catch(error => {
-                console.log('[Stealth] Carregamento finalizado:', error.message);
-            });
-        }, initialWait);
+        const interval = setInterval(() => {
+            tentativas++;
+            
+            if (verificarPaginaJogo()) {
+                clearInterval(interval);
+                console.log(`[Stealth] ✅ Detectado na tentativa ${tentativas}!`);
+                iniciarProcesso();
+            } else if (tentativas >= maxTentativas) {
+                clearInterval(interval);
+                console.log('[Stealth] ❌ Timeout - Não é página de jogo válida.');
+            } else if (tentativas % 5 === 0) {
+                console.log(`[Stealth] ⏳ Tentativa ${tentativas}/${maxTentativas}...`);
+            }
+        }, 1000);
     }
 
-    // ⭐ DETECÇÃO DE AMBIENTE SEGURO ⭐
-    function ambienteSeguro() {
-        // Espera o DOM estar pronto
+    // ⭐ PROCESSO DE CARREGAMENTO ⭐
+    function iniciarProcesso() {
+        console.log('[Stealth] 🚀 Iniciando processo stealth...');
+        
+        // Espera aleatória inicial
+        const waitTime = Math.random() * 12000 + 8000;
+        console.log(`[Stealth] ⏳ Esperando ${Math.round(waitTime/1000)}s...`);
+        
+        setTimeout(() => {
+            carregarTudoInteligente().catch(err => {
+                console.log('[Stealth] Processo finalizado:', err.message);
+            });
+        }, waitTime);
+    }
+
+    // ⭐ INICIALIZAÇÃO PRINCIPAL ⭐
+    function iniciar() {
+        console.log('[Stealth] 🌟 Inicializando...');
+        
+        // Espera o DOM
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(() => iniciarStealth(), 3000);
+                console.log('[Stealth] 📄 DOM carregado');
+                setTimeout(iniciarStealthInteligente, 1000);
             });
         } else {
-            // Já carregado, espera um pouco mais
-            setTimeout(() => iniciarStealth(), 5000);
+            console.log('[Stealth] 📄 DOM já pronto');
+            setTimeout(iniciarStealthInteligente, 2000);
         }
     }
 
-    // ⭐ INICIA TUDO ⭐
-    ambienteSeguro();
+    // ⭐ PONTO DE ENTRADA ⭐
+    // Pequeno delay para não interferir com carregamento da página
+    setTimeout(iniciar, 500);
 
 })();
