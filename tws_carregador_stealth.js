@@ -26,8 +26,6 @@
             this.isMinimized = false;
             
             this.scriptNames = {
-                'tw-antibot.js': 'AntiBot',
-                'tw-antibot-modal.js': 'AntiBot Modal',
                 'telegram-bot.js': 'Telegram Bot',
                 'tw-scheduler-backend.js': 'Backend do Scheduler',
                 'tw-scheduler-multitab-lock.js': 'Proteção MultiTab',
@@ -424,8 +422,6 @@
             { file: 'tw-scheduler-bbcode-modal.js', check: 'TWS_BBCodeModal', essential: false },
             { file: 'tw-scheduler-test-modal.js', check: 'TWS_TestModal', essential: false },
             { file: 'tw-scheduler-farm-modal.js', check: 'TWS_FarmInteligente', essential: false },
-            { file: 'tw-antibot.js', check: 'Antibot', essential: false },
-            { file: 'tw-antibot-modal.js', check: 'TWS_AntiBotModal', essential: false },
             
             // 5. Telegram bot - NÃO ESSENCIAL
             { file: 'telegram-bot.js', check: 'TelegramBotReal', essential: false },
@@ -602,8 +598,6 @@
             { nome: 'Farm Modal', var: 'TWS_FarmInteligente', critico: false },
             { nome: 'MultiTab Lock', var: 'TWS_MultiTabLock', critico: false },
             { nome: 'Telegram Bot', var: 'TelegramBotReal', critico: false },
-            { nome: 'AntiBot', var: 'Antibot', critico: false },
-            { nome: 'AntiBot Modal', var: 'TWS_AntiBotModal', critico: false },
             { nome: 'Frontend/Panel', var: 'TWS_Panel', critico: true }
         ];
         
