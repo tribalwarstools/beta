@@ -1,361 +1,179 @@
-// tws_carregador_stealth.js - VERSÃO 2.4 OTIMIZADA
+// tws_carregador_stealth.js - VERSÃO 3.0 OTIMIZADA
 (function() {
     'use strict';
 
-    if (window.__TWS_STEALTH_CARREGADOR_V2) {
+    if (window.__TWS_STEALTH_V3) {
         console.log('[Stealth] Já carregado, ignorando...');
         return;
     }
-    window.__TWS_STEALTH_CARREGADOR_V2 = Date.now();
+    window.__TWS_STEALTH_V3 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 2.4 (Otimizada)');
+    console.log('[Stealth] Inicializado - Versão 3.0 (Turbo)');
 
     // ============================================
-    // SISTEMA DE NOTIFICAÇÕES OTIMIZADO
+    // NOTIFICAÇÃO ULTRA MINIMALISTA
     // ============================================
-    class ProgressNotifier {
+    class TurboNotifier {
         constructor() {
-            this.notification = null;
-            this.progressBar = null;
-            this.stepText = null;
-            this.currentStep = 0;
-            this.totalSteps = 3; // Reduzido para 3 fases
-            this.createNotification();
+            this.step = 0;
+            this.maxSteps = 3; // Reduzido para 3 fases
+            this.createIndicator();
         }
         
-        createNotification() {
-            // Remover notificação anterior se existir
-            const oldNotif = document.getElementById('tws-progress-notification');
-            if (oldNotif && oldNotif.parentNode) {
-                oldNotif.parentNode.removeChild(oldNotif);
-            }
+        createIndicator() {
+            // Remove previous
+            const old = document.getElementById('tws-turbo-indicator');
+            if (old) old.remove();
             
-            this.notification = document.createElement('div');
-            this.notification.id = 'tws-progress-notification';
-            this.notification.style.cssText = `
+            this.indicator = document.createElement('div');
+            this.indicator.id = 'tws-turbo-indicator';
+            this.indicator.style.cssText = `
                 position: fixed;
                 top: 10px;
                 right: 10px;
-                width: 300px;
-                background: rgba(26, 26, 26, 0.95);
-                border-left: 4px solid #654321;
-                border-radius: 4px;
-                padding: 12px;
+                background: rgba(26, 26, 26, 0.9);
+                border-left: 3px solid #654321;
+                padding: 8px 12px;
                 z-index: 999998;
                 font-family: Arial, sans-serif;
-                color: #f1e1c1;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.5);
-                backdrop-filter: blur(5px);
-                display: none;
-            `;
-            
-            const title = document.createElement('div');
-            title.style.cssText = `
-                font-size: 13px;
-                font-weight: bold;
-                margin-bottom: 8px;
-                color: #d4b35d;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            `;
-            title.innerHTML = '⏳ <span>TW Scheduler</span>';
-            
-            this.stepText = document.createElement('div');
-            this.stepText.style.cssText = `
                 font-size: 11px;
-                margin: 6px 0;
-                color: #95a5a6;
+                color: #d4b35d;
+                border-radius: 3px;
+                display: none;
+                backdrop-filter: blur(2px);
             `;
-            this.stepText.textContent = 'Inicializando...';
-            
-            this.progressBar = document.createElement('div');
-            this.progressBar.style.cssText = `
-                height: 3px;
-                background: linear-gradient(90deg, #27ae60 0%, #2ecc71 100%);
-                width: 0%;
-                border-radius: 2px;
-                margin-top: 8px;
-                transition: width 0.3s ease;
-            `;
-            
-            this.notification.appendChild(title);
-            this.notification.appendChild(this.stepText);
-            this.notification.appendChild(this.progressBar);
-            document.body.appendChild(this.notification);
+            this.indicator.textContent = '🔄 TW Scheduler';
+            document.body.appendChild(this.indicator);
         }
         
-        show() {
-            if (this.notification) {
-                this.notification.style.display = 'block';
-                setTimeout(() => {
-                    if (this.notification && this.currentStep < this.totalSteps) {
-                        this.notification.style.display = 'none';
-                    }
-                }, 4000);
-            }
-        }
-        
-        update(step, message) {
-            this.currentStep = step;
-            const progress = (step / this.totalSteps) * 100;
+        update(phase, message) {
+            this.step = phase;
+            const percent = Math.round((phase / this.maxSteps) * 100);
             
-            if (this.progressBar) {
-                this.progressBar.style.width = `${progress}%`;
-            }
-            
-            if (this.stepText) {
-                this.stepText.textContent = message;
-            }
-            
-            if (step === 1) {
-                this.show();
-            }
-            
-            if (step >= this.totalSteps) {
-                setTimeout(() => this.showSuccess(), 500);
-            }
-        }
-        
-        showSuccess() {
-            if (!this.notification) return;
-            
-            this.notification.style.borderLeftColor = '#27ae60';
-            this.stepText.textContent = '✅ Carregamento completo';
-            this.stepText.style.color = '#27ae60';
-            this.progressBar.style.width = '100%';
-            
-            setTimeout(() => {
-                if (this.notification && this.notification.parentNode) {
-                    this.notification.parentNode.removeChild(this.notification);
+            if (this.indicator) {
+                const colors = ['#e74c3c', '#f39c12', '#27ae60'];
+                this.indicator.style.borderLeftColor = colors[phase - 1] || colors[0];
+                this.indicator.textContent = `🔄 TW: ${percent}%`;
+                this.indicator.style.display = 'block';
+                
+                // Auto-hide after 2 seconds if not complete
+                if (phase < this.maxSteps) {
+                    setTimeout(() => {
+                        if (this.indicator) this.indicator.style.display = 'none';
+                    }, 2000);
                 }
-            }, 2000);
+            }
+            
+            console.log(`[Stealth] ${message} (${percent}%)`);
         }
         
-        hide() {
-            if (this.notification && this.notification.parentNode) {
-                this.notification.parentNode.removeChild(this.notification);
+        success() {
+            if (this.indicator) {
+                this.indicator.style.borderLeftColor = '#27ae60';
+                this.indicator.textContent = '✅ TW Pronto';
+                setTimeout(() => {
+                    if (this.indicator) this.indicator.style.display = 'none';
+                }, 2000);
             }
+            console.log('[Stealth] ✅ Sistema pronto!');
         }
     }
 
-    const progressNotifier = new ProgressNotifier();
+    const notifier = new TurboNotifier();
 
-    // ⭐ CONFIGURAÇÃO OTIMIZADA ⭐
-    const CONFIG = {
+    // ⭐ CONFIGURAÇÃO TURBO ⭐
+    const TURBO_CONFIG = {
         baseUrl: 'https://tribalwarstools.github.io/beta/',
         
         // ORDEM OTIMIZADA: Paralelismo inteligente
-        scripts: [
-            // FASE 1: Core essencial (carrega primeiro)
-            { 
-                file: 'tw-scheduler-backend.js', 
-                check: 'TWS_Backend', 
-                phase: 1,
-                timeout: 10000
-            },
+        scripts: {
+            // FASE 1: CORE (carrega imediatamente)
+            phase1: [
+                { 
+                    file: 'tw-scheduler-backend.js', 
+                    check: 'TWS_Backend',
+                    priority: 'critical'
+                }
+            ],
             
-            // FASE 2: Modais principais (carregam em paralelo)
-            { 
-                file: 'tw-scheduler-modal.js', 
-                check: 'TWS_Modal', 
-                phase: 2,
-                timeout: 8000
-            },
-            { 
-                file: 'tw-scheduler-farm-modal.js', 
-                check: 'TWS_FarmInteligente', 
-                phase: 2,
-                timeout: 8000
-            },
-            { 
-                file: 'tw-scheduler-config-modal.js', 
-                check: 'TWS_ConfigModal', 
-                phase: 2,
-                timeout: 8000
-            },
+            // FASE 2: ESSENCIAIS (carregam em paralelo após core)
+            phase2: [
+                { 
+                    file: 'tw-scheduler-modal.js', 
+                    check: 'TWS_Modal',
+                    priority: 'high'
+                },
+                { 
+                    file: 'tw-scheduler-farm-modal.js', 
+                    check: 'TWS_FarmInteligente',
+                    priority: 'high'
+                },
+                { 
+                    file: 'tw-scheduler-frontend.js', 
+                    check: 'TWS_Panel',
+                    priority: 'high'
+                }
+            ],
             
-            // FASE 3: Frontend e extras (últimos)
-            { 
-                file: 'tw-scheduler-frontend.js', 
-                check: 'TWS_Panel', 
-                phase: 3,
-                timeout: 15000
-            },
-            { 
-                file: 'tw-scheduler-bbcode-modal.js', 
-                check: 'TWS_BBCodeModal', 
-                phase: 3,
-                timeout: 5000
-            },
-            { 
-                file: 'tw-scheduler-test-modal.js', 
-                check: 'TWS_TestModal', 
-                phase: 3,
-                timeout: 5000
-            },
-            { 
-                file: 'tw-scheduler-multitab-lock.js', 
-                check: 'TWS_MultiTabLock', 
-                phase: 3,
-                timeout: 5000
-            },
-            { 
-                file: 'telegram-bot.js', 
-                check: 'TelegramBotReal', 
-                phase: 3,
-                timeout: 5000
-            }
-        ]
+            // FASE 3: EXTRAS (carregam em background)
+            phase3: [
+                { 
+                    file: 'tw-scheduler-config-modal.js', 
+                    check: 'TWS_ConfigModal',
+                    priority: 'medium'
+                },
+                { 
+                    file: 'tw-scheduler-bbcode-modal.js', 
+                    check: 'TWS_BBCodeModal',
+                    priority: 'low'
+                },
+                { 
+                    file: 'tw-scheduler-test-modal.js', 
+                    check: 'TWS_TestModal',
+                    priority: 'low'
+                },
+                { 
+                    file: 'tw-scheduler-multitab-lock.js', 
+                    check: 'TWS_MultiTabLock',
+                    priority: 'medium'
+                },
+                { 
+                    file: 'telegram-bot.js', 
+                    check: 'TelegramBotReal',
+                    priority: 'low'
+                }
+            ]
+        },
+        
+        // Timeouts otimizados
+        timeouts: {
+            critical: 10000,  // 10s para core
+            high: 8000,       // 8s para essenciais
+            medium: 6000,     // 6s para médios
+            low: 4000         // 4s para baixos
+        }
     };
 
-    // ⭐ FUNÇÃO DE CARREGAMENTO PARALELO ⭐
-    async function loadScriptParallel(scriptInfo) {
-        const url = CONFIG.baseUrl + scriptInfo.file;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), scriptInfo.timeout);
+    // ⭐ DETECTOR DE PÁGINA TURBO ⭐
+    function detectarPaginaTurbo() {
+        // Verificação ULTRA rápida
+        const url = window.location.href;
         
-        try {
-            // Fetch com timeout
-            const response = await fetch(url, { 
-                signal: controller.signal,
-                cache: 'no-cache'
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                console.warn(`[Stealth] HTTP ${response.status}: ${scriptInfo.file}`);
-                return false;
-            }
-            
-            const code = await response.text();
-            
-            // Execute imediatamente
-            new Function(code)();
-            
-            // Verificação rápida
-            return await new Promise((resolve) => {
-                let attempts = 0;
-                const maxAttempts = 5;
-                const checkInterval = 300;
-                
-                const check = () => {
-                    attempts++;
-                    
-                    if (window[scriptInfo.check]) {
-                        console.log(`[Stealth] ✓ ${scriptInfo.file}`);
-                        resolve(true);
-                    } else if (attempts >= maxAttempts) {
-                        console.log(`[Stealth] → ${scriptInfo.file} (timeout check)`);
-                        resolve(false);
-                    } else {
-                        setTimeout(check, checkInterval);
-                    }
-                };
-                
-                check();
-            });
-            
-        } catch (error) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-                console.warn(`[Stealth] Timeout: ${scriptInfo.file}`);
-            } else {
-                console.warn(`[Stealth] Erro: ${scriptInfo.file}`, error.message);
-            }
+        // 1. Check URL (fastest)
+        if (!url.includes('game.php') && !url.includes('screen=')) {
             return false;
         }
-    }
-
-    // ⭐ CARREGAMENTO POR FASES COM PARALELISMO ⭐
-    async function carregarPorFases() {
-        console.log('[Stealth] 🚀 Iniciando carregamento otimizado...');
-        progressNotifier.update(1, 'Carregando sistema base...');
         
-        // FASE 1: Sistema base (crítico)
-        const fase1Scripts = CONFIG.scripts.filter(s => s.phase === 1);
-        console.log(`[Stealth] Fase 1: ${fase1Scripts.length} script(s) base`);
+        // 2. Check for ANY tribalwars element (single query for speed)
+        const quickCheck = document.querySelector('#game_header, .menu-row, #village_map, .vis');
+        if (quickCheck) return true;
         
-        for (const script of fase1Scripts) {
-            await loadScriptParallel(script);
-        }
-        
-        // Pequena pausa para estabilização
-        await new Promise(r => setTimeout(r, 1000));
-        progressNotifier.update(2, 'Carregando módulos principais...');
-        
-        // FASE 2: Módulos principais (em paralelo)
-        const fase2Scripts = CONFIG.scripts.filter(s => s.phase === 2);
-        console.log(`[Stealth] Fase 2: ${fase2Scripts.length} módulos (paralelo)`);
-        
-        // Carrega em paralelo com limite de concorrência
-        const parallelLimit = 2;
-        for (let i = 0; i < fase2Scripts.length; i += parallelLimit) {
-            const batch = fase2Scripts.slice(i, i + parallelLimit);
-            await Promise.allSettled(batch.map(script => loadScriptParallel(script)));
-            await new Promise(r => setTimeout(r, 500)); // Pequeno delay entre batches
-        }
-        
-        progressNotifier.update(3, 'Finalizando interface...');
-        
-        // FASE 3: Interface e extras (paralelo com prioridade no frontend)
-        const fase3Scripts = CONFIG.scripts.filter(s => s.phase === 3);
-        console.log(`[Stealth] Fase 3: ${fase3Scripts.length} módulos finais`);
-        
-        // Frontend primeiro
-        const frontend = fase3Scripts.find(s => s.file === 'tw-scheduler-frontend.js');
-        if (frontend) {
-            await loadScriptParallel(frontend);
-        }
-        
-        // Resto em paralelo
-        const outros = fase3Scripts.filter(s => s.file !== 'tw-scheduler-frontend.js');
-        await Promise.allSettled(outros.map(script => loadScriptParallel(script)));
-        
-        // Verificação final rápida
-        await new Promise(r => setTimeout(r, 2000));
-        console.log('[Stealth] ✅ Carregamento completo');
-        progressNotifier.update(3, 'Sistema pronto!');
-        
-        // Indicador minimalista
-        setTimeout(() => {
-            if (!document.querySelector('#tws-minimal-indicator')) {
-                const indicator = document.createElement('div');
-                indicator.id = 'tws-minimal-indicator';
-                indicator.textContent = 'TW✓';
-                indicator.style.cssText = `
-                    position: fixed;
-                    bottom: 2px;
-                    right: 2px;
-                    font-size: 9px;
-                    color: #4CAF50;
-                    opacity: 0.3;
-                    z-index: 999997;
-                    font-family: Arial, sans-serif;
-                    cursor: default;
-                    user-select: none;
-                    pointer-events: none;
-                `;
-                document.body.appendChild(indicator);
-            }
-        }, 1000);
-    }
-
-    // ⭐ DETECÇÃO INTELIGENTE DE PÁGINA ⭐
-    function detectarPaginaJogo() {
-        // Verificação rápida por URL
-        if (!window.location.href.includes('/game.php')) return false;
-        
-        // Verificação por elementos com timeout
-        const elementosChave = [
-            '#game_header',
-            '.menu-row',
-            '#village_map'
-        ];
-        
-        for (const selector of elementosChave) {
-            if (document.querySelector(selector)) {
+        // 3. Check for game header text (fallback)
+        const headers = document.querySelectorAll('h1, h2, h3, .header');
+        for (const header of headers) {
+            if (header.textContent.includes('Tribal Wars') || 
+                header.textContent.includes('Village') ||
+                header.textContent.includes('World')) {
                 return true;
             }
         }
@@ -363,51 +181,186 @@
         return false;
     }
 
-    // ⭐ INICIALIZAÇÃO RÁPIDA ⭐
-    async function iniciarCarregamentoRapido() {
-        if (!detectarPaginaJogo()) {
-            console.log('[Stealth] ⏳ Aguardando página do jogo...');
-            
-            // Tenta detectar novamente após 3 segundos
-            setTimeout(() => {
-                if (detectarPaginaJogo()) {
-                    console.log('[Stealth] ✅ Página detectada (tentativa 2)');
-                    carregarPorFases().catch(console.error);
+    // ⭐ LOADER TURBO (com cache e paralelismo) ⭐
+    async function carregarScriptTurbo(scriptInfo) {
+        const url = TURBO_CONFIG.baseUrl + scriptInfo.file;
+        const cacheKey = `tws_cache_${scriptInfo.file}`;
+        
+        try {
+            // Tentar cache primeiro
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                console.log(`[Turbo] ♻️ Cache: ${scriptInfo.file}`);
+                try {
+                    new Function(cached)();
+                    if (window[scriptInfo.check]) return true;
+                } catch (e) {
+                    console.log(`[Turbo] Cache inválido: ${scriptInfo.file}`);
+                    localStorage.removeItem(cacheKey);
                 }
-            }, 3000);
+            }
             
+            // Fetch com timeout otimizado
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), TURBO_CONFIG.timeouts[scriptInfo.priority]);
+            
+            const response = await fetch(url, {
+                signal: controller.signal,
+                cache: 'default'
+            });
+            
+            clearTimeout(timeout);
+            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const code = await response.text();
+            
+            // Salvar no cache (exceto para updates frequentes)
+            if (!scriptInfo.file.includes('frontend')) {
+                try {
+                    localStorage.setItem(cacheKey, code);
+                    localStorage.setItem(cacheKey + '_time', Date.now());
+                } catch (e) {
+                    // Ignora erros de quota
+                }
+            }
+            
+            // Executar
+            new Function(code)();
+            
+            // Verificação rápida
+            return await new Promise(resolve => {
+                const start = Date.now();
+                const check = () => {
+                    if (window[scriptInfo.check]) {
+                        console.log(`[Turbo] ✓ ${scriptInfo.file} (${Date.now() - start}ms)`);
+                        resolve(true);
+                    } else if (Date.now() - start > 3000) { // Max 3s wait
+                        console.log(`[Turbo] ⏱️ ${scriptInfo.check} não verificado (timeout)`);
+                        resolve(false);
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                check();
+            });
+            
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log(`[Turbo] ⏱️ Timeout: ${scriptInfo.file}`);
+            } else {
+                console.log(`[Turbo] ❌ ${scriptInfo.file}: ${error.message}`);
+            }
+            return false;
+        }
+    }
+
+    // ⭐ CARREGAMENTO PARALELO INTELIGENTE ⭐
+    async function carregarParalelo(scripts, phaseName) {
+        console.log(`[Turbo] 🚀 ${phaseName}: ${scripts.length} scripts`);
+        
+        // Limitar paralelismo para evitar overload
+        const BATCH_SIZE = 2;
+        const results = [];
+        
+        for (let i = 0; i < scripts.length; i += BATCH_SIZE) {
+            const batch = scripts.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(async (script, idx) => {
+                // Pequeno stagger entre scripts do mesmo batch
+                if (idx > 0) await new Promise(r => setTimeout(r, 500));
+                return await carregarScriptTurbo(script);
+            });
+            
+            const batchResults = await Promise.allSettled(batchPromises);
+            results.push(...batchResults);
+            
+            // Pequena pausa entre batches
+            if (i + BATCH_SIZE < scripts.length) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+        
+        return results.filter(r => r.status === 'fulfilled' && r.value).length;
+    }
+
+    // ⭐ PROCESSO TURBO PRINCIPAL ⭐
+    async function iniciarTurbo() {
+        if (!detectarPaginaTurbo()) {
+            console.log('[Turbo] ⏳ Aguardando página do jogo...');
+            // Tenta novamente em 2 segundos
+            setTimeout(iniciarTurbo, 2000);
             return;
         }
         
-        console.log('[Stealth] ✅ Página do jogo detectada');
+        console.log('[Turbo] ✅ Página detectada! Iniciando...');
         
-        // Delay inicial aleatório reduzido
-        const delayInicial = Math.random() * 3000 + 1000;
-        console.log(`[Stealth] ⏳ Iniciando em ${Math.round(delayInicial/1000)}s...`);
+        // Delay stealth mínimo
+        await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
         
+        // === FASE 1: CORE ===
+        notifier.update(1, 'Carregando sistema base');
+        await carregarParalelo(TURBO_CONFIG.scripts.phase1, 'Fase 1 - Core');
+        
+        // === FASE 2: ESSENCIAIS ===
+        notifier.update(2, 'Carregando interface');
+        await carregarParalelo(TURBO_CONFIG.scripts.phase2, 'Fase 2 - Essenciais');
+        
+        // === FASE 3: EXTRAS (background) ===
+        notifier.update(3, 'Finalizando módulos');
+        carregarParalelo(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Extras')
+            .then(() => {
+                console.log('[Turbo] ✅ Todos os módulos carregados');
+            })
+            .catch(e => console.log('[Turbo] ⚠️ Extras:', e));
+        
+        // Verificação rápida do sistema
         setTimeout(() => {
-            carregarPorFases().catch(err => {
-                console.error('[Stealth] Erro no carregamento:', err);
-                progressNotifier.hide();
-            });
-        }, delayInicial);
+            const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
+            if (essentialsLoaded) {
+                notifier.success();
+                
+                // Adicionar indicador permanente minimalista
+                if (!document.querySelector('#tws-active-badge')) {
+                    const badge = document.createElement('div');
+                    badge.id = 'tws-active-badge';
+                    badge.textContent = '✓';
+                    badge.style.cssText = `
+                        position: fixed;
+                        bottom: 2px;
+                        right: 2px;
+                        font-size: 8px;
+                        color: #27ae60;
+                        opacity: 0.3;
+                        z-index: 999997;
+                        font-family: monospace;
+                        pointer-events: none;
+                        user-select: none;
+                    `;
+                    document.body.appendChild(badge);
+                }
+            } else {
+                console.log('[Turbo] ⚠️ Sistema parcialmente carregado');
+            }
+        }, 5000);
     }
 
-    // ⭐ PONTO DE ENTRADA OTIMIZADO ⭐
-    function iniciar() {
-        console.log('[Stealth] 🌟 Iniciando carregador otimizado...');
+    // ⭐ INICIALIZAÇÃO TURBO ⭐
+    function init() {
+        console.log('[Turbo] 🌟 Inicializando...');
         
-        // Verifica se já está pronto
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            setTimeout(iniciarCarregamentoRapido, 500);
-        } else {
+        // Inicia imediatamente se a página já estiver pronta
+        if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(iniciarCarregamentoRapido, 500);
+                console.log('[Turbo] 📄 DOM pronto');
+                setTimeout(iniciarTurbo, 500);
             }, { once: true });
+        } else {
+            console.log('[Turbo] 📄 DOM já carregado');
+            setTimeout(iniciarTurbo, 500);
         }
     }
 
     // Inicia com pequeno delay
-    setTimeout(iniciar, 800);
+    setTimeout(init, 800);
 
 })();
