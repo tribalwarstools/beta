@@ -271,7 +271,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   function testSend() { if (window.TWS_TestModal) window.TWS_TestModal.show(); }
   function Farm() { if (window.TWS_FarmInteligente) window.TWS_FarmInteligente.show(); }
   function Config() { if (window.TWS_ConfigModal) window.TWS_ConfigModal.show(); }
-  function Antibot() { if (window.TWS_AntiBotModal) window.TWS_AntiBotModal.show(); }
 
 
   function exportList() {
@@ -341,7 +340,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.exportList()" style="padding:6px 12px;background:#607D8B;color:white;border:none;border-radius:4px;cursor:pointer;">💾 Exportar</button>
           <button onclick="TWS_Panel.importList()" style="padding:6px 12px;background:#795548;color:white;border:none;border-radius:4px;cursor:pointer;">📂 Importar</button>
           <button onclick="TWS_Panel.Config()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Config</button>
-          </div>
+        </div>
       </div>
       <div id="tws-dashboard" style="margin-bottom:20px;"></div>
       <div style="overflow-x:auto;">
@@ -393,8 +392,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     viewDetails,
     exportList,
     importList,
-    togglePanel,
-    Antibot,
+    togglePanel
   };
 
   // =========================
@@ -409,14 +407,8 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     if(!window.TWS_TestModal) console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
     if(!window.TWS_FarmInteligente) console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
     if(!window.TWS_ConfigModal) console.warn('[TW Scheduler] ⚠️ Modal de Configuração não detectado.');
-    if(!window.TWS_AntiBotModal) console.warn('[TW Scheduler] ⚠️ Modal de AntiBot não detectado.');
     
   },100);
 
 })();
-
-
-
-
-
 
