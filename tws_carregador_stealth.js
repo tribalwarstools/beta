@@ -8,7 +8,9 @@
     }
     window.__TWS_STEALTH_CARREGADOR_V2 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 2.3 (com notificações)');
+    // Informações de versão
+    const VERSAO_CARREGADOR = '2.3';
+    console.log(`[Stealth] Inicializado - Versão ${VERSAO_CARREGADOR} (com notificações) - ${new Date().toLocaleString()}`);
 
     // ============================================
     // SISTEMA DE NOTIFICAÇÕES VISUAIS
@@ -20,12 +22,12 @@
             this.stepText = null;
             this.counter = null;
             this.currentStep = 0;
-            this.totalSteps = 9; // Total de scripts
+            this.totalSteps = 11; // Corrigido: Total de scripts
             this.isMinimized = false;
             
             this.scriptNames = {
-                'tw-antibot.js':'AntiBot'
-                'tw-antibot-modal.js':'AntiBot Modal'
+                'tw-antibot.js': 'AntiBot',
+                'tw-antibot-modal.js': 'AntiBot Modal',
                 'telegram-bot.js': 'Telegram Bot',
                 'tw-scheduler-backend.js': 'Backend do Scheduler',
                 'tw-scheduler-multitab-lock.js': 'Proteção MultiTab',
@@ -439,13 +441,18 @@
         }
     };
 
-    // ⭐ FUNÇÃO PRINCIPAL STEALTH ⭐
+    // ⭐ FUNÇÃO PRINCIPAL STEALTH COM TIMEOUT ⭐
     async function carregarScriptStealth(scriptInfo, isEssential) {
         const url = CONFIG.baseUrl + scriptInfo.file;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
         
         try {
-            // Fetch normal (sem headers suspeitos)
-            const response = await fetch(url);
+            // Fetch com timeout
+            const response = await fetch(url, { 
+                signal: controller.signal 
+            });
+            
             if (!response.ok) {
                 console.warn(`[Stealth] HTTP ${response.status} em ${scriptInfo.file}`);
                 progressNotifier.error(`Falha ao carregar: ${scriptInfo.file}`);
@@ -499,6 +506,8 @@
             console.warn(`[Stealth] Fetch ${scriptInfo.file}:`, fetchError.message);
             progressNotifier.error(`Falha de rede: ${scriptInfo.file}`);
             return !isEssential; // Se não é essencial, continua
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 
@@ -582,23 +591,25 @@
         
         // === VERIFICAÇÃO FINAL ===
         console.log('[Stealth] 🔍 Verificação final...');
-        progressNotifier.update(9, 'Finalizando verificação...');
+        progressNotifier.update(11, 'Finalizando verificação...');
         
         const componentes = [
-            { nome: 'Backend', var: 'TWS_Backend', crítico: true },
-            { nome: 'Config Modal', var: 'TWS_ConfigModal', crítico: false },
-            { nome: 'Modal Principal', var: 'TWS_Modal', crítico: false },
-            { nome: 'BBCode Modal', var: 'TWS_BBCodeModal', crítico: false },
-            { nome: 'Test Modal', var: 'TWS_TestModal', crítico: false },
-            { nome: 'Farm Modal', var: 'TWS_FarmInteligente', crítico: false },
-            { nome: 'MultiTab Lock', var: 'TWS_MultiTabLock', crítico: false },
-            { nome: 'Telegram Bot', var: 'TelegramBotReal', crítico: false },
-            { nome: 'Frontend/Panel', var: 'TWS_Panel', crítico: true }
+            { nome: 'Backend', var: 'TWS_Backend', critico: true },
+            { nome: 'Config Modal', var: 'TWS_ConfigModal', critico: false },
+            { nome: 'Modal Principal', var: 'TWS_Modal', critico: false },
+            { nome: 'BBCode Modal', var: 'TWS_BBCodeModal', critico: false },
+            { nome: 'Test Modal', var: 'TWS_TestModal', critico: false },
+            { nome: 'Farm Modal', var: 'TWS_FarmInteligente', critico: false },
+            { nome: 'MultiTab Lock', var: 'TWS_MultiTabLock', critico: false },
+            { nome: 'Telegram Bot', var: 'TelegramBotReal', critico: false },
+            { nome: 'AntiBot', var: 'Antibot', critico: false },
+            { nome: 'AntiBot Modal', var: 'TWS_AntiBotModal', critico: false },
+            { nome: 'Frontend/Panel', var: 'TWS_Panel', critico: true }
         ];
         
         const total = componentes.length;
         const carregados = componentes.filter(c => window[c.var]).length;
-        const criticosCarregados = componentes.filter(c => c.crítico && window[c.var]).length;
+        const criticosCarregados = componentes.filter(c => c.critico && window[c.var]).length;
         
         console.log(`[Stealth] 📊 ${carregados}/${total} componentes carregados`);
         console.log(`[Stealth] ✅ ${criticosCarregados}/2 componentes críticos (backend + frontend)`);
@@ -630,7 +641,17 @@
                     cursor: default;
                     user-select: none;
                 `;
-                indicator.title = `TW Scheduler Stealth\n${carregados}/${total} módulos carregados`;
+                indicator.title = `TW Scheduler Stealth v${VERSAO_CARREGADOR}\n${carregados}/${total} módulos carregados\n${new Date().toLocaleTimeString()}`;
+                
+                // Adicionar botão para reabrir notificação
+                indicator.onclick = () => {
+                    if (!document.getElementById('tws-progress-notification')) {
+                        progressNotifier.createNotification();
+                        progressNotifier.update(carregados, 'Sistema Operacional');
+                        progressNotifier.showSuccess();
+                    }
+                };
+                
                 document.body.appendChild(indicator);
             }, 3000);
         } else {
@@ -639,9 +660,16 @@
         }
     }
 
-    // ⭐ DETECTOR DE PÁGINA DE JOGO ⭐
+    // ⭐ DETECTOR DE PÁGINA DE JOGO MELHORADO ⭐
     function verificarPaginaJogo() {
         const url = window.location.href;
+        
+        // Verificar se é Tribal Wars
+        if (!window.location.hostname.includes('tribalwars')) {
+            console.log('[Stealth] ❌ Não é domínio do Tribal Wars');
+            return false;
+        }
+        
         const isGameURL = url.includes('/game.php') && 
                          !url.includes('login') && 
                          !url.includes('logout') &&
@@ -656,11 +684,16 @@
             '#content_value',
             '.building_buttons',
             '#sidebar_box',
-            '#menu_row'
+            '#menu_row',
+            '#village_ress',
+            '.quickbar'
         ];
         
         for (const selector of gameSelectors) {
-            if (document.querySelector(selector)) return true;
+            if (document.querySelector(selector)) {
+                console.log(`[Stealth] ✅ Selector de jogo encontrado: ${selector}`);
+                return true;
+            }
         }
         
         return false;
@@ -686,13 +719,13 @@
         setTimeout(() => {
             progressNotifier.stepText.textContent = 'Iniciando carregamento dos módulos...';
             carregarTudoInteligente().catch(err => {
-                console.log('[Stealth] Processo finalizado:', err.message);
+                console.error('[Stealth] Erro no processo principal:', err);
                 progressNotifier.error(`Erro: ${err.message}`);
             });
         }, esperaInicial);
     }
 
-    // ⭐ PONTO DE ENTRADA PRINCIPAL ⭐
+    // ⭐ PONTO DE ENTRADA PRINCIPAL COM TRY-CATCH ⭐
     function iniciar() {
         console.log('[Stealth] 🌟 Inicializando carregador stealth...');
         
@@ -709,7 +742,46 @@
         }
     }
 
-    // Delay inicial para não interferir com carregamento da página
-    setTimeout(iniciar, 1000);
+    // ⭐ TRATAMENTO DE ERROS GLOBAL ⭐
+    try {
+        // Delay inicial para não interferir com carregamento da página
+        setTimeout(() => {
+            try {
+                iniciar();
+            } catch (initError) {
+                console.error('[Stealth] Erro na inicialização:', initError);
+                if (progressNotifier) {
+                    progressNotifier.error(`Erro de inicialização: ${initError.message}`);
+                }
+            }
+        }, 1000);
+        
+        // Capturar erros não tratados
+        window.addEventListener('error', function(e) {
+            console.error('[Stealth] Erro global capturado:', e.error);
+            if (progressNotifier) {
+                progressNotifier.error(`Erro JavaScript: ${e.message}`);
+            }
+        });
+        
+    } catch (globalError) {
+        console.error('[Stealth] Erro fatal no carregador:', globalError);
+        // Tentar mostrar erro mesmo sem notificação
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #e74c3c;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 999999;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        `;
+        errorDiv.textContent = `TW Scheduler Erro: ${globalError.message}`;
+        document.body.appendChild(errorDiv);
+    }
 
 })();
