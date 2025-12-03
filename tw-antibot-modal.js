@@ -6,13 +6,13 @@
     'use strict';
     
     // Verificar se o backend está carregado
-    if (!window.TWBackend) {
+    if (!window.TWS_AntiBotBackend) {
         console.error('[AntiBot Modal] ❌ Backend TWBackend não encontrado!');
         alert('❌ ERRO: Backend AntiBot não carregado!\nCarregue tw-antibot.js primeiro.');
         return;
     }
     
-    const Backend = window.TWBackend;
+    const Backend = window.TWS_AntiBotBackend;
     
     // ============================================
     // CSS DO MODAL
