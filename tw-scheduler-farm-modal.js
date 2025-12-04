@@ -445,664 +445,51 @@
   }
 
   // ═════════════════════════════════════════════════════════
-  // ✅ #7 FUNÇÃO APENAS PARA LOGAR FARMS ATRASADOS (SEM EXECUTAR)
+  // ✅ #7 VERIFICAÇÃO DE FARMS ATRASADOS (SEM RESTRIÇÕES)
   // ═════════════════════════════════════════════════════════
 
-  function apenasLogarFarmsAtrasados() {
+  function verificarFarmsAtrasados() {
+      const lista = getList();
       const farms = getFarmList().filter(f => !f.paused && f.active !== false);
       const now = Date.now();
       
       farms.forEach(farm => {
+          if (farm.agendamentoBaseId >= lista.length) return;
+          
+          const agendamentoBase = lista[farm.agendamentoBaseId];
+          if (!agendamentoBase || agendamentoBase.done || agendamentoBase.locked) return;
+          
           try {
               const nextRun = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : null;
               
+              // ✅ SE HORÁRIO JÁ PASSOU, EXECUTAR IMEDIATAMENTE
               if (nextRun && nextRun < now) {
-                  const atrasoMinutos = Math.floor((now - nextRun) / 60000);
+                  console.log(`[Farm] ⚡ Executando farm atrasado: ${farm.origem} → ${farm.alvo}`);
                   
-                  if (atrasoMinutos > 5) { // Só logar se estiver atrasado mais de 5 minutos
-                      console.warn(`[Farm] ⚠️ Farm atrasado: ${farm.origem} → ${farm.alvo} (${atrasoMinutos} minutos)`);
-                      FarmLogger.log('FARM_ATRASADO', farm, { 
-                          atrasoMinutos,
-                          nextRun: farm.nextRun,
-                          agora: new Date().toISOString()
+                  executeAttack(agendamentoBase)
+                      .then(success => {
+                          if (success) {
+                              agendamentoBase.done = true;
+                              agendamentoBase.success = true;
+                              agendamentoBase.executedAt = new Date().toISOString();
+                              FarmLogger.log('DELAYED_EXECUTION_SUCCESS', farm);
+                          } else {
+                              agendamentoBase.done = true;
+                              agendamentoBase.success = false;
+                              agendamentoBase.error = 'Falha em execução atrasada';
+                              FarmLogger.log('DELAYED_EXECUTION_FAILED', farm);
+                          }
+                          setList(lista);
+                      })
+                      .catch(error => {
+                          console.error('[Farm] Erro em execução atrasada:', error);
+                          FarmLogger.log('DELAYED_EXECUTION_ERROR', farm, { error: error.message });
                       });
-                  }
               }
           } catch (error) {
-              // Ignorar erros de parsing
+              console.error('[Farm] Erro ao verificar farm atrasado:', error);
           }
       });
-  }
-
-  // ═════════════════════════════════════════════════════════
-  // ✅ #8 SISTEMA MICRO FARM
-  // ═════════════════════════════════════════════════════════
-
-  // === FUNÇÃO PARA CRIAR MICRO FARM ===
-  function criarMicroFarm() {
-      const lista = getList();
-      const agendamentos = lista.filter(a => !a.done);
-      
-      if (agendamentos.length === 0) {
-          alert('❌ Nenhum agendamento disponível!');
-          return;
-      }
-      
-      // Interface para selecionar agendamento base
-      let mensagem = '🎯 SELECIONE O AGRUPAMENTO BASE PARA MICRO FARM:\n\n';
-      agendamentos.forEach((agend, idx) => {
-          const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
-          mensagem += `[${idx + 1}] ${agend.origem} → ${agend.alvo}\n`;
-          mensagem += `   🪖 ${tropas}\n\n`;
-      });
-      
-      const escolha = prompt(mensagem + 'Digite o número:');
-      if (!escolha) return;
-      
-      const idxBase = parseInt(escolha) - 1;
-      if (idxBase < 0 || idxBase >= agendamentos.length) {
-          alert('❌ Número inválido!');
-          return;
-      }
-      
-      const agendamentoBase = agendamentos[idxBase];
-      
-      // Configurações do Micro Farm
-      const quantidadeLotes = prompt('Quantidade de lotês (ataques simultâneos)?', '3');
-      const intervaloMicro = prompt('Intervalo entre envios (minutos)?', '2');
-      const pausaPosRetorno = prompt('Pausa pós-retorno (minutos)?', '1');
-      const usarEspioesApenas = confirm('Usar apenas espiões? (Recomendado para Micro Farm)');
-      
-      // Validar
-      if (!quantidadeLotes || !intervaloMicro || pausaPosRetorno === null) {
-          return;
-      }
-      
-      // Calcular tempo total do ciclo
-      const travelTimeToTarget = calculateTravelTime(agendamentoBase.origem, agendamentoBase.alvo, agendamentoBase);
-      const travelTimeMinutes = Math.ceil(travelTimeToTarget / 60);
-      const tempoTotalCiclo = (travelTimeMinutes * 2) + parseInt(pausaPosRetorno);
-      const lotesCalculados = Math.ceil(tempoTotalCiclo / parseInt(intervaloMicro));
-      
-      // Confirmar criação
-      const confirmacao = confirm(
-          `🚀 CRIAR MICRO FARM - ${agendamentoBase.origem} → ${agendamentoBase.alvo}\n\n` +
-          `📊 Configuração:\n` +
-          `• Lotês: ${quantidadeLotes} (calculado: ${lotesCalculados})\n` +
-          `• Intervalo: ${intervaloMicro} minutos\n` +
-          `• Pausa pós-retorno: ${pausaPosRetorno} minutos\n` +
-          `• Tempo total ciclo: ${tempoTotalCiclo} minutos\n` +
-          `• Uso: ${usarEspioesApenas ? 'Apenas espiões' : 'Tropas originais'}\n\n` +
-          `Serão criados ${quantidadeLotes} farms idênticos.`
-      );
-      
-      if (!confirmacao) return;
-      
-      // Criar os lotês
-      const resultados = [];
-      for (let i = 0; i < parseInt(quantidadeLotes); i++) {
-          const success = criarMicroFarmLote(agendamentoBase, i, {
-              quantidadeLotes: parseInt(quantidadeLotes),
-              intervaloMicro: parseInt(intervaloMicro),
-              pausaPosRetorno: parseInt(pausaPosRetorno),
-              usarEspioesApenas: usarEspioesApenas
-          });
-          resultados.push(success ? '✅' : '❌');
-      }
-      
-      alert(`🎉 MICRO FARM CRIADO!\n\n${quantidadeLotes} lotês criados:\n${resultados.join(' ')}\n\nOs farms aparecerão na lista principal.`);
-      
-      // Atualizar interface
-      if (document.getElementById('farm-list-container')) {
-          document.getElementById('farm-list-container').innerHTML = renderFarmList();
-      }
-  }
-
-  // === FUNÇÃO AUXILIAR PARA CRIAR LOTE ===
-  function criarMicroFarmLote(agendamentoBase, numeroLote, config) {
-      try {
-          // Criar novo agendamento baseado no original
-          const novoAgendamento = JSON.parse(JSON.stringify(agendamentoBase));
-          
-          // Ajustar tropas se for usar apenas espiões
-          if (config.usarEspioesApenas) {
-              TROOP_LIST.forEach(u => {
-                  if (u !== 'spy') {
-                      novoAgendamento[u] = 0;
-                  }
-              });
-              // Manter pelo menos 1 espião
-              novoAgendamento.spy = Math.max(novoAgendamento.spy || 0, 1);
-          }
-          
-          // Calcular horário de início escalonado
-          const intervaloMs = config.intervaloMicro * 60000 * numeroLote;
-          const now = new Date();
-          const startTime = new Date(now.getTime() + intervaloMs);
-          
-          novoAgendamento.datetime = formatDateTime(startTime);
-          novoAgendamento.done = false;
-          novoAgendamento.success = false;
-          novoAgendamento.locked = false;
-          novoAgendamento.status = 'pending';
-          novoAgendamento.statusText = `Micro Farm Lote ${numeroLote + 1}`;
-          
-          // Adicionar à lista de agendamentos
-          const lista = getList();
-          const agendamentoIndex = lista.length;
-          lista.push(novoAgendamento);
-          setList(lista);
-          
-          // Criar farm inteligente
-          const farm = {
-              id: generateId(),
-              agendamentoBaseId: agendamentoIndex,
-              origem: novoAgendamento.origem,
-              alvo: novoAgendamento.alvo,
-              troops: {},
-              intervalo: config.intervaloMicro,
-              paused: false,
-              active: true,
-              isMicroFarm: true,
-              microFarmGroup: agendamentoBase.origem + '->' + agendamentoBase.alvo,
-              microFarmLote: numeroLote + 1,
-              stats: { totalRuns: 0, successRuns: 0, lastRun: null },
-              nextRun: novoAgendamento.datetime,
-              created: new Date().toISOString(),
-              lastReturnTime: null,
-              failedAttempts: 0,
-              configMicro: {
-                  pausaPosRetorno: config.pausaPosRetorno,
-                  lotesTotais: config.quantidadeLotes,
-                  intervaloMicro: config.intervaloMicro
-              }
-          };
-          
-          // Copiar tropas
-          TROOP_LIST.forEach(u => {
-              farm.troops[u] = novoAgendamento[u] || 0;
-          });
-          
-          // Adicionar à lista de farms
-          const farms = getFarmList();
-          farms.push(farm);
-          setFarmList(farms);
-          
-          FarmLogger.log('MICRO_FARM_CREATED', farm, {
-              lote: numeroLote + 1,
-              config: config
-          });
-          
-          return true;
-      } catch (error) {
-          console.error('[Micro Farm] Erro ao criar lote:', error);
-          return false;
-      }
-  }
-
-  // === CALCULADORA DE MICRO FARM ===
-  function showMicroFarmCalculator() {
-      const overlay = document.createElement('div');
-      overlay.style.cssText = `
-          position: fixed;
-          top: 0; left: 0;
-          width: 100%; height: 100%;
-          background: rgba(0,0,0,0.8);
-          z-index: 999999;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-      `;
-      
-      overlay.innerHTML = `
-          <div style="
-              background: white;
-              border-radius: 12px;
-              padding: 25px;
-              width: 90%;
-              max-width: 500px;
-              box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-          ">
-              <div style="text-align: center; margin-bottom: 20px;">
-                  <div style="font-size: 24px; font-weight: bold; color: #FF9800; margin-bottom: 5px;">
-                      🧮 Calculadora de Micro Farm
-                  </div>
-                  <div style="color: #666; font-size: 14px;">
-                      Calcule lotês para ataques contínuos
-                  </div>
-              </div>
-              
-              <div style="margin-bottom: 15px;">
-                  <label style="display: block; margin-bottom: 5px; font-weight: bold;">⏱️ Tempo de Ida (minutos):</label>
-                  <input type="number" id="calc-tempoIda" style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px;" value="49">
-              </div>
-              
-              <div style="margin-bottom: 15px;">
-                  <label style="display: block; margin-bottom: 5px; font-weight: bold;">🔄 Intervalo entre Envios (minutos):</label>
-                  <input type="number" id="calc-intervalo" style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px;" value="2">
-              </div>
-              
-              <div style="margin-bottom: 25px;">
-                  <label style="display: block; margin-bottom: 5px; font-weight: bold;">⏸️ Pausa Pós-Retorno (minutos):</label>
-                  <input type="number" id="calc-pausa" style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px;" value="1">
-              </div>
-              
-              <button onclick="calcularMicroFarmLotes()" style="
-                  width: 100%;
-                  padding: 15px;
-                  background: linear-gradient(135deg, #FF9800, #F57C00);
-                  color: white;
-                  border: none;
-                  border-radius: 8px;
-                  font-size: 16px;
-                  font-weight: bold;
-                  cursor: pointer;
-                  margin-bottom: 20px;
-              ">
-                  🎯 Calcular Lotês
-              </button>
-              
-              <div id="calc-resultado" style="
-                  background: #f8f9fa;
-                  padding: 15px;
-                  border-radius: 8px;
-                  border-left: 5px solid #FF9800;
-                  display: none;
-              ">
-                  <div style="font-size: 18px; font-weight: bold; color: #333; text-align: center; margin-bottom: 10px;">
-                      📊 Resultado
-                  </div>
-                  <div id="calc-numeroLotes" style="
-                      font-size: 42px;
-                      font-weight: bold;
-                      text-align: center;
-                      color: #FF9800;
-                      margin: 10px 0;
-                  ">0</div>
-                  <div id="calc-explicacao" style="font-size: 13px; color: #555; line-height: 1.5;"></div>
-              </div>
-              
-              <div style="text-align: center; margin-top: 20px;">
-                  <button onclick="this.parentElement.parentElement.remove()" style="
-                      padding: 10px 20px;
-                      background: #666;
-                      color: white;
-                      border: none;
-                      border-radius: 6px;
-                      cursor: pointer;
-                  ">
-                      Fechar
-                  </button>
-              </div>
-          </div>
-      `;
-      
-      document.body.appendChild(overlay);
-      
-      // Função de cálculo
-      window.calcularMicroFarmLotes = function() {
-          const tempoIda = parseFloat(document.getElementById('calc-tempoIda').value);
-          const intervalo = parseFloat(document.getElementById('calc-intervalo').value);
-          const pausa = parseFloat(document.getElementById('calc-pausa').value);
-          
-          if (!tempoIda || !intervalo || tempoIda <= 0 || intervalo <= 0 || pausa < 0) {
-              alert('Preencha valores válidos!');
-              return;
-          }
-          
-          const tempoVolta = tempoIda; // TW: tempo volta = tempo ida
-          const tempoTotalCiclo = tempoIda + tempoVolta + pausa;
-          const numeroLotes = Math.ceil(tempoTotalCiclo / intervalo);
-          
-          document.getElementById('calc-numeroLotes').textContent = numeroLotes;
-          
-          const explicacao = `
-              <strong>Cálculo:</strong><br>
-              • Tempo de ida: ${tempoIda} min<br>
-              • Tempo de volta: ${tempoVolta} min<br>
-              • Pausa pós-retorno: ${pausa} min<br>
-              • Tempo total do ciclo: ${tempoTotalCiclo} min<br>
-              • Intervalo entre envios: ${intervalo} min<br><br>
-              
-              <strong>Recomendações:</strong><br>
-              • Use ${numeroLotes} lotês idênticos<br>
-              • Envie a cada ${intervalo} minutos<br>
-              • Cada lote aguarda ${pausa} min após retornar<br>
-              • <strong>Dica:</strong> Use apenas espiões para Micro Farm!
-          `;
-          
-          document.getElementById('calc-explicacao').innerHTML = explicacao;
-          document.getElementById('calc-resultado').style.display = 'block';
-      };
-      
-      // Calcular automaticamente ao abrir
-      setTimeout(window.calcularMicroFarmLotes, 100);
-  }
-
-  // === GERENCIAMENTO DE GRUPOS DE MICRO FARM ===
-  function gerenciarMicroFarms() {
-      const farms = getFarmList().filter(f => f.isMicroFarm && f.active !== false);
-      
-      if (farms.length === 0) {
-          alert('Nenhum micro farm ativo!');
-          return;
-      }
-      
-      // Agrupar por grupo
-      const grupos = {};
-      farms.forEach(farm => {
-          if (!grupos[farm.microFarmGroup]) {
-              grupos[farm.microFarmGroup] = [];
-          }
-          grupos[farm.microFarmGroup].push(farm);
-      });
-      
-      let mensagem = '📋 GERENCIAR MICRO FARMS\n\n';
-      Object.entries(grupos).forEach(([grupo, farmsDoGrupo], idx) => {
-          const primeiroFarm = farmsDoGrupo[0];
-          const ativos = farmsDoGrupo.filter(f => !f.paused).length;
-          
-          mensagem += `[${idx + 1}] ${primeiroFarm.origem} → ${primeiroFarm.alvo}\n`;
-          mensagem += `   Lotês: ${farmsDoGrupo.length} (${ativos} ativos)\n`;
-          mensagem += `   Intervalo: ${primeiroFarm.intervalo}min | Pausa: ${primeiroFarm.configMicro?.pausaPosRetorno || 1}min\n\n`;
-      });
-      
-      mensagem += 'Opções:\n';
-      mensagem += '• Digite número para ver detalhes do grupo\n';
-      mensagem += '• Digite "P" para pausar todos micro farms\n';
-      mensagem += '• Digite "R" para retomar todos\n';
-      mensagem += '• Digite "E" para enviar agora todos ativos\n';
-      mensagem += '• Digite "X" para excluir grupo completo';
-      
-      let opcao = prompt(mensagem);
-      if (!opcao) return;
-      
-      opcao = opcao.toUpperCase();
-      
-      if (opcao === 'P') {
-          // Pausar todos micro farms
-          const farmsParaPausar = getFarmList().filter(f => f.isMicroFarm && !f.paused);
-          farmsParaPausar.forEach(farm => {
-              farm.paused = true;
-              FarmLogger.log('MICRO_GROUP_PAUSED', farm);
-          });
-          setFarmList(getFarmList());
-          alert(`⏸️ ${farmsParaPausar.length} micro farms pausados!`);
-          
-      } else if (opcao === 'R') {
-          // Retomar todos micro farms
-          const farmsParaRetomar = getFarmList().filter(f => f.isMicroFarm && f.paused);
-          farmsParaRetomar.forEach(farm => {
-              farm.paused = false;
-              farm.failedAttempts = 0; // Resetar tentativas
-              FarmLogger.log('MICRO_GROUP_RESUMED', farm);
-          });
-          setFarmList(getFarmList());
-          alert(`▶️ ${farmsParaRetomar.length} micro farms retomados!`);
-          
-      } else if (opcao === 'E') {
-          // Enviar agora todos ativos
-          const farmsAtivos = getFarmList().filter(f => f.isMicroFarm && !f.paused && f.active !== false);
-          let enviados = 0;
-          farmsAtivos.forEach(farm => {
-              if (enviarFarmAgora(farm.id)) {
-                  enviados++;
-              }
-          });
-          alert(`🚀 ${enviados}/${farmsAtivos.length} micro farms enviados agora!`);
-          
-      } else if (opcao === 'X') {
-          // Excluir grupo
-          const grupoIdx = prompt('Digite o número do grupo para excluir:');
-          const idx = parseInt(grupoIdx) - 1;
-          const gruposArray = Object.entries(grupos);
-          
-          if (idx >= 0 && idx < gruposArray.length) {
-              const [grupoKey, farmsDoGrupo] = gruposArray[idx];
-              
-              if (confirm(`EXCLUIR GRUPO COMPLETO?\n\n${farmsDoGrupo.length} micro farms serão removidos!`)) {
-                  const allFarms = getFarmList();
-                  const updatedFarms = allFarms.filter(f => !farmsDoGrupo.some(mf => mf.id === f.id));
-                  setFarmList(updatedFarms);
-                  
-                  // Remover também os agendamentos
-                  const lista = getList();
-                  farmsDoGrupo.forEach(farm => {
-                      if (lista[farm.agendamentoBaseId]) {
-                          lista.splice(farm.agendamentoBaseId, 1);
-                      }
-                  });
-                  setList(lista);
-                  
-                  alert(`🗑️ Grupo excluído (${farmsDoGrupo.length} micro farms removidos)!`);
-              }
-          }
-          
-      } else {
-          // Ver detalhes do grupo
-          const idx = parseInt(opcao) - 1;
-          const gruposArray = Object.entries(grupos);
-          
-          if (idx >= 0 && idx < gruposArray.length) {
-              const [grupoKey, farmsDoGrupo] = gruposArray[idx];
-              const primeiroFarm = farmsDoGrupo[0];
-              
-              let detalhes = `📊 DETALHES DO GRUPO\n\n`;
-              detalhes += `Origem: ${primeiroFarm.origem}\n`;
-              detalhes += `Alvo: ${primeiroFarm.alvo}\n`;
-              detalhes += `Total lotês: ${farmsDoGrupo.length}\n`;
-              detalhes += `Intervalo: ${primeiroFarm.intervalo} minutos\n`;
-              detalhes += `Pausa pós-retorno: ${primeiroFarm.configMicro?.pausaPosRetorno || 1} minutos\n\n`;
-              detalhes += `Tropas por lote:\n`;
-              Object.entries(primeiroFarm.troops).forEach(([unidade, quantidade]) => {
-                  if (quantidade > 0) {
-                      detalhes += `• ${unidade}: ${quantidade}\n`;
-                  }
-              });
-              
-              alert(detalhes);
-          }
-      }
-      
-      // Atualizar interface
-      if (document.getElementById('farm-list-container')) {
-          document.getElementById('farm-list-container').innerHTML = renderFarmList();
-      }
-  }
-
-  // === FUNÇÃO AUXILIAR PARA RENDERIZAR CARD DE MICRO FARM ===
-  function renderMicroFarmCard(farm) {
-      const statusColor = farm.paused ? '#FF9800' : '#4CAF50';
-      const statusIcon = farm.paused ? '⏸️' : '▶️';
-      
-      return `
-          <div style="
-              background: white;
-              border: 2px solid ${statusColor};
-              border-radius: 6px;
-              padding: 8px;
-              min-width: 120px;
-          ">
-              <div style="font-size: 10px; font-weight: bold; color: #666;">
-                  Lote ${farm.microFarmLote}
-              </div>
-              <div style="font-size: 11px; color: #888; margin-top: 2px;">
-                  ${farm.nextRun ? farm.nextRun.split(' ')[1] : '--:--:--'}
-              </div>
-              <div style="display: flex; gap: 3px; margin-top: 5px;">
-                  <button onclick="TWS_FarmInteligente._toggleFarm('${farm.id}')" style="
-                      flex: 1;
-                      padding: 3px 6px;
-                      border: none;
-                      border-radius: 3px;
-                      background: ${farm.paused ? '#4CAF50' : '#FF9800'};
-                      color: white;
-                      font-size: 10px;
-                      cursor: pointer;
-                  ">${farm.paused ? '▶' : '⏸'}</button>
-                  <button onclick="TWS_FarmInteligente._enviarAgora('${farm.id}')" style="
-                      flex: 1;
-                      padding: 3px 6px;
-                      border: none;
-                      border-radius: 3px;
-                      background: #2196F3;
-                      color: white;
-                      font-size: 10px;
-                      cursor: pointer;
-                  ">🚀</button>
-              </div>
-          </div>
-      `;
-  }
-
-  // === FUNÇÃO AUXILIAR PARA RENDERIZAR CARD DE FARM NORMAL ===
-  function renderNormalFarmCard(farm) {
-      const now = Date.now();
-      let nextRun = null;
-      
-      try {
-          nextRun = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : null;
-      } catch (e) {
-          console.error('[Farm] Erro ao parsear data:', farm.nextRun);
-      }
-      
-      const status = farm.paused ? 'pausado' : (nextRun && nextRun > now ? 'agendado' : 'ativo');
-      
-      let statusColor = '#4CAF50';
-      let statusText = '🟢 Ativo';
-      
-      if (farm.paused) {
-          statusColor = '#FF9800';
-          statusText = '⏸️ Pausado';
-      } else if (nextRun && nextRun > now) {
-          statusColor = '#2196F3';
-          statusText = '⏰ Agendado';
-      }
-
-      const stats = farm.stats || { totalRuns: 0, successRuns: 0 };
-      
-      const listaAgendamentos = getList();
-      const agendamentoBase = listaAgendamentos[farm.agendamentoBaseId];
-      const baseStatus = agendamentoBase ? 
-          (agendamentoBase.done ? 
-              (agendamentoBase.success ? '✅ Concluído' : '❌ Falhou') : 
-              '⏳ Pendente') : 
-          '❓ Agendamento não encontrado';
-      
-      let tempoRestante = '';
-      if (nextRun && nextRun > now) {
-          const diffMs = nextRun - now;
-          const diffMins = Math.floor(diffMs / 60000);
-          const diffHours = Math.floor(diffMins / 60);
-          const remainingMins = diffMins % 60;
-          
-          if (diffHours > 0) {
-              tempoRestante = `${diffHours}h ${remainingMins}m`;
-          } else {
-              tempoRestante = `${diffMins}m`;
-          }
-      }
-      
-      const distancia = calcularDistancia(farm.origem, farm.alvo);
-      const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
-      const velocidadesUnidades = getVelocidadesUnidades();
-      const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
-      const tempoIda = distancia * velocidade;
-      const tempoVolta = tempoIda;
-      const tempoTotalCiclo = tempoIda + tempoVolta;
-      
-      return `
-          <div style="
-              background: white;
-              border: 3px solid ${statusColor};
-              border-radius: 8px;
-              padding: 15px;
-              margin-bottom: 10px;
-              transition: all 0.3s;
-          " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                  <div style="flex: 1;">
-                      <div style="font-weight: bold; color: #8B4513; font-size: 16px;">
-                          ${farm.origem} → ${farm.alvo}
-                      </div>
-                      <div style="color: #666; font-size: 12px; margin-top: 4px;">
-                          🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ') || 'Nenhuma'}
-                      </div>
-                      <div style="color: #888; font-size: 11px; margin-top: 2px;">
-                          📋 ${baseStatus} | ⏰ Ciclo: ${farm.intervalo} min
-                          ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
-                      </div>
-                  </div>
-                  <div style="
-                      background: ${statusColor};
-                      color: white;
-                      padding: 6px 12px;
-                      border-radius: 20px;
-                      font-size: 12px;
-                      font-weight: bold;
-                      min-width: 80px;
-                      text-align: center;
-                  ">
-                      ${statusText}
-                  </div>
-              </div>
-              
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; color: #666;">
-                  <div>
-                      <strong>Próximo envio:</strong><br>
-                      ${farm.nextRun || 'Calculando...'}
-                      ${tempoRestante ? `<br><small>⏱️ ${tempoRestante}</small>` : ''}
-                  </div>
-                  <div>
-                      <strong>Estatísticas:</strong><br>
-                      ${stats.totalRuns} ciclos (${stats.successRuns} sucessos)
-                  </div>
-              </div>
-              
-              <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-                  <button onclick="TWS_FarmInteligente._enviarAgora('${farm.id}')" style="
-                      padding: 6px 12px;
-                      border: none;
-                      border-radius: 4px;
-                      background: #2196F3;
-                      color: white;
-                      font-size: 11px;
-                      cursor: pointer;
-                      transition: all 0.2s;
-                      font-weight: bold;
-                  " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'"
-                  title="Forçar envio imediato">
-                      🚀 Enviar Agora
-                  </button>
-                  
-                  <button onclick="TWS_FarmInteligente._toggleFarm('${farm.id}')" style="
-                      padding: 6px 12px;
-                      border: none;
-                      border-radius: 4px;
-                      background: ${farm.paused ? '#4CAF50' : '#FF9800'};
-                      color: white;
-                      font-size: 11px;
-                      cursor: pointer;
-                      transition: all 0.2s;
-                  ">
-                      ${farm.paused ? '▶️ Retomar' : '⏸️ Pausar'}
-                  </button>
-                  
-                  <button onclick="TWS_FarmInteligente._deleteFarm('${farm.id}')" style="
-                      padding: 6px 12px;
-                      border: none;
-                      border-radius: 4px;
-                      background: #F44336;
-                      color: white;
-                      font-size: 11px;
-                      cursor: pointer;
-                      transition: all 0.2s;
-                  ">
-                      🗑️ Excluir
-                  </button>
-              </div>
-          </div>
-      `;
   }
 
   // ═════════════════════════════════════════════════════════
@@ -1463,6 +850,7 @@
 
   function renderFarmList() {
     const farms = getFarmList().filter(f => f.active !== false);
+    const listaAgendamentos = getList();
     
     if (farms.length === 0) {
       return `
@@ -1474,119 +862,170 @@
       `;
     }
 
-    // Separar farms normais e micro farms
-    const normalFarms = farms.filter(f => !f.isMicroFarm);
-    const microFarms = farms.filter(f => f.isMicroFarm);
+    let html = '<div style="display: grid; gap: 10px;">';
     
-    let html = '';
-    
-    // Seção Micro Farms (agrupados)
-    if (microFarms.length > 0) {
-        html += `
-            <div style="margin-bottom: 30px;">
-                <div style="
-                    background: #FF9800;
-                    color: white;
-                    padding: 10px 15px;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    margin-bottom: 15px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                ">
-                    <span>🚀 MICRO FARMS (${microFarms.length} lotês)</span>
-                    <button onclick="TWS_FarmInteligente._gerenciarMicroFarms()" style="
-                        background: white;
-                        color: #FF9800;
-                        border: none;
-                        padding: 5px 10px;
-                        border-radius: 4px;
-                        font-size: 11px;
-                        cursor: pointer;
-                        font-weight: bold;
-                    ">
-                        ⚙️ Gerenciar Grupo
-                    </button>
-                </div>
-        `;
+    farms.forEach((farm) => {
+      const now = Date.now();
+      let nextRun = null;
+      
+      try {
+        nextRun = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : null;
+      } catch (e) {
+        console.error('[Farm] Erro ao parsear data:', farm.nextRun);
+      }
+      
+      const status = farm.paused ? 'pausado' : (nextRun && nextRun > now ? 'agendado' : 'ativo');
+      
+      let statusColor = '#4CAF50';
+      let statusText = '🟢 Ativo';
+      
+      if (farm.paused) {
+        statusColor = '#FF9800';
+        statusText = '⏸️ Pausado';
+      } else if (nextRun && nextRun > now) {
+        statusColor = '#2196F3';
+        statusText = '⏰ Agendado';
+      }
+
+      const stats = farm.stats || { totalRuns: 0, successRuns: 0 };
+      
+      const agendamentoBase = listaAgendamentos[farm.agendamentoBaseId];
+      const baseStatus = agendamentoBase ? 
+        (agendamentoBase.done ? 
+          (agendamentoBase.success ? '✅ Concluído' : '❌ Falhou') : 
+          '⏳ Pendente') : 
+        '❓ Agendamento não encontrado';
+      
+      let tempoRestante = '';
+      if (nextRun && nextRun > now) {
+        const diffMs = nextRun - now;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const remainingMins = diffMins % 60;
         
-        // Agrupar por grupo
-        const grupos = {};
-        microFarms.forEach(farm => {
-            if (!grupos[farm.microFarmGroup]) {
-                grupos[farm.microFarmGroup] = [];
-            }
-            grupos[farm.microFarmGroup].push(farm);
-        });
-        
-        Object.entries(grupos).forEach(([grupo, farmsDoGrupo]) => {
-            const primeiroFarm = farmsDoGrupo[0];
-            const ativos = farmsDoGrupo.filter(f => !f.paused).length;
-            const pausados = farmsDoGrupo.length - ativos;
+        if (diffHours > 0) {
+          tempoRestante = `${diffHours}h ${remainingMins}m`;
+        } else {
+          tempoRestante = `${diffMins}m`;
+        }
+      }
+      
+      const distancia = calcularDistancia(farm.origem, farm.alvo);
+      const unidadeMaisLenta = getUnidadeMaisLenta(farm.troops);
+      // ✅ OBTER VELOCIDADES ATUAIS
+      const velocidadesUnidades = getVelocidadesUnidades();
+      const velocidade = unidadeMaisLenta ? velocidadesUnidades[unidadeMaisLenta] : 0;
+      const tempoIda = distancia * velocidade;
+      const tempoVolta = tempoIda;
+      const tempoTotalCiclo = tempoIda + tempoVolta;
+      
+      html += `
+        <div style="
+          background: white;
+          border: 3px solid ${statusColor};
+          border-radius: 8px;
+          padding: 15px;
+          transition: all 0.3s;
+        " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+            <div style="flex: 1;">
+              <div style="font-weight: bold; color: #8B4513; font-size: 16px;">
+                ${farm.origem} → ${farm.alvo}
+              </div>
+              <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ') || 'Nenhuma'}
+              </div>
+              <div style="color: #888; font-size: 11px; margin-top: 2px;">
+                📋 ${baseStatus} | ⏰ Ciclo: ${farm.intervalo} min
+                ${farm.lastReturnTime ? `| 🔄 Retorno: ${Math.round(farm.lastReturnTime/60)}min` : ''}
+              </div>
+              <div style="color: #666; font-size: 10px; margin-top: 2px;">
+                📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo 
+                <small style="color: #999;">(Configuração global)</small>
+              </div>
+              <div style="color: #888; font-size: 10px; margin-top: 1px;">
+                ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
+              </div>
+
+              ${farm.failedAttempts ? `<div style="color: #FF6B6B; font-size: 10px; margin-top: 2px;">🔄 Tentativa ${farm.failedAttempts}/3</div>` : ''}
+              ${farm.paused && farm.failedAttempts >= 3 ? `<div style="color: #FF9800; font-size: 10px; margin-top: 2px;">⚠️ Pausado: ${farm.failedAttempts} falhas consecutivas</div>` : ''}
+              
+            </div>
+            <div style="
+              background: ${statusColor};
+              color: white;
+              padding: 6px 12px;
+              border-radius: 20px;
+              font-size: 12px;
+              font-weight: bold;
+              min-width: 80px;
+              text-align: center;
+            ">
+              ${statusText}
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; color: #666;">
+            <div>
+              <strong>Próximo envio:</strong><br>
+              ${farm.nextRun || 'Calculando...'}
+              ${tempoRestante ? `<br><small>⏱️ ${tempoRestante}</small>` : ''}
+            </div>
+            <div>
+              <strong>Estatísticas:</strong><br>
+              ${stats.totalRuns} ciclos (${stats.successRuns} sucessos)
+              ${stats.lastRun ? `<br><small>Último: ${new Date(stats.lastRun).toLocaleTimeString()}</small>` : ''}
+            </div>
+          </div>
+          
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <!-- BOTÃO ENVIAR AGORA (NOVO) -->
+            <button onclick="TWS_FarmInteligente._enviarAgora('${farm.id}')" style="
+              padding: 6px 12px;
+              border: none;
+              border-radius: 4px;
+              background: #2196F3;
+              color: white;
+              font-size: 11px;
+              cursor: pointer;
+              transition: all 0.2s;
+              font-weight: bold;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'"
+            title="Forçar envio imediato (útil em caso de falhas)">
+              🚀 Enviar Agora
+            </button>
             
-            html += `
-                <div style="
-                    background: #fff8e1;
-                    border: 2px solid #FFB74D;
-                    border-radius: 8px;
-                    padding: 15px;
-                    margin-bottom: 15px;
-                ">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-weight: bold; color: #E65100; font-size: 15px;">
-                            🎯 ${primeiroFarm.origem} → ${primeiroFarm.alvo}
-                        </div>
-                        <div style="
-                            background: #FF9800;
-                            color: white;
-                            padding: 4px 8px;
-                            border-radius: 12px;
-                            font-size: 11px;
-                        ">
-                            ${farmsDoGrupo.length} lotês (${ativos} ativos)
-                        </div>
-                    </div>
-                    
-                    <div style="font-size: 11px; color: #666; margin-bottom: 10px;">
-                        ⏰ Intervalo: ${primeiroFarm.intervalo}min | 
-                        ⏸️ Pausa: ${primeiroFarm.configMicro?.pausaPosRetorno || 1}min |
-                        🪖 Tropas: ${Object.entries(primeiroFarm.troops).filter(([k,v]) => v > 0).map(([k,v]) => `${k}:${v}`).join(', ')}
-                    </div>
-                    
-                    <div style="display: flex; flex-wrap: wrap; gap: 5px;">
-                        ${farmsDoGrupo.map(farm => renderMicroFarmCard(farm)).join('')}
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += `</div>`;
-    }
-    
-    // Seção Farms Normais
-    if (normalFarms.length > 0) {
-        html += `
-            <div style="margin-bottom: 20px;">
-                <div style="
-                    background: #4CAF50;
-                    color: white;
-                    padding: 10px 15px;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    margin-bottom: 15px;
-                ">
-                    🌾 FARMS NORMAIS (${normalFarms.length})
-                </div>
-        `;
-        
-        normalFarms.forEach(farm => {
-            html += renderNormalFarmCard(farm);
-        });
-        
-        html += `</div>`;
-    }
-    
+            <button onclick="TWS_FarmInteligente._toggleFarm('${farm.id}')" style="
+              padding: 6px 12px;
+              border: none;
+              border-radius: 4px;
+              background: ${farm.paused ? '#4CAF50' : '#FF9800'};
+              color: white;
+              font-size: 11px;
+              cursor: pointer;
+              transition: all 0.2s;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+              ${farm.paused ? '▶️ Retomar' : '⏸️ Pausar'}
+            </button>
+            
+            <button onclick="TWS_FarmInteligente._deleteFarm('${farm.id}')" style="
+              padding: 6px 12px;
+              border: none;
+              border-radius: 4px;
+              background: #F44336;
+              color: white;
+              font-size: 11px;
+              cursor: pointer;
+              transition: all 0.2s;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+              🗑️ Excluir
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
     return html;
   }
 
@@ -1654,10 +1093,10 @@
 
   function startFarmMonitor() {
     setInterval(monitorAgendamentosParaFarm, 10000);
-    setInterval(apenasLogarFarmsAtrasados, 30000); // Apenas logar a cada 30s
+    setInterval(verificarFarmsAtrasados, 15000); // 🆕 VERIFICA ATRASOS
     setInterval(cleanupOrphanFarms, 60000);
     iniciarMonitorConfig(); // 🆕 MONITORAR MUDANÇAS NAS CONFIGURAÇÕES
-    console.log('[Farm Inteligente] ✅ Monitor iniciado (SEM execução automática de atrasos) e velocidades unificadas!');
+    console.log('[Farm Inteligente] ✅ Monitor iniciado com verificação de atrasos e velocidades unificadas!');
   }
 
   function showFarmModal() {
@@ -1723,32 +1162,34 @@
       <!-- Cabeçalho -->
       <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
         <div style="font-size: 24px; font-weight: bold; color: white;">
-          🌾 FARM INTELIGENTE v2.3
+          🌾 FARM INTELIGENTE v2.2
           <span class="config-info" title="Velocidades das unidades configuradas globalmente">⚙️ Config Global</span>
         </div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com Micro Farm, reset de tentativas e SEM execução automática de atrasos
+          Sistema automático com reset de tentativas e recuperação completa - Velocidades unificadas
         </div>
       </div>
 
       <!-- Conteúdo -->
       <div style="flex: 1; overflow-y: auto; padding: 20px;">
         <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
-          <strong>✨ NOVAS FUNCIONALIDADES:</strong><br>
-          ✅ <strong>MICRO FARM</strong> - Ataques contínuos com múltiplos lotês<br>
-          ✅ Calculadora integrada de lotês<br>
-          ✅ Gerenciamento em grupo de Micro Farms<br>
-          ✅ Reset automático de tentativas<br>
-          ✅ <strong>SEM execução automática de farms atrasados</strong><br>
+          <strong>✨ MELHORIAS APLICADAS:</strong><br>
+          ✅ Reset automático de tentativas ao retomar farm pausado<br>
+          ✅ Verificação de farms atrasados (evita horários no passado)<br>
           ✅ Tentativas escalonadas (1min, 2min, 5min)<br>
           ✅ Pausa automática após 3 falhas consecutivas<br>
+          ✅ Distância Euclidiana correta para TW<br>
+          ✅ Logging detalhado de eventos<br>
+          ✅ 🚀 BOTÃO "ENVIAR AGORA" para falhas<br>
           <strong>🎯 VELOCIDADES UNIFICADAS:</strong><br>
           ✅ Usa configurações globais do Config Modal<br>
           ✅ Atualização automática quando velocidades mudam<br>
           ✅ Fallback para valores padrão se necessário<br>
-          <strong>⚠️ ATENÇÃO:</strong><br>
-          ⚠️ Farms atrasados NÃO são executados automaticamente<br>
-          ⚠️ Use o botão "🚀 Enviar Agora" para envios manuais
+          <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>
+          ✅ Múltiplos farms no mesmo alvo<br>
+          ✅ Mesmas tropas, mesmo alvo<br>
+          ✅ Mesmo agendamento convertido múltiplas vezes<br>
+          ✅ "Enviar Agora" sem verificações
         </div>
 
         <!-- Botões de Conversão em Massa -->
@@ -1779,30 +1220,6 @@
           </div>
         </div>
 
-        <!-- Seção Micro Farm -->
-        <div style="margin-bottom: 20px; border-top: 2px dashed #FF9800; padding-top: 20px;">
-          <div style="font-weight: bold; color: #FF9800; margin-bottom: 10px; font-size: 16px;">
-            🚀 MICRO FARM (Ataques Rápidos)
-          </div>
-          <div style="background: #fff3e0; border: 1px solid #ffb74d; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #5d4037;">
-            <strong>✨ O QUE É MICRO FARM?</strong><br>
-            • Ataques contínuos à mesma aldeia<br>
-            • Intervalos curtos (1-10 minutos)<br>
-            • Poucas tropas por ataque (especialmente espiões)<br>
-            • Ideal para esgotar defesa e recursos<br>
-            • Cálculo automático de lotês necessários
-          </div>
-          
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="farm-btn" style="background: #FF9800;" onclick="TWS_FarmInteligente._criarMicroFarm()">
-              🚀 Criar Micro Farm
-            </button>
-            <button class="farm-btn" style="background: #9C27B0;" onclick="TWS_FarmInteligente._calcularMicroFarm()">
-              🧮 Calculadora de Lotês
-            </button>
-          </div>
-        </div>
-
         <div id="farm-list-container">
           ${renderFarmList()}
         </div>
@@ -1810,9 +1227,8 @@
 
       <!-- Rodapé -->
       <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        Farm Inteligente v2.3 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | 
-        Micro Farms: ${getFarmList().filter(f => f.isMicroFarm && f.active !== false).length} lotês | 
-        Velocidades: Configuração Global | ⚠️ SEM execução automática de atrasos
+        Farm Inteligente v2.2 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | 
+        Eventos: ${FarmLogger.history.length} | Velocidades: Configuração Global
       </div>
     `;
 
@@ -1867,10 +1283,6 @@
           // Opcional: this._closeModal();
         }
       },
-
-      _criarMicroFarm: criarMicroFarm,
-      _calcularMicroFarm: showMicroFarmCalculator,
-      _gerenciarMicroFarms: gerenciarMicroFarms,
 
       _convertAgendamento() {
         const lista = getList();
@@ -2095,9 +1507,7 @@
           paused: farms.filter(f => f.paused).length,
           totalCycles: farms.reduce((a, b) => a + (b.stats?.totalRuns || 0), 0),
           successCycles: farms.reduce((a, b) => a + (b.stats?.successRuns || 0), 0),
-          events: FarmLogger.history.length,
-          microFarms: farms.filter(f => f.isMicroFarm).length,
-          normalFarms: farms.filter(f => !f.isMicroFarm).length
+          events: FarmLogger.history.length
         };
         
         // Obter configurações de velocidade
@@ -2105,10 +1515,8 @@
         const configSource = window.TWS_ConfigModal ? 'Config Modal Global' : 'Fallback Local';
 
         alert(
-          '📊 ESTATÍSTICAS DO FARM INTELIGENTE v2.3\n\n' +
+          '📊 ESTATÍSTICAS DO FARM INTELIGENTE\n\n' +
           `Total de Farms: ${stats.total}\n` +
-          `Farms Normais: ${stats.normalFarms}\n` +
-          `Micro Farms: ${stats.microFarms} lotês\n` +
           `Ativos: ${stats.active}\n` +
           `Pausados: ${stats.paused}\n\n` +
           `Ciclos Total: ${stats.totalCycles}\n` +
@@ -2119,10 +1527,7 @@
           `Fonte: ${configSource}\n` +
           `Lanceiro: ${velocidades.spear} min/campo\n` +
           `Espadachim: ${velocidades.sword} min/campo\n` +
-          `Cav. Leve: ${velocidades.light} min/campo\n\n` +
-          `⚠️ AVISO:\n` +
-          `Farms atrasados NÃO são executados automaticamente\n` +
-          `Use o botão "🚀 Enviar Agora" para envios manuais`
+          `Cav. Leve: ${velocidades.light} min/campo`
         );
       },
       
@@ -2142,7 +1547,8 @@
   }
 
   // === INICIALIZAÇÃO ===
-  function init() {
+// === INICIALIZAÇÃO ===
+function init() {
     if (!window.TWS_FarmInteligente) {
         window.TWS_FarmInteligente = {};
     }
@@ -2161,18 +1567,11 @@
     // ✅ ADICIONAR ESTA LINHA (FALTAVA):
     window.TWS_FarmInteligente._getVelocidadesUnidades = getVelocidadesUnidades;
     
-    // ✅ ADICIONAR FUNÇÕES DO MICRO FARM
-    window.TWS_FarmInteligente._criarMicroFarm = criarMicroFarm;
-    window.TWS_FarmInteligente._calcularMicroFarm = showMicroFarmCalculator;
-    window.TWS_FarmInteligente._gerenciarMicroFarms = gerenciarMicroFarms;
-    
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado v2.3 - COM MICRO FARM, SEM execução automática de atrasos, com Reset de Tentativas e Velocidades Unificadas!');
-    console.log('[TW Farm Inteligente] 🚀 Micro Farm disponível: ataques contínuos com múltiplos lotês');
-    console.log('[TW Farm Inteligente] ⚠️ Farms atrasados NÃO serão executados automaticamente');
+    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas, Recuperação Completa e Velocidades Unificadas!');
     console.log('[TW Farm Inteligente] ⚙️ Usando velocidades do Config Modal: ', getVelocidadesUnidades());
-  }
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
