@@ -445,49 +445,31 @@
   }
 
   // ═════════════════════════════════════════════════════════
-  // ✅ #7 VERIFICAÇÃO DE FARMS ATRASADOS (SEM RESTRIÇÕES)
+  // ✅ #7 FUNÇÃO APENAS PARA LOGAR FARMS ATRASADOS (SEM EXECUTAR)
   // ═════════════════════════════════════════════════════════
 
-  function verificarFarmsAtrasados() {
-      const lista = getList();
+  function apenasLogarFarmsAtrasados() {
       const farms = getFarmList().filter(f => !f.paused && f.active !== false);
       const now = Date.now();
       
       farms.forEach(farm => {
-          if (farm.agendamentoBaseId >= lista.length) return;
-          
-          const agendamentoBase = lista[farm.agendamentoBaseId];
-          if (!agendamentoBase || agendamentoBase.done || agendamentoBase.locked) return;
-          
           try {
               const nextRun = farm.nextRun ? parseDateTimeToMs(farm.nextRun) : null;
               
-              // ✅ SE HORÁRIO JÁ PASSOU, EXECUTAR IMEDIATAMENTE
               if (nextRun && nextRun < now) {
-                  console.log(`[Farm] ⚡ Executando farm atrasado: ${farm.origem} → ${farm.alvo}`);
+                  const atrasoMinutos = Math.floor((now - nextRun) / 60000);
                   
-                  executeAttack(agendamentoBase)
-                      .then(success => {
-                          if (success) {
-                              agendamentoBase.done = true;
-                              agendamentoBase.success = true;
-                              agendamentoBase.executedAt = new Date().toISOString();
-                              FarmLogger.log('DELAYED_EXECUTION_SUCCESS', farm);
-                          } else {
-                              agendamentoBase.done = true;
-                              agendamentoBase.success = false;
-                              agendamentoBase.error = 'Falha em execução atrasada';
-                              FarmLogger.log('DELAYED_EXECUTION_FAILED', farm);
-                          }
-                          setList(lista);
-                      })
-                      .catch(error => {
-                          console.error('[Farm] Erro em execução atrasada:', error);
-                          FarmLogger.log('DELAYED_EXECUTION_ERROR', farm, { error: error.message });
+                  if (atrasoMinutos > 5) { // Só logar se estiver atrasado mais de 5 minutos
+                      console.warn(`[Farm] ⚠️ Farm atrasado: ${farm.origem} → ${farm.alvo} (${atrasoMinutos} minutos)`);
+                      FarmLogger.log('FARM_ATRASADO', farm, { 
+                          atrasoMinutos,
+                          nextRun: farm.nextRun,
+                          agora: new Date().toISOString()
                       });
+                  }
               }
           } catch (error) {
-              console.error('[Farm] Erro ao verificar farm atrasado:', error);
+              // Ignorar erros de parsing
           }
       });
   }
@@ -1093,10 +1075,10 @@
 
   function startFarmMonitor() {
     setInterval(monitorAgendamentosParaFarm, 10000);
-    setInterval(verificarFarmsAtrasados, 15000); // 🆕 VERIFICA ATRASOS
+    setInterval(apenasLogarFarmsAtrasados, 30000); // Apenas logar a cada 30s
     setInterval(cleanupOrphanFarms, 60000);
     iniciarMonitorConfig(); // 🆕 MONITORAR MUDANÇAS NAS CONFIGURAÇÕES
-    console.log('[Farm Inteligente] ✅ Monitor iniciado com verificação de atrasos e velocidades unificadas!');
+    console.log('[Farm Inteligente] ✅ Monitor iniciado (SEM execução automática de atrasos) e velocidades unificadas!');
   }
 
   function showFarmModal() {
@@ -1166,7 +1148,7 @@
           <span class="config-info" title="Velocidades das unidades configuradas globalmente">⚙️ Config Global</span>
         </div>
         <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
-          Sistema automático com reset de tentativas e recuperação completa - Velocidades unificadas
+          Sistema automático com reset de tentativas e recuperação completa - SEM execução automática de atrasos
         </div>
       </div>
 
@@ -1175,7 +1157,7 @@
         <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
           <strong>✨ MELHORIAS APLICADAS:</strong><br>
           ✅ Reset automático de tentativas ao retomar farm pausado<br>
-          ✅ Verificação de farms atrasados (evita horários no passado)<br>
+          ✅ <strong>SEM execução automática de farms atrasados</strong><br>
           ✅ Tentativas escalonadas (1min, 2min, 5min)<br>
           ✅ Pausa automática após 3 falhas consecutivas<br>
           ✅ Distância Euclidiana correta para TW<br>
@@ -1189,7 +1171,10 @@
           ✅ Múltiplos farms no mesmo alvo<br>
           ✅ Mesmas tropas, mesmo alvo<br>
           ✅ Mesmo agendamento convertido múltiplas vezes<br>
-          ✅ "Enviar Agora" sem verificações
+          ✅ "Enviar Agora" sem verificações<br>
+          <strong>⚠️ ATENÇÃO:</strong><br>
+          ⚠️ Farms atrasados NÃO são executados automaticamente<br>
+          ⚠️ Use o botão "🚀 Enviar Agora" para enviar manualmente
         </div>
 
         <!-- Botões de Conversão em Massa -->
@@ -1228,7 +1213,7 @@
       <!-- Rodapé -->
       <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
         Farm Inteligente v2.2 | Total: ${getFarmList().filter(f => f.active !== false).length} farms ativos | 
-        Eventos: ${FarmLogger.history.length} | Velocidades: Configuração Global
+        Eventos: ${FarmLogger.history.length} | Velocidades: Configuração Global | ⚠️ SEM execução automática de atrasos
       </div>
     `;
 
@@ -1527,7 +1512,10 @@
           `Fonte: ${configSource}\n` +
           `Lanceiro: ${velocidades.spear} min/campo\n` +
           `Espadachim: ${velocidades.sword} min/campo\n` +
-          `Cav. Leve: ${velocidades.light} min/campo`
+          `Cav. Leve: ${velocidades.light} min/campo\n\n` +
+          `⚠️ AVISO:\n` +
+          `Farms atrasados NÃO são executados automaticamente\n` +
+          `Use o botão "🚀 Enviar Agora" para envios manuais`
         );
       },
       
@@ -1547,8 +1535,7 @@
   }
 
   // === INICIALIZAÇÃO ===
-// === INICIALIZAÇÃO ===
-function init() {
+  function init() {
     if (!window.TWS_FarmInteligente) {
         window.TWS_FarmInteligente = {};
     }
@@ -1569,9 +1556,10 @@ function init() {
     
     startFarmMonitor();
     
-    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - Com Reset de Tentativas, Recuperação Completa e Velocidades Unificadas!');
+    console.log('[TW Farm Inteligente] ✅ Carregado v2.2 - SEM execução automática de atrasos, com Reset de Tentativas e Velocidades Unificadas!');
+    console.log('[TW Farm Inteligente] ⚠️ Farms atrasados NÃO serão executados automaticamente');
     console.log('[TW Farm Inteligente] ⚙️ Usando velocidades do Config Modal: ', getVelocidadesUnidades());
-}
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
