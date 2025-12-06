@@ -42,6 +42,10 @@
     // ============================================
     
     var FarmCore = {
+    // ⭐ ADICIONE ESTA PROPRIEDADE:
+    _lastRealSpeeds: null,
+    
+    
         // === CONFIGURAÇÃO E CÁLCULOS ===
         
         /**
@@ -54,13 +58,17 @@
         getVelocidadesUnidades: function() {
             try {
                 // 1. PRIORIDADE: Velocity Manager (velocidades reais em tempo real)
-                if (window.TWS_FarmInteligente.VelocityManager) {
-                    const realSpeeds = window.TWS_FarmInteligente.VelocityManager.getVelocidadesParaFarmCore();
-                    if (realSpeeds && Object.keys(realSpeeds).length > 0) {
-                        console.log('[Farm] ✅ Usando velocidades REAIS do mundo atual');
-                        return realSpeeds;
-                    }
-                }
+if (window.TWS_FarmInteligente.VelocityManager) {
+    const realSpeeds = window.TWS_FarmInteligente.VelocityManager.getVelocidadesParaFarmCore();
+    if (realSpeeds && Object.keys(realSpeeds).length > 0) {
+        // ⭐ ADICIONE ESTA VERIFICAÇÃO:
+        if (!this._lastRealSpeeds || JSON.stringify(this._lastRealSpeeds) !== JSON.stringify(realSpeeds)) {
+            console.log('[Farm] ✅ Usando velocidades REAIS do mundo atual');
+            this._lastRealSpeeds = realSpeeds;
+        }
+        return realSpeeds;
+    }
+}
                 
                 // 2. Configuração do modal do usuário
                 if (window.TWS_ConfigModal && window.TWS_ConfigModal.getConfig) {
