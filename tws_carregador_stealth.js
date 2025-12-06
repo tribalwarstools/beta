@@ -348,10 +348,8 @@
                     let badgeText = '✓';
                     let badgeTitle = 'TW Scheduler';
                     
-                    if (farmLoaded && configLoaded) {
-                        badgeText = '🌾⚙️';
-                        badgeTitle = 'TW Scheduler + Farm + Config';
-                    } else if (farmLoaded) {
+                    // CORREÇÃO: Removida a verificação de configLoaded
+                    if (farmLoaded) {
                         badgeText = '🌾✓';
                         badgeTitle = 'TW Scheduler + Farm';
                     }
@@ -363,7 +361,7 @@
                         bottom: 2px;
                         right: 2px;
                         font-size: 8px;
-                        color: ${farmLoaded && configLoaded ? '#9b59b6' : farmLoaded ? '#27ae60' : configLoaded ? '#3498db' : '#3498db'};
+                        color: ${farmLoaded ? '#27ae60' : '#3498db'};
                         opacity: 0.3;
                         z-index: 999997;
                         font-family: monospace;
