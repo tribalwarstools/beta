@@ -23,22 +23,18 @@
   let updateInterval = null;
 
   // =========================
-  // FUNÇÃO DO BOTÃO CONFIGURAÇÕES
+  // FUNÇÃO DO BOTÃO CONFIGURAÇÕES (ATUALIZADA)
   // =========================
   function openConfigModal() {
     console.log('[TW Scheduler] Abrindo modal de configurações...');
     
-    // Aqui você pode criar ou chamar o modal de configurações
-    // Por enquanto, vamos apenas mostrar uma mensagem
-    alert('⚙️ Modal de Configurações\n\nEsta funcionalidade será implementada em breve!\n\nVocê poderá configurar:\n• Intervalo do scheduler\n• Comportamento de falhas\n• Notificações\n• E outras preferências');
-    
-    // Quando você criar o modal de configurações, substitua o alert acima por:
-    // if (window.TWS_ConfigModal) {
-    //   window.TWS_ConfigModal.show();
-    // } else {
-    //   console.warn('[TW Scheduler] Modal de configurações não disponível');
-    //   alert('Modal de configurações ainda não foi implementado.');
-    // }
+    // ✅ VERIFICAÇÃO CORRETA DO MODAL DE CONFIGURAÇÕES
+    if (window.TWS_ConfigModal && typeof window.TWS_ConfigModal.show === 'function') {
+      window.TWS_ConfigModal.show();
+    } else {
+      console.warn('[TW Scheduler] Modal de configurações não disponível');
+      alert('⚙️ Modal de Configurações\n\nO modal de configurações ainda não foi carregado.\n\nAguarde alguns segundos e tente novamente, ou verifique se o script foi carregado.');
+    }
   }
 
   // =========================
@@ -287,8 +283,21 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     window.TWS_BBCodeModal.show();
   }
 
-  function testSend() { if (window.TWS_TestModal) window.TWS_TestModal.show(); }
-  function Farm() { if (window.TWS_FarmInteligente) window.TWS_FarmInteligente.show(); }
+  function testSend() { 
+    if (window.TWS_TestModal && typeof window.TWS_TestModal.show === 'function') { 
+        window.TWS_TestModal.show(); 
+    } else { 
+        alert('Modal de teste não disponível!'); 
+    } 
+  }
+  
+  function Farm() { 
+    if (window.TWS_FarmInteligente && typeof window.TWS_FarmInteligente.show === 'function') { 
+        window.TWS_FarmInteligente.show(); 
+    } else { 
+        alert('Farm Inteligente não disponível!'); 
+    } 
+  }
 
   function exportList() {
     const list = getList();
@@ -327,7 +336,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   }
 
   // =========================
-  // UI
+  // UI (ATUALIZADA COM BOTÃO DE CONFIG)
   // =========================
   function createUI() {
     let existing = document.getElementById('tws-panel'); if(existing) existing.remove();
@@ -351,6 +360,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.importBBCode()" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📋 BBCode</button>
           <button onclick="TWS_Panel.testSend()" style="padding:6px 12px;background:#F44336;color:white;border:none;border-radius:4px;cursor:pointer;">🔥 Testar Envio</button>
           <button onclick="TWS_Panel.Farm()" style="padding:6px 12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">🌾 Farm</button>
+          <!-- ✅ BOTÃO DE CONFIGURAÇÕES ATUALIZADO -->
           <button onclick="TWS_Panel.openConfigModal()" style="padding:6px 12px;background:#607D8B;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Configurações</button>
           <button onclick="TWS_Panel.clearCompleted()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding:6px 12px;background:#FF6F00;color:white;border:none;border-radius:4px;cursor:pointer;">⏳ Limpar Pendentes</button>
@@ -382,6 +392,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     const savedState = localStorage.getItem(PANEL_STATE_KEY);
     panelOpen = savedState==='1'; panel.style.display=panelOpen?'block':'none';
 
+    // ✅ ATUALIZADO: Iniciar scheduler com configuração atual
     startScheduler();
     renderTable();
 
@@ -418,12 +429,19 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   createUI();
   console.log('[TW Scheduler Frontend] ✅ Carregado com Dashboard! (v2.0 - status unificado)');
 
+  // ✅ ATUALIZADO: Verificações aprimoradas
   setTimeout(()=>{
     if(!window.TWS_Modal) console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
     if(!window.TWS_BBCodeModal) console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
     if(!window.TWS_TestModal) console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
     if(!window.TWS_FarmInteligente) console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
-    if(!window.TWS_ConfigModal) console.warn('[TW Scheduler] ⚠️ Modal de Configurações não detectado.'); // ✅ ADICIONADO
-  },100);
+    if(!window.TWS_ConfigModal) {
+        console.warn('[TW Scheduler] ⚠️ Modal de Configurações não detectado.');
+        // ✅ MENSAGEM MAIS DESCRITIVA
+        console.info('[TW Scheduler] ℹ️ O modal de configurações será carregado em alguns segundos...');
+    } else {
+        console.log('[TW Scheduler] ✅ Modal de Configurações disponível!');
+    }
+  }, 1500); // ✅ Aumentado para 1500ms para dar tempo de carregar
 
 })();
