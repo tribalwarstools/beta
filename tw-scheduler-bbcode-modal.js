@@ -79,6 +79,22 @@
     }
   }
 
+  // ✅ FUNÇÃO PARA VERIFICAR SE DATA ESTÁ NO PASSADO
+  function isDateTimeInPast(dateTimeString) {
+    const targetTime = parseDateTimeToMs(dateTimeString);
+    const now = Date.now();
+    return !isNaN(targetTime) && targetTime <= now;
+  }
+
+  // ✅ FILTRAR AGENDAMENTOS FUTUROS
+  function filterFutureAgendamentos(agendamentos) {
+    return agendamentos.filter(cfg => {
+      const targetTime = parseDateTimeToMs(cfg.datetime);
+      const now = Date.now();
+      return !isNaN(targetTime) && targetTime > now;
+    });
+  }
+
   // ✅ ALGORITMO "1 ALDEIA ATACA 1 SEM REPETIR"
   function distribuirAtaquesOneToOne(agendamentos) {
     if (!agendamentos || agendamentos.length === 0) return agendamentos;
@@ -173,7 +189,13 @@
           continue;
         }
         
-        // 3️⃣ Extrair URL e parâmetros
+        // 3️⃣ Verificar se data está no passado
+        if (isDateTimeInPast(dataHora)) {
+          console.log(`[BBCode] ⏰ Data no passado ignorada: ${dataHora}`);
+          continue;
+        }
+        
+        // 4️⃣ Extrair URL e parâmetros
         const urlMatch = linha.match(/\[url=(.*?)\]/i);
         const params = {};
         
@@ -195,7 +217,7 @@
           }
         }
         
-        // 4️⃣ Construir configuração
+        // 5️⃣ Construir configuração
         const cfg = {
           _id: generateUniqueId(),
           origem,
@@ -206,7 +228,7 @@
           locked: false
         };
         
-        // 5️⃣ Adicionar tropas
+        // 6️⃣ Adicionar tropas
         const troopTypes = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
         
         troopTypes.forEach(unit => {
@@ -234,6 +256,17 @@
     }
 
     const now = Date.now();
+    
+    // Filtrar apenas agendamentos futuros para exibição
+    const agendamentosFuturos = agendamentos.filter(cfg => {
+      const t = parseDateTimeToMs(cfg.datetime);
+      return !isNaN(t) && t > now;
+    });
+    
+    if (agendamentosFuturos.length === 0) {
+      return '<p style="text-align:center;color:#888;padding:20px;">Todos os agendamentos estão no passado e não serão exibidos</p>';
+    }
+    
     let html = '<div style="max-height: 400px; overflow-y: auto;">';
     html += '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
     html += `
@@ -252,12 +285,12 @@
     // Análise para destacar duplicatas
     const origemCount = {};
     const destinoCount = {};
-    agendamentos.forEach(cfg => {
+    agendamentosFuturos.forEach(cfg => {
       origemCount[cfg.origem] = (origemCount[cfg.origem] || 0) + 1;
       destinoCount[cfg.alvo] = (destinoCount[cfg.alvo] || 0) + 1;
     });
 
-    agendamentos.forEach((cfg, idx) => {
+    agendamentosFuturos.forEach((cfg, idx) => {
       const t = parseDateTimeToMs(cfg.datetime);
       const diff = t - now;
       let status = '✅ OK';
@@ -267,9 +300,6 @@
       if (isNaN(t)) {
         status = '⚠️ Data Inválida';
         statusColor = '#FFF3E0';
-      } else if (diff < 0) {
-        status = '⏰ Horário Passado';
-        statusColor = '#FFEBEE';
       } else if (diff < 60000) {
         status = '🔥 < 1 minuto';
         statusColor = '#FFF9C4';
@@ -317,10 +347,18 @@
   function handleImport(agendamentos, replaceAll, oneToOneEnabled = false) {
     const list = getList();
     
+    // Filtrar apenas agendamentos futuros
+    const agendamentosFuturos = filterFutureAgendamentos(agendamentos);
+    
+    if (agendamentosFuturos.length === 0) {
+      alert('⚠️ Todos os agendamentos estão no passado e não serão importados!');
+      return { novos: 0, duplicados: 0, oneToOne: oneToOneEnabled, originalCount: agendamentos.length, processedCount: 0 };
+    }
+    
     // Aplicar distribuição one-to-one se habilitado
     let agendamentosProcessados = oneToOneEnabled 
-      ? distribuirAtaquesOneToOne(agendamentos) 
-      : agendamentos;
+      ? distribuirAtaquesOneToOne(agendamentosFuturos) 
+      : agendamentosFuturos;
     
     if (replaceAll) {
       setList(agendamentosProcessados);
@@ -558,7 +596,8 @@
         2️⃣ Clique em <strong>"Analisar BBCode"</strong> para visualizar preview<br>
         3️⃣ Escolha <strong>"Adicionar"</strong> ou <strong>"Substituir Tudo"</strong><br><br>
         <strong>🔍 Coordenadas suportadas:</strong> X|Y, XX|YY, XXX|YYY, XXXX|YYYY<br>
-        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS
+        <strong>📅 Data/Hora:</strong> DD/MM/YYYY HH:MM:SS<br>
+        <strong>⚠️ Agendamentos no passado serão automaticamente ignorados</strong>
       </div>
 
       <div class="toggle-label">
@@ -635,19 +674,23 @@
     });
 
     function updatePreview() {
-      const agendamentosParaPreview = oneToOneEnabled 
-        ? distribuirAtaquesOneToOne(parsedAgendamentos) 
-        : parsedAgendamentos;
-      
       const now = Date.now();
+      
+      // Filtrar agendamentos futuros
+      const agendamentosFuturos = filterFutureAgendamentos(parsedAgendamentos);
+      
+      // Aplicar distribuição one-to-one se habilitado
+      const agendamentosParaPreview = oneToOneEnabled 
+        ? distribuirAtaquesOneToOne(agendamentosFuturos) 
+        : agendamentosFuturos;
+      
+      // Contadores atualizados
       const validDates = agendamentosParaPreview.filter(a => {
         const t = parseDateTimeToMs(a.datetime);
         return !isNaN(t) && t > now;
       }).length;
-      const pastDates = agendamentosParaPreview.filter(a => {
-        const t = parseDateTimeToMs(a.datetime);
-        return !isNaN(t) && t <= now;
-      }).length;
+      
+      const pastDatesCount = parsedAgendamentos.length - agendamentosFuturos.length;
       const invalidDates = agendamentosParaPreview.filter(a => {
         const t = parseDateTimeToMs(a.datetime);
         return isNaN(t);
@@ -655,18 +698,17 @@
 
       statsDiv.innerHTML = `
         <div class="bbcode-stat-item">
-          <span>📦 Total:</span>
-          <span style="color: #2196F3;">${agendamentosParaPreview.length}</span>
-          ${oneToOneEnabled ? `<span style="color: #999; font-size: 11px;">(${parsedAgendamentos.length} original)</span>` : ''}
+          <span>📦 Total Parseados:</span>
+          <span style="color: #2196F3;">${parsedAgendamentos.length}</span>
         </div>
         <div class="bbcode-stat-item">
-          <span>✅ Válidos:</span>
-          <span style="color: #4CAF50;">${validDates}</span>
+          <span>✅ Futuros:</span>
+          <span style="color: #4CAF50;">${agendamentosParaPreview.length}</span>
         </div>
-        ${pastDates > 0 ? `
+        ${pastDatesCount > 0 ? `
           <div class="bbcode-stat-item">
-            <span>⏰ Passados:</span>
-            <span style="color: #F44336;">${pastDates}</span>
+            <span>⏰ Passados (ignorados):</span>
+            <span style="color: #F44336;">${pastDatesCount}</span>
           </div>
         ` : ''}
         ${invalidDates > 0 ? `
@@ -685,6 +727,16 @@
 
       previewContent.innerHTML = renderPreview(agendamentosParaPreview, oneToOneEnabled);
       previewDiv.style.display = 'block';
+      
+      // Mostrar aviso se houver agendamentos passados
+      if (pastDatesCount > 0 && agendamentosParaPreview.length === 0) {
+        previewContent.innerHTML = `
+          <div style="text-align:center;padding:20px;">
+            <p style="color:#F44336;font-weight:bold;">⚠️ Todos os ${pastDatesCount} agendamentos estão no passado!</p>
+            <p style="color:#666;">Nenhum agendamento será importado.</p>
+          </div>
+        `;
+      }
     }
 
     btnCancel.onclick = () => overlay.remove();
@@ -722,9 +774,21 @@
       }
 
       const existingList = getList();
+      const agendamentosFuturos = filterFutureAgendamentos(parsedAgendamentos);
+      const agendamentosProcessados = oneToOneEnabled 
+        ? distribuirAtaquesOneToOne(agendamentosFuturos) 
+        : agendamentosFuturos;
+      
+      if (agendamentosProcessados.length === 0) {
+        alert('⚠️ Todos os agendamentos estão no passado e não serão importados!');
+        return;
+      }
+      
+      const pastCount = parsedAgendamentos.length - agendamentosFuturos.length;
+      
       const msg = existingList.length > 0 
-        ? `Adicionar ${oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length} agendamentos?\n\nTotal após: ${existingList.length + (oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length)}${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
-        : `Importar ${oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length} agendamentos?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
+        ? `Adicionar ${agendamentosProcessados.length} agendamentos${pastCount > 0 ? ` (${pastCount} no passado ignorados)` : ''}?\n\nTotal após: ${existingList.length + agendamentosProcessados.length}${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
+        : `Importar ${agendamentosProcessados.length} agendamentos${pastCount > 0 ? ` (${pastCount} no passado ignorados)` : ''}?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
 
       if (confirm(msg)) {
         const result = handleImport(parsedAgendamentos, false, oneToOneEnabled);
@@ -732,6 +796,9 @@
         let alertMsg = `✅ ${result.novos} importado(s)!`;
         if (result.duplicados > 0) {
           alertMsg += `\n⚠️ ${result.duplicados} duplicado(s) ignorado(s).`;
+        }
+        if (result.originalCount - result.processedCount > 0) {
+          alertMsg += `\n⏰ ${result.originalCount - result.processedCount} agendamento(s) no passado ignorado(s).`;
         }
         if (oneToOneEnabled) {
           alertMsg += `\n🎯 Modo 1:1: ${result.originalCount} → ${result.processedCount} agendamentos`;
@@ -749,16 +816,29 @@
       }
 
       const existingList = getList();
-      const processedCount = oneToOneEnabled ? distribuirAtaquesOneToOne(parsedAgendamentos).length : parsedAgendamentos.length;
+      const agendamentosFuturos = filterFutureAgendamentos(parsedAgendamentos);
+      const processedCount = oneToOneEnabled 
+        ? distribuirAtaquesOneToOne(agendamentosFuturos).length 
+        : agendamentosFuturos.length;
+      
+      const pastCount = parsedAgendamentos.length - agendamentosFuturos.length;
+      
+      if (processedCount === 0) {
+        alert('⚠️ Todos os agendamentos estão no passado! Nada será importado.');
+        return;
+      }
       
       const msg = existingList.length > 0
-        ? `⚠️ Remover ${existingList.length} e substituir por ${processedCount}?\n\nContinuar?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
-        : `Importar ${processedCount} agendamentos?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
+        ? `⚠️ Remover ${existingList.length} e substituir por ${processedCount}${pastCount > 0 ? ` (${pastCount} no passado ignorados)` : ''}?\n\nContinuar?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`
+        : `Importar ${processedCount} agendamentos${pastCount > 0 ? ` (${pastCount} no passado ignorados)` : ''}?${oneToOneEnabled ? '\n\n🎯 Modo "1 Aldeia = 1 Alvo" ATIVO' : ''}`;
 
       if (confirm(msg)) {
         handleImport(parsedAgendamentos, true, oneToOneEnabled);
         
         let alertMsg = `✅ ${processedCount} agendamento(s) importado(s)!`;
+        if (pastCount > 0) {
+          alertMsg += `\n⏰ ${pastCount} agendamento(s) no passado ignorado(s).`;
+        }
         if (oneToOneEnabled) {
           alertMsg += `\n🎯 Modo 1:1: ${parsedAgendamentos.length} → ${processedCount} agendamentos`;
         }
@@ -775,5 +855,5 @@
     show: showModal
   };
 
-  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas e modo 1:1!');
+  console.log('[TW Scheduler BBCode Modal] ✅ Carregado com suporte robusto a coordenadas, modo 1:1 e filtro de datas passadas!');
 })();
