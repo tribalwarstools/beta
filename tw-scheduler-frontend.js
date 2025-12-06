@@ -270,60 +270,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 
   function testSend() { if (window.TWS_TestModal) window.TWS_TestModal.show(); }
   function Farm() { if (window.TWS_FarmInteligente) window.TWS_FarmInteligente.show(); }
-
-
-  function Config() { 
-  console.log('Botão Config clicado');
-  
-  // Verificação completa em 4 níveis
-  if (!window.TWS_ConfigModal) {
-    console.error('TWS_ConfigModal não está definido no window');
-    alert('❌ Módulo de configuração não carregado!\nRecarregue a página.');
-    return;
-  }
-  
-  if (typeof window.TWS_ConfigModal.show === 'function') {
-    // Primeira opção: show() no objeto raiz
-    console.log('Usando TWS_ConfigModal.show()');
-    try {
-      window.TWS_ConfigModal.show();
-      return;
-    } catch (e) {
-      console.error('Erro em TWS_ConfigModal.show():', e);
-    }
-  }
-  
-  // Segunda opção: show() no módulo UI
-  if (window.TWS_ConfigModal.UI && typeof window.TWS_ConfigModal.UI.show === 'function') {
-    console.log('Usando TWS_ConfigModal.UI.show()');
-    try {
-      window.TWS_ConfigModal.UI.show();
-      return;
-    } catch (e) {
-      console.error('Erro em TWS_ConfigModal.UI.show():', e);
-    }
-  }
-  
-  // Terceira opção: show() no módulo Core
-  if (window.TWS_ConfigModal.Core && typeof window.TWS_ConfigModal.Core.show === 'function') {
-    console.log('Usando TWS_ConfigModal.Core.show()');
-    try {
-      window.TWS_ConfigModal.Core.show();
-      return;
-    } catch (e) {
-      console.error('Erro em TWS_ConfigModal.Core.show():', e);
-    }
-  }
-  
-  // Nenhuma opção funcionou
-  console.error('Nenhum método show encontrado em TWS_ConfigModal:', window.TWS_ConfigModal);
-  alert('⚠️ Configuração incompleta.\n\n' +
-        'Módulos carregados:\n' +
-        `• UI: ${!!window.TWS_ConfigModal.UI}\n` +
-        `• Core: ${!!window.TWS_ConfigModal.Core}\n` +
-        `• Telegram: ${!!window.TWS_ConfigModal.Telegram}\n\n` +
-        'Recarregue a página ou verifique o console (F12).');
-}
+  function Configuracao() { if (window.TWS_ConfigModal) window.TWS_ConfigModal.show(); }
 
 
   function exportList() {
@@ -381,7 +328,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     panel.style.cssText = `position:fixed;top:60px;right:10px;width:90%;max-width:1000px;max-height:80vh;background:#F4E4C1;border:3px solid #8B4513;border-radius:8px;padding:15px;z-index:99998;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.4);font-family:Arial,sans-serif;display:none;`;
     panel.innerHTML = `
       <div style="margin-bottom:15px;">
-        <h2 style="margin:0 0 10px 0;color:#8B4513;">⚔️ TW Scheduler</h2>
+        <h2 style="margin:0 0 10px 0;color:#8B4513;">⚔️ TW Scheduler 1.0</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
           <button onclick="TWS_Panel.addManual()" style="padding:6px 12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">➕ Adicionar</button>
           <button onclick="TWS_Panel.importBBCode()" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📋 BBCode</button>
@@ -392,7 +339,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.clearAll()" style="padding:6px 12px;background:#D32F2F;color:white;border:none;border-radius:4px;cursor:pointer;">🚫 Limpar Tudo</button>
           <button onclick="TWS_Panel.exportList()" style="padding:6px 12px;background:#607D8B;color:white;border:none;border-radius:4px;cursor:pointer;">💾 Exportar</button>
           <button onclick="TWS_Panel.importList()" style="padding:6px 12px;background:#795548;color:white;border:none;border-radius:4px;cursor:pointer;">📂 Importar</button>
-          <button onclick="TWS_Panel.Config()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Config</button>
+          <button onclick="TWS_Panel.Configuracao()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Configuracao</button>
         </div>
       </div>
       <div id="tws-dashboard" style="margin-bottom:20px;"></div>
@@ -437,7 +384,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     importBBCode,
     testSend,
     Farm,
-    Config,
+    Configuracao,
     clearCompleted,
     clearPending,
     clearAll,
@@ -464,6 +411,4 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
-
-
 
