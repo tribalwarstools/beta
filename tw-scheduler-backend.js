@@ -553,7 +553,7 @@ function getGlobalConfig() {
     // ✅ USAR MESMO defaultConfig DO MODAL
     const defaultConfig = {
       behavior: {
-        schedulerCheckInterval: 50,  // ← VALOR PADRÃO ÚNICO
+        schedulerCheckInterval: 1000,  // ← VALOR PADRÃO ÚNICO
         retryOnFail: true,
         maxRetries: 3
       }
@@ -947,6 +947,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
