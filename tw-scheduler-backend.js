@@ -569,7 +569,7 @@ function getGlobalConfig() {
     console.error('[Backend] Erro ao ler config global:', e);
     return { 
       behavior: { 
-        schedulerCheckInterval: 50,  // ← MESMO VALOR
+        schedulerCheckInterval: 1000,  // ← MESMO VALOR
         retryOnFail: true, 
         maxRetries: 3 
       } 
@@ -947,6 +947,7 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
+
 
 
 
