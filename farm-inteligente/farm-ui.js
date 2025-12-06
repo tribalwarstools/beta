@@ -398,71 +398,72 @@
             }, 100);
         },
         
-        // === ATUALIZAR INFORMAÇÕES DINÂMICAS ===
-        updateDynamicInfo: function() {
-            if (!window.TWS_FarmInteligente || !window.TWS_FarmInteligente.Core) return;
+
+// === ATUALIZAR INFORMAÇÕES DINÂMICAS ===
+updateDynamicInfo: function() {
+    if (!window.TWS_FarmInteligente || !window.TWS_FarmInteligente.Core) return;
+    
+    try {
+        const worldInfo = window.TWS_FarmInteligente.Core.getVelocitySourceInfo();
+        const velocidades = window.TWS_FarmInteligente.Core.getVelocidadesUnidades(); // ⭐ Declaração em português
+        
+        // Atualizar badge no cabeçalho
+        const badge = document.getElementById('world-badge');
+        if (badge) {
+            let badgeText = '';
+            let badgeColor = '#9b59b6';
+            let badgeTitle = '';
             
-            try {
-                const worldInfo = window.TWS_FarmInteligente.Core.getVelocitySourceInfo();
-                const velocities = window.TWS_FarmInteligente.Core.getVelocidadesUnidades();
-                
-                // Atualizar badge no cabeçalho
-                const badge = document.getElementById('world-badge');
-                if (badge) {
-                    let badgeText = '';
-                    let badgeColor = '#9b59b6';
-                    let badgeTitle = '';
-                    
-                    if (worldInfo.source === 'REAL') {
-                        badgeText = `⚡ ${worldInfo.world}`;
-                        badgeColor = '#27ae60';
-                        badgeTitle = `Velocidades REAIS do mundo ${worldInfo.world} (atualizado: ${worldInfo.lastUpdate || 'agora'})`;
-                    } else if (worldInfo.source === 'CACHE') {
-                        badgeText = `♻️ ${worldInfo.world}`;
-                        badgeColor = '#f39c12';
-                        badgeTitle = `Velocidades em cache do mundo ${worldInfo.world} (${worldInfo.lastUpdate || 'desconhecido'})`;
-                    } else {
-                        badgeText = `🌍 ${worldInfo.world || 'Config'}`;
-                        badgeColor = '#3498db';
-                        badgeTitle = `Velocidades ${worldInfo.world ? `do mundo ${worldInfo.world}` : 'configuradas globalmente'}`;
-                    }
-                    
-                    badge.textContent = badgeText;
-                    badge.style.background = badgeColor;
-                    badge.title = badgeTitle;
-                }
-                
-                // Atualizar info no conteúdo
-                const velocityInfo = document.getElementById('velocity-info');
-                if (velocityInfo) {
-                    let infoText = '';
-                    
-                    if (worldInfo.source === 'REAL') {
-                        infoText = `✅ Usando velocidades REAIS do mundo ${worldInfo.world}`;
-                    } else if (worldInfo.source === 'CACHE') {
-                        infoText = `♻️ Usando velocidades em cache do mundo ${worldInfo.world}`;
-                    } else {
-                        infoText = `⚙️ Usando velocidades configuradas globalmente`;
-                    }
-                    
-                    // Adicionar exemplo de velocidade
-                    if (velocidades.sword && velocities.snob) {
-                        infoText += ` (Ex: Sword: ${velocidades.sword.toFixed(2)} min/campo, Snob: ${velocidades.snob.toFixed(2)} min/campo)`;
-                    }
-                    
-                    velocityInfo.textContent = infoText;
-                }
-                
-                // Atualizar rodapé
-                const footerInfo = document.getElementById('footer-velocity-info');
-                if (footerInfo) {
-                    footerInfo.textContent = `Velocidades: ${worldInfo.source === 'REAL' ? '⚡ REAIS' : worldInfo.source === 'CACHE' ? '♻️ CACHE' : '⚙️ CONFIG'} (${worldInfo.world || 'Global'})`;
-                }
-                
-            } catch (error) {
-                console.warn('[Farm UI] Erro ao atualizar info:', error);
+            if (worldInfo.source === 'REAL') {
+                badgeText = `⚡ ${worldInfo.world}`;
+                badgeColor = '#27ae60';
+                badgeTitle = `Velocidades REAIS do mundo ${worldInfo.world} (atualizado: ${worldInfo.lastUpdate || 'agora'})`;
+            } else if (worldInfo.source === 'CACHE') {
+                badgeText = `♻️ ${worldInfo.world}`;
+                badgeColor = '#f39c12';
+                badgeTitle = `Velocidades em cache do mundo ${worldInfo.world} (${worldInfo.lastUpdate || 'desconhecido'})`;
+            } else {
+                badgeText = `🌍 ${worldInfo.world || 'Config'}`;
+                badgeColor = '#3498db';
+                badgeTitle = `Velocidades ${worldInfo.world ? `do mundo ${worldInfo.world}` : 'configuradas globalmente'}`;
             }
-        },
+            
+            badge.textContent = badgeText;
+            badge.style.background = badgeColor;
+            badge.title = badgeTitle;
+        }
+        
+        // Atualizar info no conteúdo
+        const velocityInfo = document.getElementById('velocity-info');
+        if (velocityInfo) {
+            let infoText = '';
+            
+            if (worldInfo.source === 'REAL') {
+                infoText = `✅ Usando velocidades REAIS do mundo ${worldInfo.world}`;
+            } else if (worldInfo.source === 'CACHE') {
+                infoText = `♻️ Usando velocidades em cache do mundo ${worldInfo.world}`;
+            } else {
+                infoText = `⚙️ Usando velocidades configuradas globalmente`;
+            }
+            
+            // ⭐⭐ CORREÇÃO APLICADA: Usar 'velocidades' (português) consistentemente
+            if (velocidades && velocidades.sword && velocidades.snob) {
+                infoText += ` (Ex: Sword: ${velocidades.sword.toFixed(2)} min/campo, Snob: ${velocidades.snob.toFixed(2)} min/campo)`;
+            }
+            
+            velocityInfo.textContent = infoText;
+        }
+        
+        // Atualizar rodapé
+        const footerInfo = document.getElementById('footer-velocity-info');
+        if (footerInfo) {
+            footerInfo.textContent = `Velocidades: ${worldInfo.source === 'REAL' ? '⚡ REAIS' : worldInfo.source === 'CACHE' ? '♻️ CACHE' : '⚙️ CONFIG'} (${worldInfo.world || 'Global'})`;
+        }
+        
+    } catch (error) {
+        console.warn('[Farm UI] Erro ao atualizar info:', error);
+    }
+},
         
         // === FUNÇÕES DE AÇÃO DA UI ===
         _toggleFarm: function(id) {
