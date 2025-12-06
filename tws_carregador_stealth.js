@@ -130,23 +130,6 @@
                     priority: 'medium'
                 },
                 
-                // 🆕 NOVA ESTRUTURA: Config Modal Modular (3 arquivos)
-                { 
-                    file: 'config-modular/config-core.js', 
-                    check: 'TWS_ConfigModal.Core',
-                    priority: 'medium'
-                },
-                { 
-                    file: 'config-modular/config-telegram.js', 
-                    check: 'TWS_ConfigModal.Telegram',
-                    priority: 'medium'
-                },
-                { 
-                    file: 'config-modular/config-ui.js', 
-                    check: 'TWS_ConfigModal.UI',
-                    priority: 'medium'
-                },
-                
                 { 
                     file: 'tw-scheduler-bbcode-modal.js', 
                     check: 'TWS_BBCodeModal',
@@ -162,11 +145,7 @@
                     check: 'TWS_MultiTabLock',
                     priority: 'medium'
                 },
-                { 
-                    file: 'telegram-bot.js', 
-                    check: 'TelegramBotReal',
-                    priority: 'low'
-                }
+
             ]
         },
         
@@ -351,13 +330,6 @@
                     console.log('[Turbo]   ✅ Show:', !!window.TWS_FarmInteligente.show);
                 }
                 
-                // Log específico do Config Modal
-                if (window.TWS_ConfigModal) {
-                    console.log('[Turbo] ⚙️ Config Modal modular carregado!');
-                    console.log('[Turbo]   ✅ Core:', !!window.TWS_ConfigModal.Core);
-                    console.log('[Turbo]   ✅ Telegram:', !!window.TWS_ConfigModal.Telegram);
-                    console.log('[Turbo]   ✅ UI:', !!window.TWS_ConfigModal.UI);
-                }
             })
             .catch(e => console.log('[Turbo] ⚠️ Extras:', e));
         
@@ -365,7 +337,6 @@
         setTimeout(() => {
             const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
             const farmLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
-            const configLoaded = window.TWS_ConfigModal && window.TWS_ConfigModal.Core;
             
             if (essentialsLoaded) {
                 notifier.success();
@@ -383,9 +354,6 @@
                     } else if (farmLoaded) {
                         badgeText = '🌾✓';
                         badgeTitle = 'TW Scheduler + Farm';
-                    } else if (configLoaded) {
-                        badgeText = '⚙️✓';
-                        badgeTitle = 'TW Scheduler + Config';
                     }
                     
                     badge.textContent = badgeText;
