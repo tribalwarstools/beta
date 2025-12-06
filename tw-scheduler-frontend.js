@@ -270,7 +270,60 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
 
   function testSend() { if (window.TWS_TestModal) window.TWS_TestModal.show(); }
   function Farm() { if (window.TWS_FarmInteligente) window.TWS_FarmInteligente.show(); }
-  function Config() { if (window.TWS_ConfigModal) window.TWS_ConfigModal.show(); }
+
+
+  function Config() { 
+  console.log('Botão Config clicado');
+  
+  // Verificação completa em 4 níveis
+  if (!window.TWS_ConfigModal) {
+    console.error('TWS_ConfigModal não está definido no window');
+    alert('❌ Módulo de configuração não carregado!\nRecarregue a página.');
+    return;
+  }
+  
+  if (typeof window.TWS_ConfigModal.show === 'function') {
+    // Primeira opção: show() no objeto raiz
+    console.log('Usando TWS_ConfigModal.show()');
+    try {
+      window.TWS_ConfigModal.show();
+      return;
+    } catch (e) {
+      console.error('Erro em TWS_ConfigModal.show():', e);
+    }
+  }
+  
+  // Segunda opção: show() no módulo UI
+  if (window.TWS_ConfigModal.UI && typeof window.TWS_ConfigModal.UI.show === 'function') {
+    console.log('Usando TWS_ConfigModal.UI.show()');
+    try {
+      window.TWS_ConfigModal.UI.show();
+      return;
+    } catch (e) {
+      console.error('Erro em TWS_ConfigModal.UI.show():', e);
+    }
+  }
+  
+  // Terceira opção: show() no módulo Core
+  if (window.TWS_ConfigModal.Core && typeof window.TWS_ConfigModal.Core.show === 'function') {
+    console.log('Usando TWS_ConfigModal.Core.show()');
+    try {
+      window.TWS_ConfigModal.Core.show();
+      return;
+    } catch (e) {
+      console.error('Erro em TWS_ConfigModal.Core.show():', e);
+    }
+  }
+  
+  // Nenhuma opção funcionou
+  console.error('Nenhum método show encontrado em TWS_ConfigModal:', window.TWS_ConfigModal);
+  alert('⚠️ Configuração incompleta.\n\n' +
+        'Módulos carregados:\n' +
+        `• UI: ${!!window.TWS_ConfigModal.UI}\n` +
+        `• Core: ${!!window.TWS_ConfigModal.Core}\n` +
+        `• Telegram: ${!!window.TWS_ConfigModal.Telegram}\n\n` +
+        'Recarregue a página ou verifique o console (F12).');
+}
 
 
   function exportList() {
@@ -411,5 +464,6 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
 
