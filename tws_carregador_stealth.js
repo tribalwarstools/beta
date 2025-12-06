@@ -1,4 +1,4 @@
-// tws_carregador_stealth.js - VERSÃO 3.0 OTIMIZADA
+// tws_carregador_stealth.js - VERSÃO 3.1 CORRIGIDA
 (function() {
     'use strict';
 
@@ -8,7 +8,7 @@
     }
     window.__TWS_STEALTH_V3 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 3.0 (Turbo)');
+    console.log('[Stealth] Inicializado - Versão 3.1 (Farm Modular)');
 
     // ============================================
     // NOTIFICAÇÃO ULTRA MINIMALISTA
@@ -104,19 +104,31 @@
                     priority: 'high'
                 },
                 { 
-                    file: 'tw-scheduler-farm-modal.js', 
-                    check: 'TWS_FarmInteligente',
+                    file: 'tw-scheduler-frontend.js', 
+                    check: 'TWS_Panel',
+                    priority: 'high'
+                },
+                // 🆕 ADICIONADO: Módulos do Farm Inteligente
+                { 
+                    file: 'farm-inteligente/farm-core.js', 
+                    check: 'TWS_FarmInteligente.Core',
                     priority: 'high'
                 },
                 { 
-                    file: 'tw-scheduler-frontend.js', 
-                    check: 'TWS_Panel',
+                    file: 'farm-inteligente/farm-ui.js', 
+                    check: 'TWS_FarmInteligente.UI',
                     priority: 'high'
                 }
             ],
             
             // FASE 3: EXTRAS (carregam em background)
             phase3: [
+                // 🆕 ADICIONADO: Inicialização do Farm (depende dos outros módulos)
+                { 
+                    file: 'farm-inteligente/farm-init.js', 
+                    check: 'TWS_FarmInteligente.show',
+                    priority: 'medium'
+                },
                 { 
                     file: 'tw-scheduler-config-modal.js', 
                     check: 'TWS_ConfigModal',
@@ -180,11 +192,20 @@
         
         return false;
     }
+    
+    // ⭐ HELPER: Verificar objetos aninhados ⭐
+    function checkObjectExists(path) {
+        try {
+            return path.split('.').reduce((obj, key) => obj && obj[key], window) !== undefined;
+        } catch (e) {
+            return false;
+        }
+    }
 
     // ⭐ LOADER TURBO (com cache e paralelismo) ⭐
     async function carregarScriptTurbo(scriptInfo) {
         const url = TURBO_CONFIG.baseUrl + scriptInfo.file;
-        const cacheKey = `tws_cache_${scriptInfo.file}`;
+        const cacheKey = `tws_cache_${scriptInfo.file.replace(/\//g, '_')}`;
         
         try {
             // Tentar cache primeiro
@@ -193,7 +214,7 @@
                 console.log(`[Turbo] ♻️ Cache: ${scriptInfo.file}`);
                 try {
                     new Function(cached)();
-                    if (window[scriptInfo.check]) return true;
+                    if (checkObjectExists(scriptInfo.check)) return true; // ✅ CORRIGIDO
                 } catch (e) {
                     console.log(`[Turbo] Cache inválido: ${scriptInfo.file}`);
                     localStorage.removeItem(cacheKey);
@@ -215,24 +236,22 @@
             
             const code = await response.text();
             
-            // Salvar no cache (exceto para updates frequentes)
-            if (!scriptInfo.file.includes('frontend')) {
-                try {
-                    localStorage.setItem(cacheKey, code);
-                    localStorage.setItem(cacheKey + '_time', Date.now());
-                } catch (e) {
-                    // Ignora erros de quota
-                }
+            // Salvar no cache
+            try {
+                localStorage.setItem(cacheKey, code);
+                localStorage.setItem(cacheKey + '_time', Date.now());
+            } catch (e) {
+                // Ignora erros de quota
             }
             
             // Executar
             new Function(code)();
             
-            // Verificação rápida
+            // Verificação com suporte para nested objects (ex: TWS_FarmInteligente.Core)
             return await new Promise(resolve => {
                 const start = Date.now();
                 const check = () => {
-                    if (window[scriptInfo.check]) {
+                    if (checkObjectExists(scriptInfo.check)) { // ✅ CORRIGIDO
                         console.log(`[Turbo] ✓ ${scriptInfo.file} (${Date.now() - start}ms)`);
                         resolve(true);
                     } else if (Date.now() - start > 3000) { // Max 3s wait
@@ -310,12 +329,22 @@
         carregarParalelo(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Extras')
             .then(() => {
                 console.log('[Turbo] ✅ Todos os módulos carregados');
+                
+                // Log específico do Farm Inteligente
+                if (window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core) {
+                    console.log('[Turbo] 🌾 Farm Inteligente modular carregado!');
+                    console.log('[Turbo]   ✅ Core:', !!window.TWS_FarmInteligente.Core);
+                    console.log('[Turbo]   ✅ UI:', !!window.TWS_FarmInteligente.UI);
+                    console.log('[Turbo]   ✅ Show:', !!window.TWS_FarmInteligente.show);
+                }
             })
             .catch(e => console.log('[Turbo] ⚠️ Extras:', e));
         
         // Verificação rápida do sistema
         setTimeout(() => {
             const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
+            const farmLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
+            
             if (essentialsLoaded) {
                 notifier.success();
                 
@@ -323,19 +352,23 @@
                 if (!document.querySelector('#tws-active-badge')) {
                     const badge = document.createElement('div');
                     badge.id = 'tws-active-badge';
-                    badge.textContent = '✓';
+                    badge.textContent = farmLoaded ? '🌾✓' : '✓';
+                    badge.title = farmLoaded ? 'TW Scheduler + Farm' : 'TW Scheduler';
                     badge.style.cssText = `
                         position: fixed;
                         bottom: 2px;
                         right: 2px;
                         font-size: 8px;
-                        color: #27ae60;
+                        color: ${farmLoaded ? '#27ae60' : '#3498db'};
                         opacity: 0.3;
                         z-index: 999997;
                         font-family: monospace;
                         pointer-events: none;
                         user-select: none;
+                        transition: opacity 0.3s;
                     `;
+                    badge.onmouseenter = () => badge.style.opacity = '0.7';
+                    badge.onmouseleave = () => badge.style.opacity = '0.3';
                     document.body.appendChild(badge);
                 }
             } else {
