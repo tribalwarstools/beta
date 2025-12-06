@@ -288,4 +288,4 @@
     // INICIA
     iniciarQuandoPronto();
 
-})(); // ← AQUI FECHA A ÚNICA IIFE
+})(); // ←  AQUI FECHA A ÚNICA IIFE
