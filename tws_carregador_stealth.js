@@ -123,6 +123,13 @@
             
             // FASE 3: EXTRAS (carregam em background)
             phase3: [
+                // 🆕 ADICIONADO: Modal de Configurações (antes do farm-init)
+                { 
+                    file: 'tw-scheduler-config-modal.js', 
+                    check: 'TWS_ConfigModal',
+                    priority: 'high' // ⬅️ Aumentei para high para garantir carregamento
+                },
+                
                 // 🆕 ADICIONADO: Inicialização do Farm (depende dos outros módulos)
                 { 
                     file: 'farm-inteligente/farm-init.js', 
@@ -144,8 +151,7 @@
                     file: 'tw-scheduler-multitab-lock.js', 
                     check: 'TWS_MultiTabLock',
                     priority: 'medium'
-                },
-
+                }
             ]
         },
         
@@ -319,8 +325,8 @@
         // === FASE 3: EXTRAS (background) ===
         notifier.update(3, 'Finalizando módulos');
         carregarParalelo(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Extras')
-            .then(() => {
-                console.log('[Turbo] ✅ Todos os módulos carregados');
+            .then((successCount) => {
+                console.log(`[Turbo] ✅ ${successCount}/${TURBO_CONFIG.scripts.phase3.length} módulos carregados`);
                 
                 // Log específico do Farm Inteligente
                 if (window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core) {
@@ -330,6 +336,13 @@
                     console.log('[Turbo]   ✅ Show:', !!window.TWS_FarmInteligente.show);
                 }
                 
+                // ⭐ NOVO: Verificar Modal de Configurações
+                if (window.TWS_ConfigModal) {
+                    console.log('[Turbo] ⚙️ Modal de Configurações carregado!');
+                } else {
+                    console.warn('[Turbo] ⚠️ Modal de Configurações NÃO carregado!');
+                }
+                
             })
             .catch(e => console.log('[Turbo] ⚠️ Extras:', e));
         
@@ -337,6 +350,7 @@
         setTimeout(() => {
             const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
             const farmLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
+            const configLoaded = window.TWS_ConfigModal; // ⭐ NOVO: Verificar config modal
             
             if (essentialsLoaded) {
                 notifier.success();
@@ -348,10 +362,16 @@
                     let badgeText = '✓';
                     let badgeTitle = 'TW Scheduler';
                     
-                    // CORREÇÃO: Removida a verificação de configLoaded
-                    if (farmLoaded) {
+                    // ⭐ ATUALIZADO: Mostrar se config modal está carregado
+                    if (farmLoaded && configLoaded) {
+                        badgeText = '🌾⚙️✓';
+                        badgeTitle = 'TW Scheduler + Farm + Config';
+                    } else if (farmLoaded) {
                         badgeText = '🌾✓';
                         badgeTitle = 'TW Scheduler + Farm';
+                    } else if (configLoaded) {
+                        badgeText = '⚙️✓';
+                        badgeTitle = 'TW Scheduler + Config';
                     }
                     
                     badge.textContent = badgeText;
@@ -361,7 +381,7 @@
                         bottom: 2px;
                         right: 2px;
                         font-size: 8px;
-                        color: ${farmLoaded ? '#27ae60' : '#3498db'};
+                        color: ${farmLoaded && configLoaded ? '#9b59b6' : farmLoaded ? '#27ae60' : configLoaded ? '#3498db' : '#3498db'};
                         opacity: 0.3;
                         z-index: 999997;
                         font-family: monospace;
@@ -373,6 +393,19 @@
                     badge.onmouseleave = () => badge.style.opacity = '0.3';
                     document.body.appendChild(badge);
                 }
+                
+                // ⭐ NOVO: Log de status completo
+                console.log('[Turbo] 📊 Status Final:');
+                console.log('  ✅ Backend:', !!window.TWS_Backend);
+                console.log('  ✅ Frontend:', !!window.TWS_Panel);
+                console.log('  ✅ Modal:', !!window.TWS_Modal);
+                console.log('  ✅ BBCode:', !!window.TWS_BBCodeModal);
+                console.log('  ✅ Test:', !!window.TWS_TestModal);
+                console.log('  ✅ Farm Core:', !!(window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core));
+                console.log('  ✅ Farm UI:', !!(window.TWS_FarmInteligente && window.TWS_FarmInteligente.UI));
+                console.log('  ✅ Config:', !!window.TWS_ConfigModal);
+                console.log('  ✅ MultiTab:', !!window.TWS_MultiTabLock);
+                
             } else {
                 console.log('[Turbo] ⚠️ Sistema parcialmente carregado');
             }
