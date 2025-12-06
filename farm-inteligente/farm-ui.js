@@ -1,5 +1,6 @@
 // ========== FARM-UI.JS ==========
 // Interface do usuário, modais e renderização
+// ATUALIZADO: Mostra mundo atual no badge de configuração
 (function() {
     'use strict';
     
@@ -99,6 +100,9 @@
                 const tempoVolta = tempoIda;
                 const tempoTotalCiclo = tempoIda + tempoVolta;
                 
+                // ⭐ NOVO: Obter informações do mundo atual
+                const worldInfo = this.getCurrentWorldInfo();
+                
                 html += `
                     <div style="
                         background: white;
@@ -121,7 +125,9 @@
                                 </div>
                                 <div style="color: #666; font-size: 10px; margin-top: 2px;">
                                     📏 Dist: ${distancia.toFixed(1)} | 🐌 ${unidadeMaisLenta}: ${velocidade}min/campo 
-                                    <small style="color: #999;">(Configuração global)</small>
+                                    <small style="color: #999;">
+                                        (${worldInfo.source === 'REAL' ? '⚡ ' : ''}${worldInfo.world || 'Config Global'})
+                                    </small>
                                 </div>
                                 <div style="color: #888; font-size: 10px; margin-top: 1px;">
                                     ⏱️ Ida: ${Math.round(tempoIda)}min | Volta: ${Math.round(tempoVolta)}min | Total: ${Math.round(tempoTotalCiclo)}min
@@ -210,6 +216,37 @@
             return html;
         },
         
+        // === FUNÇÃO AUXILIAR: Obter informações do mundo atual ===
+        getCurrentWorldInfo: function() {
+            if (window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core) {
+                try {
+                    return window.TWS_FarmInteligente.Core.getVelocitySourceInfo();
+                } catch (e) {
+                    console.warn('[Farm UI] Erro ao obter info do mundo:', e);
+                }
+            }
+            
+            // Fallback
+            try {
+                // Tentar extrair do URL
+                const url = window.location.href;
+                const match = url.match(/https?:\/\/([^.]+)\.tribalwars/);
+                const world = match && match[1] ? match[1] : 'desconhecido';
+                
+                return {
+                    world: world,
+                    source: 'URL',
+                    lastUpdate: null
+                };
+            } catch (error) {
+                return {
+                    world: 'desconhecido',
+                    source: 'FALLBACK',
+                    lastUpdate: null
+                };
+            }
+        },
+        
         // === MODAL PRINCIPAL ===
         showModal: function() {
             const existing = document.getElementById('tws-farm-modal');
@@ -230,6 +267,16 @@
                 align-items: center;
                 animation: fadeIn 0.2s ease;
             `;
+
+            // ⭐ NOVO: Obter informações do mundo para o título
+            const worldInfo = this.getCurrentWorldInfo();
+            const worldBadgeText = worldInfo.source === 'REAL' ? `⚡ ${worldInfo.world}` : 
+                                  worldInfo.world !== 'desconhecido' ? `🌍 ${worldInfo.world}` : '⚙️ Config Global';
+            const worldBadgeColor = worldInfo.source === 'REAL' ? '#27ae60' : 
+                                   worldInfo.world !== 'desconhecido' ? '#3498db' : '#9b59b6';
+            const worldBadgeTitle = worldInfo.source === 'REAL' ? 'Velocidades REAIS do mundo atual' :
+                                   worldInfo.world !== 'desconhecido' ? `Mundo ${worldInfo.world}` : 
+                                   'Velocidades das unidades configuradas globalmente';
 
             const modal = document.createElement('div');
             modal.style.cssText = `
@@ -262,7 +309,20 @@
                 <div style="background: #4CAF50; padding: 20px; text-align: center; border-bottom: 3px solid #388E3C;">
                     <div style="font-size: 24px; font-weight: bold; color: white;">
                         🌾 FARM INTELIGENTE v2.2
-                        <span style="display: inline-block; background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 10px; vertical-align: middle; cursor: help;" title="Velocidades das unidades configuradas globalmente">⚙️ Config Global</span>
+                        <span id="world-badge" style="
+                            display: inline-block;
+                            background: ${worldBadgeColor};
+                            color: white;
+                            padding: 2px 8px;
+                            border-radius: 10px;
+                            font-size: 11px;
+                            margin-left: 10px;
+                            vertical-align: middle;
+                            cursor: help;
+                            font-weight: bold;
+                        " title="${worldBadgeTitle}">
+                            ${worldBadgeText}
+                        </span>
                     </div>
                     <div style="color: #E8F5E8; font-size: 14px; margin-top: 5px;">
                         Sistema automático sem disparo automático de farms atrasados - Use "Enviar Agora" manualmente
@@ -280,8 +340,8 @@
                         ✅ Pausa automática após 3 falhas consecutivas<br>
                         ✅ Distância Euclidiana correta para TW<br>
                         ✅ Logging detalhado de eventos<br>
-                        <strong>🎯 VELOCIDADES UNIFICADAS:</strong><br>
-                        ✅ Usa configurações globais do Config Modal<br>
+                        <strong>🎯 VELOCIDADES ATUALIZADAS:</strong><br>
+                        ✅ <span id="velocity-info">Usando configurações específicas do mundo atual</span><br>
                         ✅ Atualização automática quando velocidades mudam<br>
                         ✅ Fallback para valores padrão se necessário<br>
                         <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>
@@ -305,7 +365,7 @@
                                 📈 Ver Estatísticas
                             </button>
                             <button class="farm-btn btn-warning" onclick="TWS_FarmInteligente.UI._recarregarVelocidades()">
-                                🔄 Recarregar Velocidades
+                                🔄 Atualizar Velocidades
                             </button>
                         </div>
                     </div>
@@ -318,7 +378,8 @@
                 <!-- Rodapé -->
                 <div style="background: #f5f5f5; padding: 15px; text-align: center; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
                     Farm Inteligente v2.2 | Total: ${window.TWS_FarmInteligente.Core ? window.TWS_FarmInteligente.Core.getFarmList().filter(f => f.active !== false).length : 0} farms ativos | 
-                    Eventos: ${window.TWS_FarmInteligente.Core ? window.TWS_FarmInteligente.Core.FarmLogger.history.length : 0} | Velocidades: Configuração Global
+                    Eventos: ${window.TWS_FarmInteligente.Core ? window.TWS_FarmInteligente.Core.FarmLogger.history.length : 0} | 
+                    <span id="footer-velocity-info">Velocidades: ${worldBadgeText}</span>
                 </div>
             `;
 
@@ -330,6 +391,77 @@
                     overlay.remove(); 
                 }
             };
+            
+            // Atualizar informações dinâmicas
+            setTimeout(() => {
+                this.updateDynamicInfo();
+            }, 100);
+        },
+        
+        // === ATUALIZAR INFORMAÇÕES DINÂMICAS ===
+        updateDynamicInfo: function() {
+            if (!window.TWS_FarmInteligente || !window.TWS_FarmInteligente.Core) return;
+            
+            try {
+                const worldInfo = window.TWS_FarmInteligente.Core.getVelocitySourceInfo();
+                const velocities = window.TWS_FarmInteligente.Core.getVelocidadesUnidades();
+                
+                // Atualizar badge no cabeçalho
+                const badge = document.getElementById('world-badge');
+                if (badge) {
+                    let badgeText = '';
+                    let badgeColor = '#9b59b6';
+                    let badgeTitle = '';
+                    
+                    if (worldInfo.source === 'REAL') {
+                        badgeText = `⚡ ${worldInfo.world}`;
+                        badgeColor = '#27ae60';
+                        badgeTitle = `Velocidades REAIS do mundo ${worldInfo.world} (atualizado: ${worldInfo.lastUpdate || 'agora'})`;
+                    } else if (worldInfo.source === 'CACHE') {
+                        badgeText = `♻️ ${worldInfo.world}`;
+                        badgeColor = '#f39c12';
+                        badgeTitle = `Velocidades em cache do mundo ${worldInfo.world} (${worldInfo.lastUpdate || 'desconhecido'})`;
+                    } else {
+                        badgeText = `🌍 ${worldInfo.world || 'Config'}`;
+                        badgeColor = '#3498db';
+                        badgeTitle = `Velocidades ${worldInfo.world ? `do mundo ${worldInfo.world}` : 'configuradas globalmente'}`;
+                    }
+                    
+                    badge.textContent = badgeText;
+                    badge.style.background = badgeColor;
+                    badge.title = badgeTitle;
+                }
+                
+                // Atualizar info no conteúdo
+                const velocityInfo = document.getElementById('velocity-info');
+                if (velocityInfo) {
+                    let infoText = '';
+                    
+                    if (worldInfo.source === 'REAL') {
+                        infoText = `✅ Usando velocidades REAIS do mundo ${worldInfo.world}`;
+                    } else if (worldInfo.source === 'CACHE') {
+                        infoText = `♻️ Usando velocidades em cache do mundo ${worldInfo.world}`;
+                    } else {
+                        infoText = `⚙️ Usando velocidades configuradas globalmente`;
+                    }
+                    
+                    // Adicionar exemplo de velocidade
+                    if (velocidades.sword && velocities.snob) {
+                        infoText += ` (Ex: Sword: ${velocidades.sword.toFixed(2)} min/campo, Snob: ${velocidades.snob.toFixed(2)} min/campo)`;
+                    }
+                    
+                    velocityInfo.textContent = infoText;
+                }
+                
+                // Atualizar rodapé
+                const footerInfo = document.getElementById('footer-velocity-info');
+                if (footerInfo) {
+                    footerInfo.textContent = `Velocidades: ${worldInfo.source === 'REAL' ? '⚡ REAIS' : worldInfo.source === 'CACHE' ? '♻️ CACHE' : '⚙️ CONFIG'} (${worldInfo.world || 'Global'})`;
+                }
+                
+            } catch (error) {
+                console.warn('[Farm UI] Erro ao atualizar info:', error);
+            }
         },
         
         // === FUNÇÕES DE AÇÃO DA UI ===
@@ -380,8 +512,6 @@
         },
         
         _enviarAgora: function(id) {
-            // Esta função precisa estar no arquivo de inicialização
-            // por depender de window.TWS_Backend.executeAttack
             if (window.TWS_FarmInteligente && window.TWS_FarmInteligente._enviarAgora) {
                 window.TWS_FarmInteligente._enviarAgora(id);
             }
@@ -402,8 +532,15 @@
                 min-width: 400px;
             `;
 
+            // Obter info do mundo atual
+            const worldInfo = this.getCurrentWorldInfo();
+
             filtroModal.innerHTML = `
                 <h3 style="margin-top: 0; color: #388E3C;">🔍 Converter por Filtro</h3>
+                <div style="margin-bottom: 10px; padding: 8px; background: #f0f8ff; border-radius: 4px; font-size: 12px;">
+                    <strong>Mundo atual:</strong> ${worldInfo.world} 
+                    <small style="color: #666;">(${worldInfo.source === 'REAL' ? '⚡ velocidades reais' : '⚙️ configuração'})</small>
+                </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">Origem (opcional):</label>
                     <input type="text" id="filtro-origem" placeholder="Ex: 500|500" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
@@ -421,6 +558,7 @@
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">Intervalo (minutos):</label>
                     <input type="number" id="filtro-intervalo" value="5" min="1" max="1440" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <small style="color: #666;">Entre cada ciclo do farm</small>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button onclick="this.parentElement.parentElement.remove()" style="padding: 8px 16px; background: #9E9E9E; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancelar</button>
@@ -478,34 +616,55 @@
                 events: window.TWS_FarmInteligente.Core.FarmLogger.history.length
             };
             
-            const velocidades = window.TWS_FarmInteligente.Core.getVelocidadesUnidades();
-            const configSource = window.TWS_ConfigModal ? 'Config Modal Global' : 'Fallback Local';
+            const velocities = window.TWS_FarmInteligente.Core.getVelocidadesUnidades();
+            const worldInfo = window.TWS_FarmInteligente.Core.getVelocitySourceInfo();
+
+            // Calcular eficiência (menor = melhor)
+            const swordSpeed = velocities.sword || 22;
+            const defaultSwordSpeed = 22; // brp10 padrão
+            const efficiencyPercent = ((defaultSwordSpeed - swordSpeed) / defaultSwordSpeed * 100).toFixed(1);
+            
+            let efficiencyText = swordSpeed < defaultSwordSpeed ? 
+                `(+${efficiencyPercent}% mais rápido que brp10)` : 
+                `(${efficiencyPercent}% mais lento que brp10)`;
 
             alert(
                 '📊 ESTATÍSTICAS DO FARM INTELIGENTE\n\n' +
-                `Total de Farms: ${stats.total}\n` +
+                `🌍 Mundo: ${worldInfo.world || 'desconhecido'}\n` +
+                `📊 Fonte: ${worldInfo.source === 'REAL' ? '⚡ REAL' : worldInfo.source === 'CACHE' ? '♻️ CACHE' : '⚙️ CONFIG'}\n\n` +
+                `Farms Total: ${stats.total}\n` +
                 `Ativos: ${stats.active}\n` +
                 `Pausados: ${stats.paused}\n\n` +
                 `Ciclos Total: ${stats.totalCycles}\n` +
                 `Ciclos Sucesso: ${stats.successCycles}\n` +
                 `Taxa de Sucesso: ${stats.totalCycles > 0 ? ((stats.successCycles / stats.totalCycles) * 100).toFixed(1) : 0}%\n\n` +
                 `Eventos Registrados: ${stats.events}\n\n` +
-                `⚙️ CONFIGURAÇÃO DE VELOCIDADES:\n` +
-                `Fonte: ${configSource}\n` +
-                `Lanceiro: ${velocidades.spear} min/campo\n` +
-                `Espadachim: ${velocidades.sword} min/campo\n` +
-                `Cav. Leve: ${velocidades.light} min/campo`
+                `⚡ VELOCIDADES (${worldInfo.world || 'Global'}):\n` +
+                `Eficiência: ${efficiencyText}\n` +
+                `Lanceiro: ${velocidades.spear?.toFixed(3) || '?'} min/campo\n` +
+                `Espadachim: ${velocidades.sword?.toFixed(3) || '?'} min/campo\n` +
+                `Nobre: ${velocidades.snob?.toFixed(3) || '?'} min/campo`
             );
         },
         
         _recarregarVelocidades: function() {
             if (window.TWS_FarmInteligente.Core) {
-                window.TWS_FarmInteligente.Core.recarregarVelocidades();
-                alert('✅ Velocidades recarregadas da configuração global!');
-                
-                if (document.getElementById('farm-list-container')) {
-                    document.getElementById('farm-list-container').innerHTML = this.renderFarmList();
+                // Forçar atualização das velocidades
+                if (window.TWS_FarmInteligente.Core.updateVelocitiesFromRealWorld) {
+                    window.TWS_FarmInteligente.Core.updateVelocitiesFromRealWorld();
+                } else {
+                    window.TWS_FarmInteligente.Core.recarregarVelocidades();
                 }
+                
+                // Atualizar interface após 2 segundos
+                setTimeout(() => {
+                    if (document.getElementById('farm-list-container')) {
+                        document.getElementById('farm-list-container').innerHTML = this.renderFarmList();
+                        this.updateDynamicInfo();
+                    }
+                }, 2000);
+                
+                alert('✅ Velocidades sendo atualizadas do mundo atual!');
             }
         }
     };
