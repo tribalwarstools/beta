@@ -23,6 +23,25 @@
   let updateInterval = null;
 
   // =========================
+  // FUNÇÃO DO BOTÃO CONFIGURAÇÕES
+  // =========================
+  function openConfigModal() {
+    console.log('[TW Scheduler] Abrindo modal de configurações...');
+    
+    // Aqui você pode criar ou chamar o modal de configurações
+    // Por enquanto, vamos apenas mostrar uma mensagem
+    alert('⚙️ Modal de Configurações\n\nEsta funcionalidade será implementada em breve!\n\nVocê poderá configurar:\n• Intervalo do scheduler\n• Comportamento de falhas\n• Notificações\n• E outras preferências');
+    
+    // Quando você criar o modal de configurações, substitua o alert acima por:
+    // if (window.TWS_ConfigModal) {
+    //   window.TWS_ConfigModal.show();
+    // } else {
+    //   console.warn('[TW Scheduler] Modal de configurações não disponível');
+    //   alert('Modal de configurações ainda não foi implementado.');
+    // }
+  }
+
+  // =========================
   // ESTATÍSTICAS
   // =========================
   function calculateStats() {
@@ -332,6 +351,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
           <button onclick="TWS_Panel.importBBCode()" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📋 BBCode</button>
           <button onclick="TWS_Panel.testSend()" style="padding:6px 12px;background:#F44336;color:white;border:none;border-radius:4px;cursor:pointer;">🔥 Testar Envio</button>
           <button onclick="TWS_Panel.Farm()" style="padding:6px 12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">🌾 Farm</button>
+          <button onclick="TWS_Panel.openConfigModal()" style="padding:6px 12px;background:#607D8B;color:white;border:none;border-radius:4px;cursor:pointer;">⚙️ Configurações</button>
           <button onclick="TWS_Panel.clearCompleted()" style="padding:6px 12px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;">🗑️ Limpar Concluídos</button>
           <button onclick="TWS_Panel.clearPending()" style="padding:6px 12px;background:#FF6F00;color:white;border:none;border-radius:4px;cursor:pointer;">⏳ Limpar Pendentes</button>
           <button onclick="TWS_Panel.clearAll()" style="padding:6px 12px;background:#D32F2F;color:white;border:none;border-radius:4px;cursor:pointer;">🚫 Limpar Tudo</button>
@@ -389,6 +409,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     exportList,
     importList,
     togglePanel,
+    openConfigModal, // ✅ ADICIONADO
   };
 
   // =========================
@@ -401,9 +422,8 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     if(!window.TWS_Modal) console.warn('[TW Scheduler] ⚠️ Modal de Adicionar não detectado.');
     if(!window.TWS_BBCodeModal) console.warn('[TW Scheduler] ⚠️ Modal de BBCode não detectado.');
     if(!window.TWS_TestModal) console.warn('[TW Scheduler] ⚠️ Modal de Teste não detectado.');
-    if(!window.TWS_FarmInteligente) console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');    
+    if(!window.TWS_FarmInteligente) console.warn('[TW Scheduler] ⚠️ Modal de Farm não detectado.');
+    if(!window.TWS_ConfigModal) console.warn('[TW Scheduler] ⚠️ Modal de Configurações não detectado.'); // ✅ ADICIONADO
   },100);
 
 })();
-
-
