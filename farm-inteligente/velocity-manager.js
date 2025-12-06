@@ -290,30 +290,38 @@
         },
         
         // Método para integração direta com FarmCore
-        getVelocidadesParaFarmCore: function() {
-            const realSpeeds = this.getCurrentSpeeds();
-            
-            if (realSpeeds) {
-                // Garantir todas as unidades necessárias
-                const requiredUnits = ['spear', 'sword', 'axe', 'archer', 'spy', 
-                                      'light', 'marcher', 'heavy', 'ram', 
-                                      'catapult', 'knight', 'snob'];
-                
-                const completeSpeeds = { ...realSpeeds };
-                
-                // Adicionar unidades faltantes com valores padrão
-                requiredUnits.forEach(unit => {
-                    if (!completeSpeeds[unit]) {
-                        console.warn(`[Velocity] Unidade ${unit} não encontrada, usando padrão`);
-                        completeSpeeds[unit] = this.getDefaultSpeed(unit);
-                    }
-                });
-                
-                return completeSpeeds;
+// No velocity-manager.js, modificar getVelocidadesParaFarmCore:
+
+getVelocidadesParaFarmCore: function() {
+    const realSpeeds = this.getCurrentSpeeds();
+    
+    if (realSpeeds) {
+        // Garantir todas as unidades necessárias
+        const requiredUnits = ['spear', 'sword', 'axe', 'spy', 
+                              'light', 'heavy', 'ram', 
+                              'catapult', 'knight', 'snob'];
+        
+        const completeSpeeds = { ...realSpeeds };
+        
+        // Adicionar unidades faltantes com valores padrão SILENCIOSAMENTE
+        requiredUnits.forEach(unit => {
+            if (!completeSpeeds[unit]) {
+                // SILENCIOSO - não logar toda vez
+                completeSpeeds[unit] = this.getDefaultSpeed(unit);
             }
-            
-            return null;
-        },
+        });
+        
+        // Adicionar archer e marcher apenas se existirem no mundo
+        // (não adicionar automaticamente)
+        if (!completeSpeeds.archer && !completeSpeeds.marcher) {
+            // Mundo sem arqueiros - tudo bem
+        }
+        
+        return completeSpeeds;
+    }
+    
+    return null;
+},
         
         getDefaultSpeed: function(unit) {
             const defaults = {
