@@ -1,4 +1,4 @@
-// tws_carregador_stealth.js - VERSÃO 3.1 CORRIGIDA
+// tws_carregador_stealth.js - VERSÃO 3.2 (Farm + Config Modular)
 (function() {
     'use strict';
 
@@ -8,7 +8,7 @@
     }
     window.__TWS_STEALTH_V3 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 3.1 (Farm Modular)');
+    console.log('[Stealth] Inicializado - Versão 3.2 (Farm + Config Modular)');
 
     // ============================================
     // NOTIFICAÇÃO ULTRA MINIMALISTA
@@ -129,11 +129,24 @@
                     check: 'TWS_FarmInteligente.show',
                     priority: 'medium'
                 },
+                
+                // 🆕 NOVA ESTRUTURA: Config Modal Modular (3 arquivos)
                 { 
-                    file: 'tw-scheduler-config-modal.js', 
-                    check: 'TWS_ConfigModal',
+                    file: 'config-modular/config-core.js', 
+                    check: 'TWS_ConfigModal.Core',
                     priority: 'medium'
                 },
+                { 
+                    file: 'config-modular/config-telegram.js', 
+                    check: 'TWS_ConfigModal.Telegram',
+                    priority: 'medium'
+                },
+                { 
+                    file: 'config-modular/config-ui.js', 
+                    check: 'TWS_ConfigModal.UI',
+                    priority: 'medium'
+                },
+                
                 { 
                     file: 'tw-scheduler-bbcode-modal.js', 
                     check: 'TWS_BBCodeModal',
@@ -214,7 +227,7 @@
                 console.log(`[Turbo] ♻️ Cache: ${scriptInfo.file}`);
                 try {
                     new Function(cached)();
-                    if (checkObjectExists(scriptInfo.check)) return true; // ✅ CORRIGIDO
+                    if (checkObjectExists(scriptInfo.check)) return true;
                 } catch (e) {
                     console.log(`[Turbo] Cache inválido: ${scriptInfo.file}`);
                     localStorage.removeItem(cacheKey);
@@ -247,11 +260,11 @@
             // Executar
             new Function(code)();
             
-            // Verificação com suporte para nested objects (ex: TWS_FarmInteligente.Core)
+            // Verificação com suporte para nested objects
             return await new Promise(resolve => {
                 const start = Date.now();
                 const check = () => {
-                    if (checkObjectExists(scriptInfo.check)) { // ✅ CORRIGIDO
+                    if (checkObjectExists(scriptInfo.check)) {
                         console.log(`[Turbo] ✓ ${scriptInfo.file} (${Date.now() - start}ms)`);
                         resolve(true);
                     } else if (Date.now() - start > 3000) { // Max 3s wait
@@ -337,6 +350,14 @@
                     console.log('[Turbo]   ✅ UI:', !!window.TWS_FarmInteligente.UI);
                     console.log('[Turbo]   ✅ Show:', !!window.TWS_FarmInteligente.show);
                 }
+                
+                // Log específico do Config Modal
+                if (window.TWS_ConfigModal) {
+                    console.log('[Turbo] ⚙️ Config Modal modular carregado!');
+                    console.log('[Turbo]   ✅ Core:', !!window.TWS_ConfigModal.Core);
+                    console.log('[Turbo]   ✅ Telegram:', !!window.TWS_ConfigModal.Telegram);
+                    console.log('[Turbo]   ✅ UI:', !!window.TWS_ConfigModal.UI);
+                }
             })
             .catch(e => console.log('[Turbo] ⚠️ Extras:', e));
         
@@ -344,6 +365,7 @@
         setTimeout(() => {
             const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
             const farmLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
+            const configLoaded = window.TWS_ConfigModal && window.TWS_ConfigModal.Core;
             
             if (essentialsLoaded) {
                 notifier.success();
@@ -352,14 +374,28 @@
                 if (!document.querySelector('#tws-active-badge')) {
                     const badge = document.createElement('div');
                     badge.id = 'tws-active-badge';
-                    badge.textContent = farmLoaded ? '🌾✓' : '✓';
-                    badge.title = farmLoaded ? 'TW Scheduler + Farm' : 'TW Scheduler';
+                    let badgeText = '✓';
+                    let badgeTitle = 'TW Scheduler';
+                    
+                    if (farmLoaded && configLoaded) {
+                        badgeText = '🌾⚙️';
+                        badgeTitle = 'TW Scheduler + Farm + Config';
+                    } else if (farmLoaded) {
+                        badgeText = '🌾✓';
+                        badgeTitle = 'TW Scheduler + Farm';
+                    } else if (configLoaded) {
+                        badgeText = '⚙️✓';
+                        badgeTitle = 'TW Scheduler + Config';
+                    }
+                    
+                    badge.textContent = badgeText;
+                    badge.title = badgeTitle;
                     badge.style.cssText = `
                         position: fixed;
                         bottom: 2px;
                         right: 2px;
                         font-size: 8px;
-                        color: ${farmLoaded ? '#27ae60' : '#3498db'};
+                        color: ${farmLoaded && configLoaded ? '#9b59b6' : farmLoaded ? '#27ae60' : configLoaded ? '#3498db' : '#3498db'};
                         opacity: 0.3;
                         z-index: 999997;
                         font-family: monospace;
@@ -379,7 +415,7 @@
 
     // ⭐ INICIALIZAÇÃO TURBO ⭐
     function init() {
-        console.log('[Turbo] 🌟 Inicializando...');
+        console.log('[Turbo] 🌟 Inicializando v3.2...');
         
         // Inicia imediatamente se a página já estiver pronta
         if (document.readyState === 'loading') {
