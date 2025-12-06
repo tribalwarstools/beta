@@ -275,11 +275,6 @@
           errors.push(validation.error);
       }
 
-      // 🚫 REMOVIDO: Verificação de duplicatas
-      // ✅ AGORA PERMITIDO: Múltiplos farms no mesmo alvo
-      // ✅ AGORA PERMITIDO: Mesmas tropas, mesmo alvo
-      // ✅ AGORA PERMITIDO: Mesmo agendamento convertido múltiplas vezes
-
       return {
           valid: errors.length === 0,
           errors
@@ -306,9 +301,6 @@
           alert('❌ Agendamento base não encontrado!');
           return false;
       }
-
-      // 🚫 REMOVIDO: Verificação de locked
-      // ✅ AGORA PERMITIDO: "Enviar Agora" sem verificações
 
       // ✅ CONFIRMAÇÃO
       if (!confirm(`🚀 ENVIAR FARM AGORA?\n\n📍 ${farm.origem} → ${farm.alvo}\n🪖 ${Object.entries(farm.troops).filter(([_, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ')}\n\nEsta ação enviará as tropas imediamente.`)) {
@@ -561,9 +553,6 @@
         alert('❌ Erro ao criar farm:\n' + validation.errors.join('\n'));
         return false;
     }
-    
-    // 🚫 REMOVIDO: Verificação se já existe farm para este agendamento
-    // ✅ AGORA PERMITIDO: Mesmo agendamento convertido múltiplas vezes
     
     if (agendamento.done) {
         agendamento.done = false;
@@ -1129,6 +1118,7 @@
     setInterval(cleanupOrphanFarms, 60000);
     iniciarMonitorConfig(); // 🆕 MONITORAR MUDANÇAS NAS CONFIGURAÇÕES
     console.log('[Farm Inteligente] ✅ Monitor iniciado - Sem disparo automático de farms atrasados!');
+    console.log('[Farm Inteligente] ⚙️ Usando velocidades do Config Modal: ', getVelocidadesUnidades());
   }
 
   function showFarmModal() {
@@ -1224,21 +1214,13 @@
           ✅ "Enviar Agora" sem verificações
         </div>
 
-        <!-- Botões de Conversão em Massa -->
+        <!-- Botões de Ação -->
         <div style="margin-bottom: 20px;">
-          <div style="font-weight: bold; color: #388E3C; margin-bottom: 10px; font-size: 16px;">🔄 CONVERSÃO EM MASSA:</div>
+          <div style="font-weight: bold; color: #388E3C; margin-bottom: 10px; font-size: 16px;">🛠️ AÇÕES DO SISTEMA:</div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="farm-btn btn-success" onclick="TWS_FarmInteligente._convertTodosPendentes()">
-              📋 Converter Todos Pendentes
-            </button>
+            <!-- APENAS OS 4 BOTÕES SOLICITADOS -->
             <button class="farm-btn btn-primary" onclick="TWS_FarmInteligente._showFiltroModal()">
               🔍 Converter por Filtro
-            </button>
-            <button class="farm-btn btn-warning" onclick="TWS_FarmInteligente._showIdsModal()">
-              🔢 Converter IDs Específicos
-            </button>
-            <button class="farm-btn btn-info" onclick="TWS_FarmInteligente._convertAgendamento()">
-              ✨ Converter Individual
             </button>
             <button class="farm-btn btn-danger" onclick="TWS_FarmInteligente._exportLogs()">
               📊 Exportar Logs (CSV)
@@ -1316,107 +1298,6 @@
         }
       },
 
-      _convertAgendamento() {
-        const lista = getList();
-        const pendentes = lista.filter(a => !a.done);
-        
-        if (pendentes.length === 0) {
-          alert('❌ Nenhum agendamento pendente encontrado!');
-          return;
-        }
-        
-        let mensagem = '📋 SELECIONE UM AGENDAMENTO PARA CONVERTER EM FARM:\n\n';
-        pendentes.forEach((agend, idx) => {
-          const listaIdx = lista.findIndex(a => a === agend);
-          const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
-          const distancia = calcularDistancia(agend.origem, agend.alvo);
-          
-          mensagem += `[${idx + 1}] ${agend.origem} → ${agend.alvo}\n`;
-          mensagem += `   📅 ${agend.datetime} | 🪖 ${tropas}\n`;
-          mensagem += `   📏 ${distancia.toFixed(1)} campos\n\n`;
-        });
-        
-        mensagem += 'Digite o número do agendamento:';
-        
-        const escolha = prompt(mensagem);
-        if (escolha === null) return;
-        
-        const idxEscolhido = parseInt(escolha) - 1;
-        
-        if (idxEscolhido >= 0 && idxEscolhido < pendentes.length) {
-          const agendamentoEscolhido = pendentes[idxEscolhido];
-          const listaIdx = lista.findIndex(a => a === agendamentoEscolhido);
-          
-          let intervalo = null;
-          while (intervalo === null) {
-            const input = prompt('⏰ Intervalo entre ciclos (minutos)?\n\n✅ Recomendado: 5-30 min\n⚠️ Máximo: 1440 min (24h)', '5');
-            if (input === null) return;
-            
-            const validation = validateIntervalo(input);
-            
-            if (!validation.valid) {
-              alert(validation.error);
-              continue;
-            }
-            
-            if (validation.warning) {
-              const confirm = prompt(validation.warning + '\n\nConfirmar? (S/N)', 'S');
-              if (confirm?.toUpperCase() !== 'S') continue;
-            }
-            
-            intervalo = validation.value;
-          }
-          
-          if (convertToFarm(listaIdx, intervalo)) {
-            alert(`✅ AGENDAMENTO CONVERTIDO EM FARM!\n\n🎯 ${agendamentoEscolhido.origem} → ${agendamentoEscolhido.alvo}\n⏰ Ciclo: ${intervalo} minutos`);
-            document.getElementById('farm-list-container').innerHTML = renderFarmList();
-          }
-        } else {
-          alert('❌ Número inválido!');
-        }
-      },
-
-      _convertTodosPendentes() {
-        const lista = getList();
-        const pendentes = lista.filter(a => !a.done);
-        
-        if (pendentes.length === 0) {
-          alert('❌ Nenhum agendamento pendente!');
-          return;
-        }
-
-        let intervalo = null;
-        while (intervalo === null) {
-          const input = prompt(
-            `⏰ CONVERTER ${pendentes.length} AGENDAMENTOS\n\n` +
-            'Intervalo entre ciclos (minutos)?\n\n' +
-            '✅ Recomendado: 5-30 min\n' +
-            '⚠️ Máximo: 1440 min (24h)',
-            '5'
-          );
-          if (input === null) return;
-          
-          const validation = validateIntervalo(input);
-          
-          if (!validation.valid) {
-            alert(validation.error);
-            continue;
-          }
-          
-          if (validation.warning) {
-            const confirm = prompt(validation.warning + '\n\nConfirmar? (S/N)', 'S');
-            if (confirm?.toUpperCase() !== 'S') continue;
-          }
-          
-          intervalo = validation.value;
-        }
-        
-        const results = convertTodosPendentes(intervalo);
-        
-        alert(`✅ CONVERSÃO EM MASSA CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos com sucesso\n• ❌ ${results.errors} erros\n\nTotal de farms ativos: ${getFarmList().filter(f => f.active !== false).length}`);
-        document.getElementById('farm-list-container').innerHTML = renderFarmList();
-      },
-
       _showFiltroModal() {
         const filtroModal = document.createElement('div');
         filtroModal.style.cssText = `
@@ -1482,47 +1363,6 @@
         });
 
         alert(`✅ CONVERSÃO POR FILTRO CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos\n• ❌ ${results.errors} erros\n\nFiltros:\n• Origem: ${origem || 'Qualquer'}\n• Alvo: ${alvo || 'Qualquer'}\n• Com tropas: ${temTropas ? 'Sim' : 'Não'}`);
-        document.getElementById('farm-list-container').innerHTML = renderFarmList();
-      },
-
-      _showIdsModal() {
-        const lista = getList();
-        let mensagemIds = '📋 AGENDAMENTOS DISPONÍVEIS:\n\n';
-        lista.forEach((agend, index) => {
-          if (!agend.done) {
-            const tropas = TROOP_LIST.map(u => agend[u] ? `${u}:${agend[u]}` : '').filter(Boolean).join(', ');
-            mensagemIds += `ID ${index}: ${agend.origem} → ${agend.alvo} | ${tropas}\n`;
-          }
-        });
-
-        const ids = prompt(`🆔 CONVERTER IDs ESPECÍFICOS\n\n${mensagemIds}\n\nDigite os IDs separados por vírgula:\nEx: 0, 3, 5, 7`);
-        if (ids === null) return;
-
-        const idsArray = ids.split(',')
-          .map(id => parseInt(id.trim()))
-          .filter(id => !isNaN(id) && id >= 0 && id < lista.length && !lista[id].done);
-
-        if (idsArray.length === 0) {
-          alert('❌ Nenhum ID válido encontrado!');
-          return;
-        }
-
-        let intervalo = null;
-        while (intervalo === null) {
-          const input = prompt(`⏰ Intervalo para ${idsArray.length} farms (minutos):`, '5');
-          if (input === null) return;
-          
-          const validation = validateIntervalo(input);
-          if (!validation.valid) {
-            alert(validation.error);
-            continue;
-          }
-          intervalo = validation.value;
-        }
-
-        const results = convertAgendamentosEmMassa(idsArray, intervalo);
-
-        alert(`✅ CONVERSÃO DE IDs CONCLUÍDA!\n\n📊 Resultados:\n• ✅ ${results.success} convertidos\n• ❌ ${results.errors} erros\n\nIDs: ${idsArray.join(', ')}`);
         document.getElementById('farm-list-container').innerHTML = renderFarmList();
       },
 
