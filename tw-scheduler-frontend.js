@@ -392,7 +392,7 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
     viewDetails,
     exportList,
     importList,
-    togglePanel
+    togglePanel,
   };
 
   // =========================
@@ -411,4 +411,5 @@ ${cfg.error ? `\n⚠️ ERRO:\n${cfg.error}` : ''}
   },100);
 
 })();
+
 
