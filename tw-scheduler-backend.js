@@ -680,23 +680,6 @@ function startScheduler() {
               // Executar o ataque
               const success = await executeAttack(a);
 
-              // ✅ TELEGRAM NOTIFICATIONS
-              if (success) {
-                await sendTelegramNotification('attack_success', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  units: TROOP_LIST.map(u => a[u] > 0 ? `${a[u]} ${u}` : null).filter(Boolean).join(', ') || 'Nenhuma tropa especificada',
-                  travelTime: 'Calculando...'
-                });
-              } else {
-                await sendTelegramNotification('attack_failure', {
-                  origin: a.origem,
-                  target: a.alvo,
-                  reason: a.statusText || 'Falha na execução do comando',
-                  suggestion: 'Verifique se as tropas estão disponíveis'
-                });
-              }
-
               // Registrar resultado
               a.done = true;
               a.success = success;
@@ -722,14 +705,6 @@ function startScheduler() {
               a.status = 'failed';
               a.statusText = `❌ Falha: ${err.message}`;
               SchedulerMetrics.recordExecution(false);
-
-              // ✅ NOTIFICAÇÃO DE ERRO
-              await sendTelegramNotification('system_error', {
-                module: 'Scheduler',
-                error: err.message,
-                details: `Ataque: ${a.origem} → ${a.alvo}`,
-                action: 'Verificar console para detalhes'
-              });
 
               console.error(
                 `[Scheduler] Erro ao executar ${a.origem}→${a.alvo}:`,
@@ -834,76 +809,6 @@ function dumpSchedulerState() {
   });
 }
 
-// ═════════════════════════════════════════════════════════
-// ✅ TELEGRAM NOTIFICATIONS - VERSÃO MELHORADA
-// ═════════════════════════════════════════════════════════
-
-async function sendTelegramNotification(type, data) {
-  // Fallback se TelegramBotReal não estiver disponível
-  const Telegram = window.TelegramBotReal || {
-    getConfig: () => ({ enabled: false }),
-    makeRequest: () => Promise.resolve({ success: false })
-  };
-  
-  try {
-    const config = Telegram.getConfig();
-    if (!config.enabled) return;
-    
-    let message = '';
-    const timestamp = new Date().toLocaleString('pt-BR');
-    
-    switch (type) {
-      case 'attack_success':
-        if (!config.notifications?.success) return;
-        message = `✅ <b>Ataque Bem-Sucedido</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🎯 <b>Origem:</b> ${data.origin || 'N/A'}\n` +
-                 `🎯 <b>Destino:</b> ${data.target || 'N/A'}\n` +
-                 `⚔️ <b>Unidades:</b> ${data.units || 'N/A'}\n` +
-                 `⏱️ <b>Status:</b> Comando enviado com sucesso`;
-        break;
-        
-      case 'attack_failure':
-        if (!config.notifications?.failure) return;
-        message = `❌ <b>Ataque Falhado</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🎯 <b>Origem:</b> ${data.origin || 'N/A'}\n` +
-                 `🎯 <b>Destino:</b> ${data.target || 'N/A'}\n` +
-                 `🚫 <b>Motivo:</b> ${data.reason || 'Erro desconhecido'}\n` +
-                 `💡 <b>Sugestão:</b> ${data.suggestion || 'Verificar configurações'}`;
-        break;
-        
-      case 'system_error':
-        if (!config.notifications?.error) return;
-        message = `🚨 <b>Erro do Sistema</b>\n\n` +
-                 `⏰ <b>${timestamp}</b>\n` +
-                 `🔧 <b>Módulo:</b> ${data.module || 'Desconhecido'}\n` +
-                 `❌ <b>Erro:</b> ${data.error || 'N/A'}\n` +
-                 `📝 <b>Detalhes:</b> ${data.details || 'N/A'}\n` +
-                 `⚡ <b>Ação:</b> ${data.action || 'Verificar o console'}`;
-        break;
-        
-      default:
-        return; // Tipo não reconhecido
-    }
-    
-    const result = await Telegram.makeRequest('sendMessage', {
-      text: message,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true
-    });
-    
-    if (result.success) {
-      console.log(`[Telegram] Notificação ${type} enviada com sucesso`);
-    } else {
-      console.warn(`[Telegram] Falha ao enviar notificação ${type}:`, result.error);
-    }
-    
-  } catch (error) {
-    console.error('[Telegram] Erro ao enviar notificação:', error);
-  }
-}
-
   
 // ═════════════════════════════════════════════════════════
 // ✅ EXPORTAR API
@@ -933,7 +838,6 @@ window.TWS_Backend = {
   validateTroops,
   generateUniqueId,
   getAttackFingerprint,
-  sendTelegramNotification, // ✅ ADICIONE ESTA LINHA AQUI!
   TROOP_LIST,
   STORAGE_KEY,
   PANEL_STATE_KEY,
@@ -947,15 +851,3 @@ window.TWS_Backend = {
 
   console.log('[TWS_Backend] Backend carregado (vFinal - status unificado)');
 })();
-
-
-
-
-
-
-
-
-
-
-
-
