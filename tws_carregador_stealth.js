@@ -1,4 +1,4 @@
-// tws_carregador_stealth.js - VERSÃO 3.3 (Farm + Config + Velocity)
+// tws_carregador_stealth.js - VERSÃO 3.4 (Farm + Config + Velocity + Telegram)
 (function() {
     'use strict';
 
@@ -8,7 +8,7 @@
     }
     window.__TWS_STEALTH_V3 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 3.3 (Farm + Config + Velocity)');
+    console.log('[Stealth] Inicializado - Versão 3.4 (Farm + Config + Velocity + Telegram)');
 
     // ============================================
     // NOTIFICAÇÃO ULTRA MINIMALISTA
@@ -16,7 +16,7 @@
     class TurboNotifier {
         constructor() {
             this.step = 0;
-            this.maxSteps = 4; // Aumentado para 4 fases
+            this.maxSteps = 5; // Aumentado para 5 fases (incluindo Telegram)
             this.createIndicator();
         }
         
@@ -51,7 +51,7 @@
             const percent = Math.round((phase / this.maxSteps) * 100);
             
             if (this.indicator) {
-                const colors = ['#e74c3c', '#f39c12', '#3498db', '#27ae60'];
+                const colors = ['#e74c3c', '#f39c12', '#3498db', '#27ae60', '#9b59b6'];
                 this.indicator.style.borderLeftColor = colors[phase - 1] || colors[0];
                 this.indicator.textContent = `🔄 TW: ${percent}%`;
                 this.indicator.style.display = 'block';
@@ -81,7 +81,7 @@
 
     const notifier = new TurboNotifier();
 
-    // ⭐ CONFIGURAÇÃO TURBO OTIMIZADA ⭐
+    // ⭐ CONFIGURAÇÃO TURBO OTIMIZADA COM TELEGRAM ⭐
     const TURBO_CONFIG = {
         baseUrl: 'https://tribalwarstools.github.io/beta/',
         
@@ -97,24 +97,34 @@
                 }
             ],
             
-            // FASE 2: VELOCITY MANAGER (deve vir ANTES do Farm Core)
+            // FASE 2: TELEGRAM BOT (deve vir ANTES do modal de config)
             phase2: [
                 { 
-                    file: 'farm-inteligente/velocity-manager.js', // ⭐ NOVO
+                    file: 'telegram/telegram-bot.js', // ⭐ MÓDULO TELEGRAM REAL
+                    check: 'TelegramBotReal',
+                    priority: 'high',
+                    description: 'Telegram Bot Core'
+                }
+            ],
+            
+            // FASE 3: VELOCITY MANAGER + CONFIG MODAL (com Telegram)
+            phase3: [
+                { 
+                    file: 'farm-inteligente/velocity-manager.js',
                     check: 'TWS_FarmInteligente.VelocityManager',
                     priority: 'high',
                     description: 'Velocity Manager'
                 },
                 { 
-                    file: 'tw-scheduler-config-modal.js', // Config antes do Farm
+                    file: 'tw-scheduler-config-modal.js', // Config Modal COM Telegram
                     check: 'TWS_ConfigModal',
                     priority: 'high',
-                    description: 'Config Modal'
+                    description: 'Config Modal com Telegram'
                 }
             ],
             
-            // FASE 3: FARM CORE + UI (depende do Velocity Manager)
-            phase3: [
+            // FASE 4: FARM CORE + UI (depende do Velocity Manager)
+            phase4: [
                 { 
                     file: 'farm-inteligente/farm-core.js', 
                     check: 'TWS_FarmInteligente.Core',
@@ -141,8 +151,8 @@
                 }
             ],
             
-            // FASE 4: MÓDULOS EXTRAS (background)
-            phase4: [
+            // FASE 5: MÓDULOS EXTRAS (background)
+            phase5: [
                 { 
                     file: 'farm-inteligente/farm-init.js', 
                     check: 'TWS_FarmInteligente.show',
@@ -337,9 +347,32 @@
         notifier.update(1, 'Carregando backend');
         await carregarSequencial(TURBO_CONFIG.scripts.phase1, 'Fase 1 - Core Essencial');
         
-        // === FASE 2: VELOCITY MANAGER + CONFIG ===
-        notifier.update(2, 'Carregando gerenciador de velocidades');
-        await carregarSequencial(TURBO_CONFIG.scripts.phase2, 'Fase 2 - Velocity + Config');
+        // === FASE 2: TELEGRAM BOT CORE ===
+        notifier.update(2, 'Carregando módulo Telegram');
+        await carregarSequencial(TURBO_CONFIG.scripts.phase2, 'Fase 2 - Telegram Bot');
+        
+        // Verificação crítica: Telegram carregou?
+        if (!checkObjectExists('TelegramBotReal')) {
+            console.warn('[Turbo] ⚠️ Módulo Telegram não carregado! Notificações não funcionarão.');
+        } else {
+            console.log('[Turbo] ✅ Telegram Bot carregado');
+            // Verificar configurações existentes
+            const telegramConfig = window.TelegramBotReal?.getConfig();
+            if (telegramConfig?.enabled) {
+                console.log('[Turbo] 📱 Telegram configurado:', telegramConfig.chatId ? 'Chat ID definido' : 'Sem Chat ID');
+            }
+        }
+        
+        // === FASE 3: VELOCITY MANAGER + CONFIG MODAL ===
+        notifier.update(3, 'Carregando gerenciador e configurações');
+        await carregarSequencial(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Velocity + Config');
+        
+        // Verificação crítica: Config Modal com Telegram carregou?
+        if (!checkObjectExists('TWS_ConfigModal')) {
+            console.warn('[Turbo] ⚠️ Config Modal não carregado! Interface de configuração não estará disponível.');
+        } else {
+            console.log('[Turbo] ✅ Config Modal carregado (com suporte Telegram)');
+        }
         
         // Verificação crítica: Velocity Manager carregou?
         if (!checkObjectExists('TWS_FarmInteligente.VelocityManager')) {
@@ -348,17 +381,17 @@
             console.log('[Turbo] ✅ Velocity Manager carregado - Buscando velocidades reais...');
         }
         
-        // === FASE 3: FARM CORE + INTERFACE ===
-        notifier.update(3, 'Carregando sistema de farm');
-        await carregarSequencial(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Farm + Interface');
+        // === FASE 4: FARM CORE + INTERFACE ===
+        notifier.update(4, 'Carregando sistema de farm');
+        await carregarSequencial(TURBO_CONFIG.scripts.phase4, 'Fase 4 - Farm + Interface');
         
-        // === FASE 4: EXTRAS (background) ===
-        notifier.update(4, 'Finalizando módulos');
-        carregarSequencial(TURBO_CONFIG.scripts.phase4, 'Fase 4 - Extras')
+        // === FASE 5: EXTRAS (background) ===
+        notifier.update(5, 'Finalizando módulos');
+        carregarSequencial(TURBO_CONFIG.scripts.phase5, 'Fase 5 - Extras')
             .then((successCount) => {
-                console.log(`[Turbo] ✅ Carregamento concluído: ${successCount}/${TURBO_CONFIG.scripts.phase4.length} extras`);
+                console.log(`[Turbo] ✅ Carregamento concluído: ${successCount}/${TURBO_CONFIG.scripts.phase5.length} extras`);
                 
-                // ⭐ RELATÓRIO DE CARREGAMENTO DETALHADO ⭐
+                // ⭐ RELATÓRIO DE CARREGAMENTO DETALHADO COM TELEGRAM ⭐
                 console.log('[Turbo] 📊 ===== RELATÓRIO DE CARREGAMENTO =====');
                 
                 // Módulos principais
@@ -367,6 +400,20 @@
                 console.log('    ✅ Frontend:', !!window.TWS_Panel);
                 console.log('    ✅ Modal:', !!window.TWS_Modal);
                 console.log('    ✅ Config:', !!window.TWS_ConfigModal);
+                
+                // Sistema Telegram
+                console.log('  📱 SISTEMA TELEGRAM:');
+                console.log('    ✅ Telegram Bot:', !!window.TelegramBotReal);
+                if (window.TelegramBotReal) {
+                    const telegramConfig = window.TelegramBotReal.getConfig();
+                    console.log('    📍 Configuração:', telegramConfig.enabled ? '✅ Ativo' : '❌ Inativo');
+                    console.log('    🤖 Token:', telegramConfig.botToken ? '✅ Definido' : '❌ Não definido');
+                    console.log('    👥 Chat ID:', telegramConfig.chatId ? '✅ Definido' : '❌ Não definido');
+                    console.log('    🔔 Notificações:');
+                    console.log('      • Sucesso:', telegramConfig.notifications?.success ? '✅' : '❌');
+                    console.log('      • Falha:', telegramConfig.notifications?.failure ? '✅' : '❌');
+                    console.log('      • Erro:', telegramConfig.notifications?.error ? '✅' : '❌');
+                }
                 
                 // Sistema Farm Inteligente
                 console.log('  🌾 SISTEMA FARM INTELIGENTE:');
@@ -394,6 +441,12 @@
                     }, 2000);
                 }
                 
+                // Verificar integração Telegram-Backend
+                if (window.TWS_Backend && window.TelegramBotReal) {
+                    console.log('[Turbo] 🔗 Integração Telegram-Backend:', 
+                        window.TWS_Backend.sendTelegramNotification ? '✅ Funcional' : '❌ Falta função');
+                }
+                
                 console.log('[Turbo] =====================================');
                 
             })
@@ -405,6 +458,7 @@
             const farmCoreLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
             const velocityLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.VelocityManager;
             const configLoaded = window.TWS_ConfigModal;
+            const telegramLoaded = window.TelegramBotReal;
             
             if (essentialsLoaded) {
                 notifier.success();
@@ -419,14 +473,26 @@
                     let badgeTitle = 'TW Scheduler';
                     let badgeColor = '#3498db'; // Azul padrão
                     
-                    if (farmCoreLoaded && velocityLoaded && configLoaded) {
-                        badgeText = '🌾⚡⚙️✓';
-                        badgeTitle = 'TW Scheduler + Farm + Velocity + Config';
+                    if (farmCoreLoaded && velocityLoaded && configLoaded && telegramLoaded) {
+                        badgeText = '🌾⚡⚙️🤖✓';
+                        badgeTitle = 'TW Scheduler + Farm + Velocity + Config + Telegram';
                         badgeColor = '#9b59b6'; // Roxo - completo
+                    } else if (farmCoreLoaded && velocityLoaded && telegramLoaded) {
+                        badgeText = '🌾⚡🤖✓';
+                        badgeTitle = 'TW Scheduler + Farm + Velocity + Telegram';
+                        badgeColor = '#27ae60'; // Verde - completo com Telegram
                     } else if (farmCoreLoaded && velocityLoaded) {
                         badgeText = '🌾⚡✓';
                         badgeTitle = 'TW Scheduler + Farm + Velocity';
-                        badgeColor = '#27ae60'; // Verde - farm com velocidades reais
+                        badgeColor = '#27ae60'; // Verde - farm com velocidades
+                    } else if (farmCoreLoaded && telegramLoaded) {
+                        badgeText = '🌾🤖✓';
+                        badgeTitle = 'TW Scheduler + Farm + Telegram';
+                        badgeColor = '#f39c12'; // Laranja - farm com Telegram
+                    } else if (telegramLoaded) {
+                        badgeText = '🤖✓';
+                        badgeTitle = 'TW Scheduler + Telegram';
+                        badgeColor = '#3498db'; // Azul - com Telegram
                     } else if (farmCoreLoaded) {
                         badgeText = '🌾✓';
                         badgeTitle = 'TW Scheduler + Farm';
@@ -477,7 +543,7 @@
                         
                         const menuBtn = document.createElement('button');
                         menuBtn.innerHTML = '⚡';
-                        menuBtn.title = 'Farm Inteligente - Menu Rápido';
+                        menuBtn.title = 'TW Scheduler - Menu Rápido';
                         menuBtn.style.cssText = `
                             background: #2c3e50;
                             border: none;
@@ -517,6 +583,56 @@
                             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
                         `;
                         
+                        // Botão para Configurações
+                        const configBtn = document.createElement('button');
+                        configBtn.textContent = '⚙️ Configurações';
+                        configBtn.style.cssText = `
+                            width: 100%;
+                            padding: 5px;
+                            margin: 2px 0;
+                            background: #3498db;
+                            border: none;
+                            color: white;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                        `;
+                        configBtn.onclick = () => {
+                            if (window.TWS_ConfigModal) {
+                                window.TWS_ConfigModal.show();
+                            }
+                        };
+                        menuContent.appendChild(configBtn);
+                        
+                        // Botão para Telegram se estiver carregado
+                        if (telegramLoaded) {
+                            const telegramBtn = document.createElement('button');
+                            telegramBtn.textContent = '📱 Telegram';
+                            telegramBtn.style.cssText = `
+                                width: 100%;
+                                padding: 5px;
+                                margin: 2px 0;
+                                background: #0088cc;
+                                border: none;
+                                color: white;
+                                border-radius: 2px;
+                                cursor: pointer;
+                                font-size: 10px;
+                            `;
+                            telegramBtn.onclick = () => {
+                                if (window.TWS_ConfigModal) {
+                                    window.TWS_ConfigModal.show();
+                                    // Mudar para aba Telegram
+                                    setTimeout(() => {
+                                        const telegramTab = document.querySelector('[data-tab="telegram"]');
+                                        if (telegramTab) telegramTab.click();
+                                    }, 100);
+                                }
+                            };
+                            menuContent.appendChild(telegramBtn);
+                        }
+                        
+                        // Botão para Velocidades se estiver carregado
                         if (velocityLoaded) {
                             const velocityBtn = document.createElement('button');
                             velocityBtn.textContent = '🔄 Velocidades';
@@ -524,7 +640,7 @@
                                 width: 100%;
                                 padding: 5px;
                                 margin: 2px 0;
-                                background: #3498db;
+                                background: #27ae60;
                                 border: none;
                                 color: white;
                                 border-radius: 2px;
@@ -537,6 +653,29 @@
                                 }
                             };
                             menuContent.appendChild(velocityBtn);
+                        }
+                        
+                        // Botão para Farm
+                        if (farmCoreLoaded) {
+                            const farmBtn = document.createElement('button');
+                            farmBtn.textContent = '🌾 Farm';
+                            farmBtn.style.cssText = `
+                                width: 100%;
+                                padding: 5px;
+                                margin: 2px 0;
+                                background: #f39c12;
+                                border: none;
+                                color: white;
+                                border-radius: 2px;
+                                cursor: pointer;
+                                font-size: 10px;
+                            `;
+                            farmBtn.onclick = () => {
+                                if (window.TWS_FarmInteligente.show) {
+                                    window.TWS_FarmInteligente.show();
+                                }
+                            };
+                            menuContent.appendChild(farmBtn);
                         }
                         
                         menuBtn.onclick = () => {
@@ -557,8 +696,9 @@
 
     // ⭐ INICIALIZAÇÃO TURBO ⭐
     function init() {
-        console.log('[Turbo] 🌟 Inicializando v3.3 (Farm + Config + Velocity)...');
+        console.log('[Turbo] 🌟 Inicializando v3.4 (Farm + Config + Velocity + Telegram)...');
         console.log('[Turbo] 🕐 Hora:', new Date().toLocaleTimeString());
+        console.log('[Turbo] 📁 Estrutura Telegram: /telegram/telegram-bot.js');
         
         // Inicia imediatamente se a página já estiver pronta
         if (document.readyState === 'loading') {
