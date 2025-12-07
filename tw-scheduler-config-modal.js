@@ -16,7 +16,6 @@
             retryOnFail: true,               // Tentar novamente em caso de falha
             maxRetries: 3,                   // Máximo de tentativas
             autoCleanCompleted: true,        // Limpar automaticamente concluídos após 24h
-            enableTelegram: false,           // Habilitar notificações Telegram
         },
         
         // Interface/UI
@@ -452,17 +451,6 @@
                             🗑️ Limpar automaticamente concluídos (após 24h)
                         </label>
                     </div>
-
-                    <!-- Telegram -->
-                    <div>
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="enableTelegram" ${currentConfig.behavior.enableTelegram ? 'checked' : ''}>
-                            📱 Habilitar notificações Telegram
-                        </label>
-                        <div style="font-size: 11px; color: #AAA; margin-left: 24px; margin-top: 3px;">
-                            Requer configuração prévia do bot Telegram.
-                        </div>
-                    </div>
                 </div>
             </div>
         `;
@@ -772,10 +760,6 @@
                                     style="background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer; font-size: 14px;">
                                 📊 Dump Estatísticas
                             </button>
-                            <button id="testTelegramBtn" 
-                                    style="background: #4CAF50; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer; font-size: 14px;">
-                                📱 Testar Telegram
-                            </button>
                         </div>
                     </div>
 
@@ -834,9 +818,6 @@
         
         const autoCleanCheckbox = document.getElementById('autoCleanCompleted');
         if (autoCleanCheckbox) autoCleanCheckbox.checked = currentConfig.behavior.autoCleanCompleted;
-        
-        const telegramCheckbox = document.getElementById('enableTelegram');
-        if (telegramCheckbox) telegramCheckbox.checked = currentConfig.behavior.enableTelegram;
         
         // Interface
         const themeRadios = document.querySelectorAll('input[name="theme"]');
@@ -952,26 +933,6 @@
             };
         }
         
-        const testTelegramBtn = document.getElementById('testTelegramBtn');
-        if (testTelegramBtn) {
-            testTelegramBtn.onclick = () => {
-                if (window.TWS_Backend.sendTelegramNotification) {
-                    window.TWS_Backend.sendTelegramNotification('system_error', {
-                        module: 'Config Modal',
-                        error: 'Teste de notificação',
-                        details: 'Esta é uma notificação de teste do modal de configurações',
-                        action: 'Nenhuma ação necessária'
-                    }).then(() => {
-                        showInfo('Notificação de teste enviada para o Telegram!');
-                    }).catch(e => {
-                        showError('Erro ao enviar teste: ' + e.message);
-                    });
-                } else {
-                    showError('Função de notificação não disponível');
-                }
-            };
-        }
-        
         const debugConsoleBtn = document.getElementById('debugConsoleBtn');
         if (debugConsoleBtn) {
             debugConsoleBtn.onclick = () => {
@@ -1025,9 +986,6 @@
         
         const autoCleanCheckbox = document.getElementById('autoCleanCompleted');
         if (autoCleanCheckbox) newConfig.behavior.autoCleanCompleted = autoCleanCheckbox.checked;
-        
-        const telegramCheckbox = document.getElementById('enableTelegram');
-        if (telegramCheckbox) newConfig.behavior.enableTelegram = telegramCheckbox.checked;
         
         // Interface
         const themeRadios = document.querySelectorAll('input[name="theme"]');
