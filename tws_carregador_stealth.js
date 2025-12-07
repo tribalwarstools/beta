@@ -97,15 +97,22 @@
                 }
             ],
             
-            // FASE 2: TELEGRAM BOT (deve vir ANTES do modal de config)
-            phase2: [
-                { 
-                    file: 'telegram/telegram-bot.js', // ⭐ MÓDULO TELEGRAM REAL
-                    check: 'TelegramBotReal',
-                    priority: 'high',
-                    description: 'Telegram Bot Core'
-                }
-            ],
+        // FASE 2: TELEGRAM BOT + MODULE (ambos)
+        phase2: [
+            { 
+                file: 'telegram/telegram-bot.js', // ⭐ MÓDULO TELEGRAM REAL
+                check: 'TelegramBotReal',
+                priority: 'high',
+                description: 'Telegram Bot Core'
+            },
+            { 
+                file: 'telegram/telegram-module.js', // ⭐ ADICIONAR ESTE
+                check: 'TelegramBotReal.getConfig', // Verifica se a função existe
+                priority: 'high',
+                description: 'Telegram Module UI',
+                requires: ['TelegramBotReal'] // ⭐ REQUER O telegram-bot.js primeiro
+            }
+        ],
             
             // FASE 3: VELOCITY MANAGER + CONFIG MODAL (com Telegram)
             phase3: [
