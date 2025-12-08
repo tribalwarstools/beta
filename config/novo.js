@@ -622,30 +622,286 @@
         },
 
         updateFormValues: function() {
-            // ... (mantém a mesma lógica de atualização dos campos)
-            // Só muda os estilos
+            const config = window.TWS_ConfigManager.getCurrentConfig();
+            
+            // Behavior
+            const intervalInput = document.getElementById('schedulerCheckInterval');
+            if (intervalInput) {
+                intervalInput.value = config.behavior.schedulerCheckInterval;
+                const intervalValue = document.getElementById('intervalValue');
+                if (intervalValue) intervalValue.textContent = intervalInput.value + 'ms';
+            }
+            
+            const retryCheckbox = document.getElementById('retryOnFail');
+            if (retryCheckbox) retryCheckbox.checked = config.behavior.retryOnFail;
+            
+            const maxRetriesSelect = document.getElementById('maxRetries');
+            if (maxRetriesSelect) maxRetriesSelect.value = config.behavior.maxRetries;
+            
+            const autoCleanCheckbox = document.getElementById('autoCleanCompleted');
+            if (autoCleanCheckbox) autoCleanCheckbox.checked = config.behavior.autoCleanCompleted;
+            
+            // Interface
+            const themeRadios = document.querySelectorAll('input[name="theme"]');
+            if (themeRadios.length > 0) {
+                themeRadios.forEach(radio => {
+                    radio.checked = radio.value === config.interface.theme;
+                });
+            }
+            
+            const autoOpenCheckbox = document.getElementById('autoOpenPanel');
+            if (autoOpenCheckbox) autoOpenCheckbox.checked = config.interface.autoOpenPanel;
+            
+            const notificationsCheckbox = document.getElementById('showNotifications');
+            if (notificationsCheckbox) notificationsCheckbox.checked = config.interface.showNotifications;
+            
+            const compactCheckbox = document.getElementById('compactMode');
+            if (compactCheckbox) compactCheckbox.checked = config.interface.compactMode;
+            
+            // Execution
+            const attackLimitInput = document.getElementById('simultaneousAttackLimit');
+            if (attackLimitInput) {
+                attackLimitInput.value = config.execution.simultaneousAttackLimit;
+                const attackLimitValue = document.getElementById('attackLimitValue');
+                if (attackLimitValue) attackLimitValue.textContent = attackLimitInput.value;
+            }
+            
+            const timeoutInput = document.getElementById('attackTimeout');
+            if (timeoutInput) {
+                timeoutInput.value = config.execution.attackTimeout;
+                const timeoutValue = document.getElementById('timeoutValue');
+                if (timeoutValue) timeoutValue.textContent = timeoutInput.value + 'ms';
+            }
+            
+            const delayInput = document.getElementById('delayBetweenAttacks');
+            if (delayInput) {
+                delayInput.value = config.execution.delayBetweenAttacks;
+                const delayValue = document.getElementById('delayValue');
+                if (delayValue) delayValue.textContent = delayInput.value + 'ms';
+            }
+            
+            const validateCheckbox = document.getElementById('validateTroops');
+            if (validateCheckbox) validateCheckbox.checked = config.execution.validateTroops;
+            
+            const skipCheckbox = document.getElementById('skipIfNoTroops');
+            if (skipCheckbox) skipCheckbox.checked = config.execution.skipIfNoTroops;
+            
+            // Backup
+            const autoExportCheckbox = document.getElementById('autoExport');
+            if (autoExportCheckbox) autoExportCheckbox.checked = config.backup.autoExport;
+            
+            const exportIntervalSelect = document.getElementById('exportInterval');
+            if (exportIntervalSelect) exportIntervalSelect.value = config.backup.exportInterval;
+            
+            const maxBackupsInput = document.getElementById('maxBackups');
+            if (maxBackupsInput) maxBackupsInput.value = config.backup.maxBackups;
+            
+            const encryptCheckbox = document.getElementById('encryptBackups');
+            if (encryptCheckbox) encryptCheckbox.checked = config.backup.encryptBackups;
         },
 
         setupTabEventListeners: function(tabName) {
-            // ... (mantém a mesma lógica)
-            // Só muda os estilos
+            switch (tabName) {
+                case 'backup':
+                    this.setupBackupTabListeners();
+                    break;
+                case 'tools':
+                    this.setupToolsTabListeners();
+                    break;
+                case 'interface':
+                    this.setupInterfaceTabListeners();
+                    break;
+            }
         },
 
         setupBackupTabListeners: function() {
-            // ... (mantém a mesma lógica)
+            // Criar backup
+            const createBackupBtn = document.getElementById('createBackupBtn');
+            if (createBackupBtn) {
+                createBackupBtn.onclick = () => {
+                    const result = window.TWS_BackupManager.createBackup();
+                    if (result.success) {
+                        window.TWS_ConfigManager.showSuccess(`Backup criado com ${result.backup.count} agendamentos!`);
+                        this.loadTabContent('backup'); // Recarregar lista
+                    } else {
+                        window.TWS_ConfigManager.showError('Erro ao criar backup: ' + result.error);
+                    }
+                };
+            }
+            
+            // Exportar/Importar config
+            const exportConfigBtn = document.getElementById('exportConfigBtn');
+            if (exportConfigBtn) exportConfigBtn.onclick = () => window.TWS_ConfigManager.exportConfig();
+            
+            const importConfigBtn = document.getElementById('importConfigBtn');
+            if (importConfigBtn) importConfigBtn.onclick = () => window.TWS_ConfigManager.importConfig();
+            
+            // Botões de backup individuais
+            document.querySelectorAll('.restore-backup-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const key = e.target.dataset.key;
+                    if (confirm('Restaurar este backup? Isso substituirá os agendamentos atuais.')) {
+                        const result = window.TWS_BackupManager.restoreBackup(key);
+                        if (result.success) {
+                            window.TWS_ConfigManager.showSuccess(`Backup restaurado com ${result.count} agendamentos!`);
+                            this.loadTabContent('backup');
+                        } else {
+                            window.TWS_ConfigManager.showError('Erro ao restaurar: ' + result.error);
+                        }
+                    }
+                };
+            });
+            
+            document.querySelectorAll('.delete-backup-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const key = e.target.dataset.key;
+                    if (confirm('Excluir este backup permanentemente?')) {
+                        window.TWS_BackupManager.deleteBackup(key);
+                        window.TWS_ConfigManager.showSuccess('Backup excluído!');
+                        this.loadTabContent('backup');
+                    }
+                };
+            });
         },
 
         setupToolsTabListeners: function() {
-            // ... (mantém a mesma lógica)
+            // Reiniciar scheduler
+            const restartSchedulerBtn = document.getElementById('restartSchedulerBtn');
+            if (restartSchedulerBtn) {
+                restartSchedulerBtn.onclick = () => window.TWS_ConfigManager.restartScheduler();
+            }
+            
+            // Limpar cache
+            const clearCacheBtn = document.getElementById('clearCacheBtn');
+            if (clearCacheBtn) {
+                clearCacheBtn.onclick = () => {
+                    if (confirm('Limpar cache local? Isso não afeta os agendamentos.')) {
+                        const removed = window.TWS_ConfigManager.clearCache();
+                        window.TWS_ConfigManager.showSuccess(`Cache limpo! ${removed} itens removidos.`);
+                    }
+                };
+            }
+            
+            // Dump stats
+            const dumpStatsBtn = document.getElementById('dumpStatsBtn');
+            if (dumpStatsBtn) {
+                dumpStatsBtn.onclick = () => {
+                    const stats = window.TWS_ConfigManager.getSchedulerStats();
+                    console.table(stats);
+                    window.TWS_ConfigManager.showInfo('Estatísticas exibidas no console (F12)');
+                };
+            }
+            
+            // Debug console
+            const debugConsoleBtn = document.getElementById('debugConsoleBtn');
+            if (debugConsoleBtn) {
+                debugConsoleBtn.onclick = () => {
+                    if (window.TWS_SchedulerDebug) {
+                        window.TWS_SchedulerDebug.dumpState();
+                        window.TWS_ConfigManager.showInfo('Informações de debug exibidas no console');
+                    } else {
+                        window.TWS_ConfigManager.showError('Debug API não disponível');
+                    }
+                };
+            }
         },
 
         setupInterfaceTabListeners: function() {
-            // ... (mantém a mesma lógica)
+            // Preview do tema
+            const themeRadios = document.querySelectorAll('input[name="theme"]');
+            if (themeRadios.length > 0) {
+                themeRadios.forEach(radio => {
+                    radio.onchange = () => {
+                        const preview = document.getElementById('themePreview');
+                        if (preview) {
+                            const colors = {
+                                brown: ['#8B4513', '#654321', '#D2691E'],
+                                blue: ['#1976D2', '#0D47A1', '#42A5F5'],
+                                dark: ['#333', '#222', '#555'],
+                                green: ['#2E7D32', '#1B5E20', '#4CAF50']
+                            };
+                            const selectedColor = colors[radio.value] || colors.brown;
+                            preview.children[0].style.background = selectedColor[0];
+                            preview.children[1].style.background = selectedColor[1];
+                            preview.children[2].style.background = selectedColor[2];
+                        }
+                    };
+                });
+            }
         },
 
         saveCurrentConfig: function() {
-            // ... (mantém a mesma lógica de coleta de dados)
-            // Só muda os estilos
+            const newConfig = window.TWS_ConfigManager.getCurrentConfig();
+            
+            // Behavior
+            const intervalInput = document.getElementById('schedulerCheckInterval');
+            if (intervalInput) newConfig.behavior.schedulerCheckInterval = parseInt(intervalInput.value);
+            
+            const retryCheckbox = document.getElementById('retryOnFail');
+            if (retryCheckbox) newConfig.behavior.retryOnFail = retryCheckbox.checked;
+            
+            const maxRetriesSelect = document.getElementById('maxRetries');
+            if (maxRetriesSelect) newConfig.behavior.maxRetries = parseInt(maxRetriesSelect.value);
+            
+            const autoCleanCheckbox = document.getElementById('autoCleanCompleted');
+            if (autoCleanCheckbox) newConfig.behavior.autoCleanCompleted = autoCleanCheckbox.checked;
+            
+            // Interface
+            const themeRadios = document.querySelectorAll('input[name="theme"]');
+            if (themeRadios.length > 0) {
+                themeRadios.forEach(radio => {
+                    if (radio.checked) newConfig.interface.theme = radio.value;
+                });
+            }
+            
+            const autoOpenCheckbox = document.getElementById('autoOpenPanel');
+            if (autoOpenCheckbox) newConfig.interface.autoOpenPanel = autoOpenCheckbox.checked;
+            
+            const notificationsCheckbox = document.getElementById('showNotifications');
+            if (notificationsCheckbox) newConfig.interface.showNotifications = notificationsCheckbox.checked;
+            
+            const compactCheckbox = document.getElementById('compactMode');
+            if (compactCheckbox) newConfig.interface.compactMode = compactCheckbox.checked;
+            
+            // Execution
+            const attackLimitInput = document.getElementById('simultaneousAttackLimit');
+            if (attackLimitInput) newConfig.execution.simultaneousAttackLimit = parseInt(attackLimitInput.value);
+            
+            const timeoutInput = document.getElementById('attackTimeout');
+            if (timeoutInput) newConfig.execution.attackTimeout = parseInt(timeoutInput.value);
+            
+            const delayInput = document.getElementById('delayBetweenAttacks');
+            if (delayInput) newConfig.execution.delayBetweenAttacks = parseInt(delayInput.value);
+            
+            const validateCheckbox = document.getElementById('validateTroops');
+            if (validateCheckbox) newConfig.execution.validateTroops = validateCheckbox.checked;
+            
+            const skipCheckbox = document.getElementById('skipIfNoTroops');
+            if (skipCheckbox) newConfig.execution.skipIfNoTroops = skipCheckbox.checked;
+            
+            // Backup
+            const autoExportCheckbox = document.getElementById('autoExport');
+            if (autoExportCheckbox) newConfig.backup.autoExport = autoExportCheckbox.checked;
+            
+            const exportIntervalSelect = document.getElementById('exportInterval');
+            if (exportIntervalSelect) newConfig.backup.exportInterval = parseInt(exportIntervalSelect.value);
+            
+            const maxBackupsInput = document.getElementById('maxBackups');
+            if (maxBackupsInput) newConfig.backup.maxBackups = parseInt(maxBackupsInput.value);
+            
+            const encryptCheckbox = document.getElementById('encryptBackups');
+            if (encryptCheckbox) newConfig.backup.encryptBackups = encryptCheckbox.checked;
+            
+            // Salvar
+            if (window.TWS_ConfigManager.saveConfig(newConfig)) {
+                window.TWS_ConfigManager.showSuccess('Configurações salvas! O scheduler será reiniciado.');
+                setTimeout(() => {
+                    window.TWS_ConfigManager.restartScheduler();
+                    this.hide();
+                }, 1000);
+            } else {
+                window.TWS_ConfigManager.showError('Erro ao salvar configurações!');
+            }
         }
     };
 
