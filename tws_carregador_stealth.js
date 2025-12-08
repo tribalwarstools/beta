@@ -1,14 +1,14 @@
-// tws_carregador_stealth.js - VERSÃO 3.3 (Farm + Config + Velocity)
+// tws_carregador_stealth.js - VERSÃO 3.4 (Farm + Config Modular + Velocity)
 (function() {
     'use strict';
 
-    if (window.__TWS_STEALTH_V3) {
+    if (window.__TWS_STEALTH_V4) {
         console.log('[Stealth] Já carregado, ignorando...');
         return;
     }
-    window.__TWS_STEALTH_V3 = Date.now();
+    window.__TWS_STEALTH_V4 = Date.now();
 
-    console.log('[Stealth] Inicializado - Versão 3.3 (Farm + Config + Velocity)');
+    console.log('[Stealth] Inicializado - Versão 3.4 (Farm + Config Modular + Velocity)');
 
     // ============================================
     // NOTIFICAÇÃO ULTRA MINIMALISTA
@@ -16,7 +16,7 @@
     class TurboNotifier {
         constructor() {
             this.step = 0;
-            this.maxSteps = 4; // Aumentado para 4 fases
+            this.maxSteps = 5; // Aumentado para 5 fases (com config modular)
             this.createIndicator();
         }
         
@@ -51,7 +51,7 @@
             const percent = Math.round((phase / this.maxSteps) * 100);
             
             if (this.indicator) {
-                const colors = ['#e74c3c', '#f39c12', '#3498db', '#27ae60'];
+                const colors = ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#27ae60'];
                 this.indicator.style.borderLeftColor = colors[phase - 1] || colors[0];
                 this.indicator.textContent = `🔄 TW: ${percent}%`;
                 this.indicator.style.display = 'block';
@@ -84,6 +84,7 @@
     // ⭐ CONFIGURAÇÃO TURBO OTIMIZADA ⭐
     const TURBO_CONFIG = {
         baseUrl: 'https://tribalwarstools.github.io/beta/',
+        configPath: 'config/', // Nova pasta para configurações
         
         // ORDEM CRÍTICA OTIMIZADA: Dependências respeitadas
         scripts: {
@@ -97,29 +98,49 @@
                 }
             ],
             
-            // FASE 2: VELOCITY MANAGER (deve vir ANTES do Farm Core)
+            // FASE 2: MÓDULOS DE CONFIGURAÇÃO (não dependem de outros módulos)
             phase2: [
                 { 
-                    file: 'farm-inteligente/velocity-manager.js', // ⭐ NOVO
-                    check: 'TWS_FarmInteligente.VelocityManager',
+                    file: 'config/ConfigManager.js', 
+                    check: 'TWS_ConfigManager',
                     priority: 'high',
-                    description: 'Velocity Manager'
+                    description: 'Config Manager',
+                    requires: ['TWS_Backend'] // Depende do backend
                 },
                 { 
-                    file: 'tw-scheduler-config-modal.js', // Config antes do Farm
+                    file: 'config/BackupManager.js', 
+                    check: 'TWS_BackupManager',
+                    priority: 'high',
+                    description: 'Backup Manager',
+                    requires: ['TWS_ConfigManager'] // Depende do ConfigManager
+                },
+                { 
+                    file: 'config/ConfigModalUI.js', 
                     check: 'TWS_ConfigModal',
                     priority: 'high',
-                    description: 'Config Modal'
+                    description: 'Config Modal UI',
+                    requires: ['TWS_ConfigManager', 'TWS_BackupManager'] // Depende dos dois anteriores
                 }
             ],
             
-            // FASE 3: FARM CORE + UI (depende do Velocity Manager)
+            // FASE 3: VELOCITY MANAGER (deve vir ANTES do Farm Core)
             phase3: [
+                { 
+                    file: 'farm-inteligente/velocity-manager.js',
+                    check: 'TWS_FarmInteligente.VelocityManager',
+                    priority: 'high',
+                    description: 'Velocity Manager'
+                }
+            ],
+            
+            // FASE 4: FARM CORE + UI (depende do Velocity Manager e Config)
+            phase4: [
                 { 
                     file: 'farm-inteligente/farm-core.js', 
                     check: 'TWS_FarmInteligente.Core',
                     priority: 'high',
-                    description: 'Farm Core'
+                    description: 'Farm Core',
+                    requires: ['TWS_ConfigManager'] // Usa configurações
                 },
                 { 
                     file: 'tw-scheduler-modal.js', 
@@ -137,12 +158,13 @@
                     file: 'farm-inteligente/farm-ui.js', 
                     check: 'TWS_FarmInteligente.UI',
                     priority: 'high',
-                    description: 'Farm UI'
+                    description: 'Farm UI',
+                    requires: ['TWS_ConfigManager'] // Usa configurações de interface
                 }
             ],
             
-            // FASE 4: MÓDULOS EXTRAS (background)
-            phase4: [
+            // FASE 5: MÓDULOS EXTRAS (background)
+            phase5: [
                 { 
                     file: 'farm-inteligente/farm-init.js', 
                     check: 'TWS_FarmInteligente.show',
@@ -216,7 +238,15 @@
 
     // ⭐ LOADER TURBO COM VERIFICAÇÃO DE DEPENDÊNCIAS ⭐
     async function carregarScriptTurbo(scriptInfo) {
-        const url = TURBO_CONFIG.baseUrl + scriptInfo.file;
+        // Determinar caminho completo
+        let fullPath;
+        if (scriptInfo.file.includes('config/')) {
+            // Scripts da pasta config usam baseUrl normal
+            fullPath = TURBO_CONFIG.baseUrl + scriptInfo.file;
+        } else {
+            fullPath = TURBO_CONFIG.baseUrl + scriptInfo.file;
+        }
+        
         const cacheKey = `tws_cache_${scriptInfo.file.replace(/\//g, '_')}`;
         
         try {
@@ -246,14 +276,29 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), TURBO_CONFIG.timeouts[scriptInfo.priority]);
             
-            const response = await fetch(url, {
+            const response = await fetch(fullPath, {
                 signal: controller.signal,
                 cache: 'default'
             });
             
             clearTimeout(timeout);
             
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                // Tenta carregar da raiz se não encontrar na subpasta
+                if (scriptInfo.file.includes('config/') && response.status === 404) {
+                    console.log(`[Turbo] 📁 Tentando carregar ${scriptInfo.file} da raiz...`);
+                    const altPath = TURBO_CONFIG.baseUrl + scriptInfo.file.replace('config/', '');
+                    const altResponse = await fetch(altPath);
+                    if (!altResponse.ok) throw new Error(`HTTP ${altResponse.status} na raiz também`);
+                    
+                    const code = await altResponse.text();
+                    new Function(code)();
+                    
+                    if (checkObjectExists(scriptInfo.check)) return true;
+                    return false;
+                }
+                throw new Error(`HTTP ${response.status}`);
+            }
             
             const code = await response.text();
             
@@ -304,6 +349,7 @@
         
         for (let i = 0; i < scripts.length; i++) {
             const script = scripts[i];
+            console.log(`[Turbo] ⏳ Carregando: ${script.description || script.file}`);
             const result = await carregarScriptTurbo(script);
             results.push(result);
             
@@ -329,6 +375,7 @@
         
         console.log('[Turbo] ✅ Página Tribal Wars detectada!');
         console.log('[Turbo] 📊 Mundo atual:', window.location.hostname);
+        console.log('[Turbo] 📁 Configs em:', TURBO_CONFIG.configPath);
         
         // Delay stealth
         await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
@@ -337,9 +384,43 @@
         notifier.update(1, 'Carregando backend');
         await carregarSequencial(TURBO_CONFIG.scripts.phase1, 'Fase 1 - Core Essencial');
         
-        // === FASE 2: VELOCITY MANAGER + CONFIG ===
-        notifier.update(2, 'Carregando gerenciador de velocidades');
-        await carregarSequencial(TURBO_CONFIG.scripts.phase2, 'Fase 2 - Velocity + Config');
+        // === FASE 2: SISTEMA DE CONFIGURAÇÃO MODULAR ===
+        notifier.update(2, 'Carregando sistema de configuração');
+        const configResult = await carregarSequencial(TURBO_CONFIG.scripts.phase2, 'Fase 2 - Config Modular');
+        
+        if (configResult > 0) {
+            console.log('[Turbo] ✅ Sistema de configuração modular carregado!');
+            
+            // Aplicar configurações carregadas imediatamente
+            if (window.TWS_ConfigManager) {
+                const config = window.TWS_ConfigManager.getCurrentConfig();
+                console.log('[Turbo] ⚙️ Configuração atual carregada:');
+                console.log('[Turbo]   - Tema:', config.interface.theme);
+                console.log('[Turbo]   - Notificações:', config.interface.showNotifications);
+                console.log('[Turbo]   - Auto-open:', config.interface.autoOpenPanel);
+                
+                // Aplicar tema se o modal já estiver aberto
+                setTimeout(() => {
+                    if (config.interface.autoOpenPanel && window.TWS_Modal) {
+                        console.log('[Turbo] ⏳ Abrindo painel automaticamente...');
+                        setTimeout(() => {
+                            try {
+                                window.TWS_Modal.toggle();
+                                console.log('[Turbo] ✅ Painel aberto automaticamente');
+                            } catch (e) {
+                                console.log('[Turbo] ⚠️ Não foi possível abrir painel:', e.message);
+                            }
+                        }, 2000);
+                    }
+                }, 1000);
+            }
+        } else {
+            console.warn('[Turbo] ⚠️ Sistema de configuração não carregado, usando padrões');
+        }
+        
+        // === FASE 3: VELOCITY MANAGER ===
+        notifier.update(3, 'Carregando gerenciador de velocidades');
+        await carregarSequencial(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Velocity Manager');
         
         // Verificação crítica: Velocity Manager carregou?
         if (!checkObjectExists('TWS_FarmInteligente.VelocityManager')) {
@@ -348,15 +429,15 @@
             console.log('[Turbo] ✅ Velocity Manager carregado - Buscando velocidades reais...');
         }
         
-        // === FASE 3: FARM CORE + INTERFACE ===
-        notifier.update(3, 'Carregando sistema de farm');
-        await carregarSequencial(TURBO_CONFIG.scripts.phase3, 'Fase 3 - Farm + Interface');
+        // === FASE 4: FARM CORE + INTERFACE ===
+        notifier.update(4, 'Carregando sistema de farm');
+        await carregarSequencial(TURBO_CONFIG.scripts.phase4, 'Fase 4 - Farm + Interface');
         
-        // === FASE 4: EXTRAS (background) ===
-        notifier.update(4, 'Finalizando módulos');
-        carregarSequencial(TURBO_CONFIG.scripts.phase4, 'Fase 4 - Extras')
+        // === FASE 5: EXTRAS (background) ===
+        notifier.update(5, 'Finalizando módulos');
+        carregarSequencial(TURBO_CONFIG.scripts.phase5, 'Fase 5 - Extras')
             .then((successCount) => {
-                console.log(`[Turbo] ✅ Carregamento concluído: ${successCount}/${TURBO_CONFIG.scripts.phase4.length} extras`);
+                console.log(`[Turbo] ✅ Carregamento concluído: ${successCount}/${TURBO_CONFIG.scripts.phase5.length} extras`);
                 
                 // ⭐ RELATÓRIO DE CARREGAMENTO DETALHADO ⭐
                 console.log('[Turbo] 📊 ===== RELATÓRIO DE CARREGAMENTO =====');
@@ -366,7 +447,12 @@
                 console.log('    ✅ Backend:', !!window.TWS_Backend);
                 console.log('    ✅ Frontend:', !!window.TWS_Panel);
                 console.log('    ✅ Modal:', !!window.TWS_Modal);
-                console.log('    ✅ Config:', !!window.TWS_ConfigModal);
+                
+                // Sistema de Configuração Modular
+                console.log('  ⚙️ SISTEMA DE CONFIGURAÇÃO:');
+                console.log('    ✅ Config Manager:', !!window.TWS_ConfigManager);
+                console.log('    ✅ Backup Manager:', !!window.TWS_BackupManager);
+                console.log('    ✅ Config Modal:', !!window.TWS_ConfigModal);
                 
                 // Sistema Farm Inteligente
                 console.log('  🌾 SISTEMA FARM INTELIGENTE:');
@@ -380,6 +466,16 @@
                 console.log('    ✅ BBCode:', !!window.TWS_BBCodeModal);
                 console.log('    ✅ Test:', !!window.TWS_TestModal);
                 console.log('    ✅ MultiTab:', !!window.TWS_MultiTabLock);
+                
+                // Configurações carregadas
+                if (window.TWS_ConfigManager) {
+                    const config = window.TWS_ConfigManager.getCurrentConfig();
+                    console.log('  ⚙️ CONFIGURAÇÕES ATIVAS:');
+                    console.log('    - Tema:', config.interface.theme);
+                    console.log('    - Check Interval:', config.behavior.schedulerCheckInterval + 'ms');
+                    console.log('    - Simultâneos:', config.execution.simultaneousAttackLimit);
+                    console.log('    - Backup Auto:', config.backup.autoExport ? 'Sim' : 'Não');
+                }
                 
                 // Verificar se Velocity Manager está funcionando
                 if (window.TWS_FarmInteligente && window.TWS_FarmInteligente.VelocityManager) {
@@ -404,7 +500,7 @@
             const essentialsLoaded = window.TWS_Backend && window.TWS_Panel;
             const farmCoreLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.Core;
             const velocityLoaded = window.TWS_FarmInteligente && window.TWS_FarmInteligente.VelocityManager;
-            const configLoaded = window.TWS_ConfigModal;
+            const configSystemLoaded = window.TWS_ConfigManager && window.TWS_ConfigModal;
             
             if (essentialsLoaded) {
                 notifier.success();
@@ -419,22 +515,30 @@
                     let badgeTitle = 'TW Scheduler';
                     let badgeColor = '#3498db'; // Azul padrão
                     
-                    if (farmCoreLoaded && velocityLoaded && configLoaded) {
+                    if (farmCoreLoaded && velocityLoaded && configSystemLoaded) {
                         badgeText = '🌾⚡⚙️✓';
-                        badgeTitle = 'TW Scheduler + Farm + Velocity + Config';
+                        badgeTitle = 'TW Scheduler + Farm + Velocity + Config Modular';
                         badgeColor = '#9b59b6'; // Roxo - completo
                     } else if (farmCoreLoaded && velocityLoaded) {
                         badgeText = '🌾⚡✓';
                         badgeTitle = 'TW Scheduler + Farm + Velocity';
                         badgeColor = '#27ae60'; // Verde - farm com velocidades reais
+                    } else if (farmCoreLoaded && configSystemLoaded) {
+                        badgeText = '🌾⚙️✓';
+                        badgeTitle = 'TW Scheduler + Farm + Config';
+                        badgeColor = '#e74c3c'; // Vermelho - farm com config
                     } else if (farmCoreLoaded) {
                         badgeText = '🌾✓';
                         badgeTitle = 'TW Scheduler + Farm';
-                        badgeColor = '#f39c12'; // Laranja - farm sem velocidades
-                    } else if (configLoaded) {
+                        badgeColor = '#f39c12'; // Laranja - farm sem extras
+                    } else if (configSystemLoaded) {
                         badgeText = '⚙️✓';
-                        badgeTitle = 'TW Scheduler + Config';
+                        badgeTitle = 'TW Scheduler + Config Modular';
                         badgeColor = '#3498db'; // Azul
+                    } else if (velocityLoaded) {
+                        badgeText = '⚡✓';
+                        badgeTitle = 'TW Scheduler + Velocity';
+                        badgeColor = '#2ecc71'; // Verde claro
                     }
                     
                     badge.textContent = badgeText;
@@ -517,6 +621,25 @@
                             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
                         `;
                         
+                        // Botão para abrir Config Modal
+                        if (window.TWS_ConfigModal) {
+                            const configBtn = document.createElement('button');
+                            configBtn.textContent = '⚙️ Config';
+                            configBtn.style.cssText = `
+                                width: 100%;
+                                padding: 5px;
+                                margin: 2px 0;
+                                background: #3498db;
+                                border: none;
+                                color: white;
+                                border-radius: 2px;
+                                cursor: pointer;
+                                font-size: 10px;
+                            `;
+                            configBtn.onclick = () => window.TWS_ConfigModal.show();
+                            menuContent.appendChild(configBtn);
+                        }
+                        
                         if (velocityLoaded) {
                             const velocityBtn = document.createElement('button');
                             velocityBtn.textContent = '🔄 Velocidades';
@@ -524,7 +647,7 @@
                                 width: 100%;
                                 padding: 5px;
                                 margin: 2px 0;
-                                background: #3498db;
+                                background: #27ae60;
                                 border: none;
                                 color: white;
                                 border-radius: 2px;
@@ -549,6 +672,15 @@
                     }, 5000);
                 }
                 
+                // Adicionar atalho para abrir config modal (Ctrl+Shift+C)
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.shiftKey && e.key === 'C' && window.TWS_ConfigModal) {
+                        e.preventDefault();
+                        console.log('[Turbo] 🎮 Atalho: Ctrl+Shift+C - Abrindo Config Modal');
+                        window.TWS_ConfigModal.show();
+                    }
+                });
+                
             } else {
                 console.log('[Turbo] ⚠️ Sistema parcialmente carregado');
             }
@@ -557,7 +689,14 @@
 
     // ⭐ INICIALIZAÇÃO TURBO ⭐
     function init() {
-        console.log('[Turbo] 🌟 Inicializando v3.3 (Farm + Config + Velocity)...');
+        console.log('[Turbo] 🌟 Inicializando v3.4 (Farm + Config Modular + Velocity)...');
+        console.log('[Turbo] 📁 Estrutura:');
+        console.log('  - Core: tw-scheduler-backend.js');
+        console.log('  - Config: config/ConfigManager.js');
+        console.log('  - Config: config/BackupManager.js');
+        console.log('  - Config: config/ConfigModalUI.js');
+        console.log('  - Velocity: farm-inteligente/velocity-manager.js');
+        console.log('  - Farm: farm-inteligente/farm-core.js');
         console.log('[Turbo] 🕐 Hora:', new Date().toLocaleTimeString());
         
         // Inicia imediatamente se a página já estiver pronta
