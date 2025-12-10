@@ -334,21 +334,8 @@
                     <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 12px; color: #155724;">
                         <strong>✨ IMPORTANTE - MUDANÇA DE COMPORTAMENTO:</strong><br>
                         ✅ <strong>SEM DISPARO AUTOMÁTICO</strong> de farms atrasados<br>
-                        ✅ Farms com horário no passado serão marcados como "Atrasado"<br>
-                        ✅ Use o botão "🚀 Enviar Agora" para executar manualmente<br>
-                        ✅ Tentativas escalonadas (1min, 2min, 5min) mantidas<br>
-                        ✅ Pausa automática após 3 falhas consecutivas<br>
-                        ✅ Distância Euclidiana correta para TW<br>
-                        ✅ Logging detalhado de eventos<br>
-                        <strong>🎯 VELOCIDADES ATUALIZADAS:</strong><br>
-                        ✅ <span id="velocity-info">Usando configurações específicas do mundo atual</span><br>
-                        ✅ Atualização automática quando velocidades mudam<br>
-                        ✅ Fallback para valores padrão se necessário<br>
-                        <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>
-                        ✅ Múltiplos farms no mesmo alvo<br>
-                        ✅ Mesmas tropas, mesmo alvo<br>
-                        ✅ Mesmo agendamento convertido múltiplas vezes<br>
-                        ✅ "Enviar Agora" sem verificações
+                        <strong>🎯 VELOCIDADES ATUALIZADAS:</strong><br>                        
+                        <strong>🎯 COMPORTAMENTO LIBERADO:</strong><br>                        
                     </div>
 
                     <!-- Botões de Ação -->
